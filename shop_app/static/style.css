@@ -212,8 +212,9 @@ dialog::backdrop { background: rgba(15, 18, 25, .45); }
   header { gap: 8px; padding: 0 12px; }
   header nav, header .bm-sub, .user-chip > span:not(.avatar) { display: none; }
   header .live { font-size: 0; gap: 0; }
-  .kpi .value { font-size: 18px; white-space: nowrap; }
+  .kpi .value { font-size: 18px; overflow-wrap: anywhere; }
   #back, a.small, .muted a { display: inline-flex; align-items: center; min-height: 44px; }
 }
 /* links inside running text are underlined, not colour-only (WCAG 1.4.1) */
 p a, .muted a, .small a { text-decoration: underline; text-underline-offset: 2px; }
+a[data-brandmark] { display: inline-flex; align-items: center; min-height: 44px; }

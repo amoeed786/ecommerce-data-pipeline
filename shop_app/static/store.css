@@ -108,7 +108,7 @@ main { min-height: 100vh; }   /* footer starts below the fold: no jump when the 
   .hero-tiles { gap: var(--k-s-2); }
 }
 .cats { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--k-s-1); }
-@media (min-width: 768px) { .cats { grid-template-columns: repeat(8, 1fr); gap: var(--k-s-2); } }
+@media (min-width: 900px) { .cats { grid-template-columns: repeat(8, 1fr); gap: var(--k-s-2); } }
 .cat { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: var(--k-s-2) 4px; border-radius: var(--k-radius); color: var(--k-text) !important;
   font-size: var(--k-fs-12); font-weight: 600; text-align: center; transition: background .15s; }
 .cat:hover { background: var(--k-surface); }

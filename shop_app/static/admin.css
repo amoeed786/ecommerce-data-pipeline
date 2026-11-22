@@ -310,3 +310,6 @@ pre.out { margin: 0; padding: 12px; background: var(--k-bg); border: 1px solid v
   .ph .actions { margin-left: 0; }
 }
 .kcol .empty { color: var(--k-text-2); }
+
+.grid > * { min-width: 0; }
+.card-b { overflow-x: auto; }
