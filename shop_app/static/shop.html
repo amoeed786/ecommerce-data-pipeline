@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShopLite</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">Shop<span>Lite</span></div>
+  <nav><a href="/">Shop</a><a href="/admin">Admin</a><a href="/dashboard">Dashboard</a><a href="/docs" target="_blank">API</a></nav>
+  <div class="spacer"></div>
+  <span id="live" class="live">connecting…</span>
+  <span id="who" class="muted"></span>
+  <button id="signin-btn">Sign in</button>
+</header>
+
+<main class="grid cols-2">
+  <section class="card">
+    <div class="row" style="justify-content: space-between; margin-bottom: 10px">
+      <h1>Products</h1>
+      <input id="search" type="search" placeholder="Search products or SKU…" style="width: 260px">
+    </div>
+    <div id="cats" class="chips"></div>
+    <div id="products" class="products"></div>
+  </section>
+
+  <aside class="grid" style="align-content: start">
+    <section class="card">
+      <h2>🛒 Cart</h2>
+      <div id="cart"></div>
+      <div id="checkout" class="hidden" style="margin-top: 12px">
+        <div class="row" style="margin-bottom: 8px">
+          <input id="coupon" placeholder="Coupon (SAVE5, SAVE10, SAVE20)" style="flex: 1">
+        </div>
+        <div class="row" style="margin-bottom: 10px">
+          <label class="row"><input id="paynow" type="checkbox" checked> Pay now</label>
+          <select id="method" style="flex: 1"></select>
+        </div>
+        <button id="place" class="primary" style="width: 100%">Place order</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>My orders <span class="muted small">— status updates arrive live</span></h2>
+      <ul id="myorders" class="plain"><li class="muted">Sign in to see your orders.</li></ul>
+    </section>
+  </aside>
+</main>
+
+<dialog id="signin">
+  <h2>Sign in</h2>
+  <p class="muted small">Pick an existing customer (search by name, email or id) — no passwords in this demo shop.</p>
+  <input id="cust-search" type="search" placeholder="Search customers…" style="width: 100%">
+  <ul id="cust-results" class="plain" style="max-height: 220px; overflow: auto; margin: 8px 0 16px"></ul>
+  <h2>…or create an account</h2>
+  <form id="signup" class="grid" style="grid-template-columns: 1fr 1fr; gap: 8px">
+    <input name="first_name" placeholder="First name" required>
+    <input name="last_name" placeholder="Last name" required>
+    <input name="email" type="email" placeholder="Email" required style="grid-column: span 2">
+    <input name="city" placeholder="City">
+    <input name="country" placeholder="Country" value="Pakistan">
+    <div class="row" style="grid-column: span 2; justify-content: flex-end">
+      <button type="button" onclick="$('#signin').close()">Close</button>
+      <button class="primary">Create account</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/static/common.js"></script>
+<script>
+const PAYMENT_METHODS = ["credit_card", "debit_card", "paypal", "bank_transfer", "cash_on_delivery"];
+const state = {
+  me: JSON.parse(localStorage.getItem("shoplite.me") || "null"),
+  cart: JSON.parse(localStorage.getItem("shoplite.cart") || "[]"),   // [{product_id, quantity}]
+  products: [], known: {}, category: null,   // known: every product seen, so the cart can show filtered-out items
+};
+const saveCart = () => localStorage.setItem("shoplite.cart", JSON.stringify(state.cart));
+$("#method").innerHTML = PAYMENT_METHODS.map((m) => `<option>${m}</option>`).join("");
+$("#paynow").onchange = (e) => ($("#method").disabled = !e.target.checked);
+
+// ---------------- catalog
+async function loadCategories() {
+  const cats = await api("/api/categories");
+  const chip = (id, name) => `<span class="chip ${state.category === id ? "on" : ""}" data-id="${id ?? ""}">${esc(name)}</span>`;
+  $("#cats").innerHTML = chip(null, "All") + cats.map((c) => chip(c.category_id, c.category_name)).join("");
+  $$("#cats .chip").forEach((el) => (el.onclick = () => { state.category = el.dataset.id ? +el.dataset.id : null; loadCategories(); loadProducts(); }));
+}
+
+async function loadProducts() {
+  const q = new URLSearchParams();
+  if (state.category) q.set("category_id", state.category);
+  if ($("#search").value.trim()) q.set("q", $("#search").value.trim());
+  state.products = await api("/api/products?" + q);
+  state.products.forEach((p) => (state.known[p.product_id] = p));
+  $("#products").innerHTML = state.products.map((p) => {
+    const stockCls = p.stock <= 0 ? "stock-out" : p.stock < 20 ? "stock-low" : "muted";
+    return `<div class="product">
+      <div class="muted small">${esc(p.category_name)} · ${esc(p.sku)}</div>
+      <div class="name">${esc(p.product_name)}</div>
+      <div class="price">${money(p.unit_price)}</div>
+      <div class="small ${stockCls}">${p.stock <= 0 ? "Out of stock" : int(p.stock) + " in stock"}</div>
+      <div class="foot">
+        <input type="number" min="1" max="20" value="1" id="qty-${p.product_id}" ${p.stock <= 0 ? "disabled" : ""}>
+        <button class="primary" style="flex:1" onclick="addToCart(${p.product_id})" ${p.stock <= 0 ? "disabled" : ""}>Add</button>
+      </div>
+    </div>`;
+  }).join("") || `<p class="muted">No products match.</p>`;
+  renderCart();
+}
+$("#search").oninput = throttle(loadProducts, 300);
+
+// ---------------- cart
+function addToCart(productId) {
+  const qty = Math.max(1, Math.min(20, +$(`#qty-${productId}`).value || 1));
+  const line = state.cart.find((l) => l.product_id === productId);
+  line ? (line.quantity = Math.min(20, line.quantity + qty)) : state.cart.push({ product_id: productId, quantity: qty });
+  saveCart(); renderCart();
+  toast("Added to cart");
+}
+function setQty(productId, delta) {
+  const line = state.cart.find((l) => l.product_id === productId);
+  line.quantity = Math.min(20, line.quantity + delta);
+  state.cart = state.cart.filter((l) => l.quantity > 0);
+  saveCart(); renderCart();
+}
+function renderCart() {
+  const byId = state.known;
+  if (!state.cart.length) { $("#cart").innerHTML = `<p class="muted">Your cart is empty.</p>`; $("#checkout").classList.add("hidden"); return; }
+  let subtotal = 0;
+  const rows = state.cart.map((l) => {
+    const p = byId[l.product_id];
+    const line = p ? p.unit_price * l.quantity : 0;
+    subtotal += line;
+    return `<tr><td>${p ? esc(p.product_name) : "#" + l.product_id}</td>
+      <td class="num"><button class="small" onclick="setQty(${l.product_id},-1)">−</button> ${l.quantity}
+        <button class="small" onclick="setQty(${l.product_id},1)">+</button></td>
+      <td class="num">${p ? money(line) : "…"}</td></tr>`;
+  }).join("");
+  $("#cart").innerHTML = `<div class="table-wrap"><table><tbody>${rows}</tbody>
+    <tfoot><tr><th>Subtotal</th><th></th><th class="num">${money(subtotal)}</th></tr></tfoot></table></div>
+    <p class="muted small">Prices and stock are re-checked by the server when you order.</p>`;
+  $("#checkout").classList.remove("hidden");
+}
+
+$("#place").onclick = async () => {
+  if (!state.me) return $("#signin").showModal();
+  $("#place").disabled = true;
+  try {
+    const res = await api("/api/orders", { method: "POST", body: {
+      customer_id: state.me.customer_id, items: state.cart,
+      pay_now: $("#paynow").checked, payment_method: $("#method").value, coupon: $("#coupon").value,
+    }});
+    state.cart = []; saveCart(); $("#coupon").value = "";
+    toast(`Order #${res.order_id} placed — ${money(res.total_amount)} (${res.status})`, "good", 5000);
+    await Promise.all([loadProducts(), loadMyOrders(res.order_id)]);
+  } catch (e) { toast(e.message, "error", 5000); }
+  finally { $("#place").disabled = false; }
+};
+
+// ---------------- my orders
+async function loadMyOrders(flashId) {
+  if (!state.me) return;
+  const orders = await api(`/api/customers/${state.me.customer_id}/orders`);
+  $("#myorders").innerHTML = orders.map((o) => `
+    <li class="${o.order_id === flashId ? "flash" : ""}">
+      <div class="row" style="justify-content: space-between">
+        <span><b>#${o.order_id}</b> <span class="muted small">${fmtDateTime(o.order_date)} · ${o.items} item(s)</span></span>
+        <span>${badge(o.status)} <b>${money(o.total_amount)}</b></span>
+      </div>
+      ${["pending", "paid"].includes(o.status) ? `<button class="small danger" style="margin-top:6px" onclick="cancelOrder(${o.order_id})">Cancel order</button>` : ""}
+    </li>`).join("") || `<li class="muted">No orders yet — go shopping!</li>`;
+}
+async function cancelOrder(id) {
+  if (!confirm(`Cancel order #${id}?`)) return;
+  try { await api(`/api/customers/${state.me.customer_id}/orders/${id}/cancel`, { method: "POST" }); toast(`Order #${id} cancelled`); loadMyOrders(id); loadProducts(); }
+  catch (e) { toast(e.message, "error"); }
+}
+
+// ---------------- sign in
+function setMe(c) {
+  state.me = c;
+  localStorage.setItem("shoplite.me", JSON.stringify(c));
+  $("#who").textContent = c ? `${c.first_name} ${c.last_name} (#${c.customer_id})` : "";
+  $("#signin-btn").textContent = c ? "Switch" : "Sign in";
+  loadMyOrders();
+}
+$("#signin-btn").onclick = () => { $("#signin").showModal(); searchCustomers(); };
+const searchCustomers = throttle(async () => {
+  const list = await api("/api/customers?limit=30&q=" + encodeURIComponent($("#cust-search").value));
+  $("#cust-results").innerHTML = list.map((c) =>
+    `<li class="clickable" style="cursor:pointer" data-c='${esc(JSON.stringify(c))}'>
+       <b>${esc(c.first_name)} ${esc(c.last_name)}</b> <span class="muted small">#${c.customer_id} · ${esc(c.email)} · ${esc(c.city)}</span></li>`).join("");
+  $$("#cust-results li").forEach((li) => (li.onclick = () => { setMe(JSON.parse(li.dataset.c)); $("#signin").close(); }));
+}, 250);
+$("#cust-search").oninput = searchCustomers;
+$("#signup").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    const c = await api("/api/customers", { method: "POST", body: Object.fromEntries(new FormData(e.target)) });
+    setMe(c); $("#signin").close(); e.target.reset(); toast(`Welcome, ${c.first_name}!`, "good");
+  } catch (err) { toast(err.message, "error"); }
+};
+
+// ---------------- live updates
+const refreshProducts = throttle(loadProducts, 2000);
+liveEvents((ev) => {
+  if (ev.kind === "order" && state.me && ev.customer_id === state.me.customer_id) {
+    loadMyOrders(ev.id);
+    if (ev.action === "updated") toast(`Your order #${ev.id} is now ${ev.status}`, "good");
+  }
+  if (ev.kind === "product") refreshProducts();   // price changed
+});
+
+loadCategories(); loadProducts(); setMe(state.me);
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShopLite Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand">Shop<span>Lite</span> <span class="muted small">dashboard</span></div>
+  <nav><a href="/">Shop</a><a href="/admin">Admin</a><a href="/dashboard">Dashboard</a><a href="/docs" target="_blank">API</a></nav>
+  <div class="spacer"></div>
+  <span class="muted small" id="updated"></span>
+  <span id="live" class="live">connecting…</span>
+</header>
+
+<main>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid cols-2" style="margin-bottom: 16px">
+    <div class="card"><h2>Orders per minute · last hour</h2><div class="chart-box"><canvas id="c-minute"></canvas></div></div>
+    <div class="card"><h2>Orders by status · all time</h2><div class="chart-box"><canvas id="c-status"></canvas></div></div>
+  </div>
+  <div class="grid cols-2" style="margin-bottom: 16px">
+    <div class="card"><h2>Revenue per day · last 30 days</h2><div class="chart-box"><canvas id="c-revenue"></canvas></div></div>
+    <div class="card"><h2>Revenue by category · last 30 days</h2><div class="chart-box"><canvas id="c-category"></canvas></div></div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="card">
+      <h2>Latest orders</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>#</th><th>Time</th><th>Customer</th><th>Status</th><th>Country</th><th class="num">Total</th></tr></thead>
+        <tbody id="recent"></tbody>
+      </table></div>
+    </div>
+    <div class="grid" style="align-content: start">
+      <div class="card"><h2>⚡ Live activity</h2><ul id="feed" class="plain feed"><li class="muted">Waiting for activity… start the simulator in Admin → Simulator &amp; pipeline.</li></ul></div>
+      <div class="card"><h2>Top products · last 7 days</h2><div id="top" class="table-wrap"></div></div>
+      <div class="card"><h2>Lowest stock</h2><div id="low" class="table-wrap"></div></div>
+    </div>
+  </div>
+</main>
+
+<script src="/static/common.js"></script>
+<script>
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+Chart.defaults.color = css("--muted");
+Chart.defaults.borderColor = css("--line");
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.maintainAspectRatio = false;
+Chart.defaults.plugins.legend.display = false;
+const ACCENT = css("--accent");
+const STATUS_COLORS = { pending: "#e0a526", paid: "#2f6fed", shipped: "#7c5ce0", delivered: "#1f9d55", cancelled: "#d64545", returned: "#8a93a6" };
+
+const charts = {
+  minute: new Chart($("#c-minute"), { type: "bar", data: { labels: [], datasets: [{ data: [], backgroundColor: ACCENT, borderRadius: 3 }] },
+    options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } } } }),
+  status: new Chart($("#c-status"), { type: "doughnut", data: { labels: [], datasets: [{ data: [], borderWidth: 0 }] },
+    options: { cutout: "62%", plugins: { legend: { display: true, position: "right" } } } }),
+  revenue: new Chart($("#c-revenue"), { type: "bar", data: { labels: [], datasets: [
+      { type: "bar", label: "Revenue", data: [], backgroundColor: ACCENT, borderRadius: 3, yAxisID: "y" },
+      { type: "line", label: "Orders", data: [], borderColor: css("--warn"), pointRadius: 0, tension: .3, yAxisID: "y2" }] },
+    options: { plugins: { legend: { display: true } }, scales: {
+      y: { beginAtZero: true, ticks: { callback: (v) => "$" + (v >= 1000 ? v / 1000 + "k" : v) } },
+      y2: { beginAtZero: true, position: "right", grid: { display: false } }, x: { grid: { display: false } } } } }),
+  category: new Chart($("#c-category"), { type: "bar", data: { labels: [], datasets: [{ data: [], backgroundColor: ACCENT, borderRadius: 3 }] },
+    options: { indexAxis: "y", scales: { x: { ticks: { callback: (v) => "$" + (v >= 1000 ? v / 1000 + "k" : v) } }, y: { grid: { display: false } } } } }),
+};
+function setData(chart, labels, ...series) {
+  chart.data.labels = labels;
+  series.forEach((s, i) => (chart.data.datasets[i].data = s));
+  chart.update("none");
+}
+
+let flashOrders = new Set();
+async function loadStats() {
+  const s = await api("/api/stats");
+  const k = s.kpis;
+  const tiles = [
+    ["Orders today", int(k.orders_today)], ["Revenue today", money(k.revenue_today)], ["Avg order today", money(k.avg_order_today)],
+    ["Orders · last 5 min", int(k.orders_last_5_min)], ["Open orders", int(k.open_orders)],
+    ["Customers", int(k.customers)], ["New customers today", int(k.new_customers_today)],
+  ];
+  $("#kpis").innerHTML = tiles.map(([l, v]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div></div>`).join("");
+
+  // fill missing minutes with 0 so the last hour reads as a continuous timeline
+  const counts = Object.fromEntries(s.per_minute.map((r) => [r.minute.slice(0, 16), r.orders]));
+  const labels = [], values = [], t = new Date(); t.setSeconds(0, 0);
+  for (let i = 59; i >= 0; i--) {
+    const m = new Date(t - i * 60000);
+    const key = new Date(m - m.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    labels.push(m.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })); values.push(counts[key] || 0);
+  }
+  setData(charts.minute, labels, values);
+  charts.status.data.datasets[0].backgroundColor = s.status_counts.map((r) => STATUS_COLORS[r.status]);
+  setData(charts.status, s.status_counts.map((r) => r.status), s.status_counts.map((r) => r.orders));
+  setData(charts.revenue, s.revenue_by_day.map((r) => new Date(r.day + "T00:00").toLocaleDateString([], { month: "short", day: "numeric" })),
+          s.revenue_by_day.map((r) => r.revenue), s.revenue_by_day.map((r) => r.orders));
+  setData(charts.category, s.category_revenue.map((r) => r.category_name), s.category_revenue.map((r) => r.revenue));
+
+  $("#recent").innerHTML = s.recent_orders.map((o) => `<tr class="${flashOrders.has(o.order_id) ? "flash" : ""}">
+    <td><b>${o.order_id}</b></td><td>${fmtTime(o.order_date)}</td><td>${esc(o.customer)}</td><td>${badge(o.status)}</td>
+    <td>${esc(o.shipping_country)}</td><td class="num">${money(o.total_amount)}</td></tr>`).join("");
+  flashOrders = new Set();
+  $("#top").innerHTML = `<table><thead><tr><th>Product</th><th class="num">Units</th><th class="num">Revenue</th></tr></thead><tbody>${
+    s.top_products.map((p) => `<tr><td>${esc(p.product_name)}</td><td class="num">${int(p.units)}</td><td class="num">${money(p.revenue)}</td></tr>`).join("")}</tbody></table>`;
+  $("#low").innerHTML = `<table><thead><tr><th>Product</th><th class="num">On hand</th></tr></thead><tbody>${
+    s.low_stock.map((p) => `<tr><td>${esc(p.product_name)}</td><td class="num ${p.quantity_on_hand < 20 ? "stock-low" : ""}">${int(p.quantity_on_hand)}</td></tr>`).join("")}</tbody></table>`;
+  $("#updated").textContent = "updated " + new Date().toLocaleTimeString();
+}
+
+const refresh = throttle(loadStats, 3000);
+let feedStarted = false;
+liveEvents((ev) => {
+  if (!feedStarted) { $("#feed").innerHTML = ""; feedStarted = true; }
+  const li = document.createElement("li");
+  li.className = "flash";
+  li.innerHTML = `<time>${fmtTime(ev.updated_at)}</time><span>${describeEvent(ev)}</span>`;
+  $("#feed").prepend(li);
+  while ($("#feed").children.length > 25) $("#feed").lastElementChild.remove();
+  if (ev.kind === "order") flashOrders.add(ev.id);
+  refresh();
+});
+setInterval(loadStats, 30000);   // safety net: the minute chart still moves even when nothing happens
+loadStats();
+</script>
+</body>
+</html>

@@ -15,11 +15,11 @@ SQL Server (ShopDB)  ->  Data lake (Parquet: bronze/silver/gold)  ->  DuckDB + d
 | 1 | Source system: `ShopDB` on SQL Server + fake data generator | Done |
 | 2 | Ingestion: incremental extract SQL Server -> bronze Parquet | Done |
 | 3 | Silver: cleaning, dedup, data-quality checks | Done |
-| ★ | Shop web app: live monitor, storefront, back office, pipeline controls | Done |
+| ★ | ShopLite web app (FastAPI): shop, admin, live dashboard | Done |
 | 4 | Gold: dbt + DuckDB star schema (facts/dims), tests, docs | |
 | 5 | Analytics: revenue, top products, CLV, RFM, cohorts | |
 | 6 | Orchestration with Dagster | |
-| 7 | Dashboard (Streamlit / Power BI) | |
+| 7 | Analytics dashboard on the gold layer (Power BI or ShopLite) | |
 | + | Bonus: CDC, SCD2, forecasting | |
 
 ## Setup
@@ -102,22 +102,35 @@ For each table, parents first, DuckDB:
 
 Silver is fully rebuilt on each run, so it's idempotent: running it twice gives the same result.
 
-## Shop web app
+## ShopLite web app (FastAPI)
 
 ```powershell
-.\.venv\Scripts\streamlit.exe run shop_app\app.py           # opens http://localhost:8501
+.\.venv\Scripts\uvicorn.exe shop_app.main:app --port 8000    # then open http://localhost:8000
 ```
 
-| Page | What you can do |
-|---|---|
-| Live monitor | Auto-refreshing KPIs, latest orders, orders per minute, recently changed rows, low stock |
-| Storefront | Pick a customer (or sign one up), add products to a cart, place an order |
-| Orders admin | Move orders through pending -> paid -> shipped -> delivered (or cancel / return) |
-| Catalog | Change prices, restock, move a customer to a new city (future SCD2 material) |
-| Pipeline | Start/stop the simulator, run extract / silver / checks with one click, see watermarks, DQ results and any layer's data |
+| URL | Who | What you can do |
+|---|---|---|
+| `/` | Customer | Sign in (pick a customer) or sign up, browse/search products, cart, coupons (`SAVE5`, `SAVE10`, `SAVE20`), pay now or later, cancel before shipping. **My orders** updates live. |
+| `/admin` | Back office | Live order board (new/changed orders flash in), order detail with pay/ship/deliver/cancel/return buttons, price changes and restocking, simulator start/stop, one-click pipeline steps, data-lake status |
+| `/dashboard` | Analytics | KPIs, orders per minute, revenue per day, status mix, revenue by category, top products, low stock, live activity feed |
+| `/docs` | Developer | FastAPI's interactive API docs: call any endpoint from the browser |
 
-Everything the app does is a normal write to ShopDB with a fresh `updated_at`, so the next
-extract picks it up, just like a real shop backend feeding a data pipeline.
+**How it's built** (`shop_app/`):
+
+- `main.py`: FastAPI routes (JSON API + the three pages).
+- `shop_db.py`: all SQL. Order rules:
+  - prices come from the database, never from the browser
+  - stock is checked under a row lock, so two buyers can't take the last unit
+  - status moves follow the order lifecycle, and only the owner can cancel, before shipping
+  - cancelling refunds the payment and puts the stock back
+- `live.py`: the **live feed**. One background task polls ShopDB every 2 seconds for rows whose
+  `updated_at` moved (the same watermark idea as the extractor). It pushes them to every open page
+  with **Server-Sent Events**, so you see changes from the simulator, customers and admins as
+  they happen.
+- `static/`: plain HTML/CSS/JavaScript. Charts use Chart.js, loaded from a CDN.
+
+Every write is a normal ShopDB write with a fresh `updated_at`, so the next extract picks it up.
+There is no login. This is a local learning app, so don't expose it to a network.
 
 ## Command cheat sheet
 
@@ -134,5 +147,5 @@ All commands are run from the project folder: `cd C:\Projects\ecommerce-data-pip
 | Bronze | `.\.venv\Scripts\python.exe ingestion\extract.py` | Incremental extract (`--full` reloads) |
 | Bronze | `.\.venv\Scripts\python.exe ingestion\check_bronze.py` | Reconcile bronze vs ShopDB |
 | Silver | `.\.venv\Scripts\python.exe transform\silver.py` | Dedup + clean + quality checks |
-| App | `.\.venv\Scripts\streamlit.exe run shop_app\app.py` | Web interface on http://localhost:8501 |
+| App | `.\.venv\Scripts\uvicorn.exe shop_app.main:app --port 8000` | ShopLite on http://localhost:8000 (Ctrl+C stops) |
 | Explore | `.\.venv\Scripts\python.exe -c "import duckdb; duckdb.sql(\"select * from 'data_lake/silver/orders.parquet' limit 5\").show()"` | Query any Parquet file with SQL |

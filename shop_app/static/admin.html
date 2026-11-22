@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShopLite Admin</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">Shop<span>Lite</span> <span class="muted small">admin</span></div>
+  <nav><a href="/">Shop</a><a href="/admin">Admin</a><a href="/dashboard">Dashboard</a><a href="/docs" target="_blank">API</a></nav>
+  <div class="spacer"></div>
+  <span id="live" class="live">connecting…</span>
+</header>
+
+<main>
+  <div class="tabs">
+    <button data-tab="orders" class="on">📦 Orders</button>
+    <button data-tab="catalog">🏷️ Catalog</button>
+    <button data-tab="pipeline">🛠️ Simulator &amp; pipeline</button>
+  </div>
+
+  <!-- ============ ORDERS ============ -->
+  <section id="tab-orders" class="grid cols-2">
+    <div class="card">
+      <div class="row" style="justify-content: space-between">
+        <h1>Orders</h1>
+        <span class="muted small">New and changed orders appear live (highlighted)</span>
+      </div>
+      <div id="status-chips" class="chips" style="margin-top: 10px"></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>#</th><th>Placed</th><th>Customer</th><th>Status</th><th class="num">Items</th><th class="num">Total</th></tr></thead>
+        <tbody id="orders"></tbody>
+      </table></div>
+    </div>
+    <div class="card" id="detail" style="align-self: start; position: sticky; top: 70px">
+      <p class="muted">Click an order to see its details and move it along.</p>
+    </div>
+  </section>
+
+  <!-- ============ CATALOG ============ -->
+  <section id="tab-catalog" class="card hidden">
+    <div class="row" style="justify-content: space-between; margin-bottom: 10px">
+      <h1>Catalog</h1>
+      <input id="cat-search" type="search" placeholder="Search products…" style="width: 260px">
+    </div>
+    <p class="muted small">Price changes are kept as history in bronze — later, SCD2 uses them to know the price on any given day.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>Product</th><th>Category</th><th class="num">Stock</th><th>Price</th><th>Restock</th></tr></thead>
+      <tbody id="catalog"></tbody>
+    </table></div>
+  </section>
+
+  <!-- ============ PIPELINE ============ -->
+  <section id="tab-pipeline" class="hidden grid">
+    <div class="grid cols-even">
+      <div class="card">
+        <h2>1 · Shop simulator <span id="sim-state" class="muted small"></span></h2>
+        <p class="muted small">Runs <code>python source_app/generator.py stream</code> in the background: new customers, orders and status changes every few seconds.</p>
+        <div class="row">
+          <label>Every <input id="sim-interval" type="number" min="1" max="60" value="5" style="width: 64px"> s</label>
+          <button id="sim-start" class="primary">▶ Start</button>
+          <button id="sim-stop">■ Stop</button>
+        </div>
+        <pre id="sim-log" class="out">(not running)</pre>
+      </div>
+      <div class="card">
+        <h2>2 · Run a pipeline step</h2>
+        <p class="muted small">Same scripts you run in the terminal. The command and its output appear below.</p>
+        <div class="row">
+          <button data-step="extract" class="primary">Extract → bronze</button>
+          <button data-step="check_bronze">Check bronze</button>
+          <button data-step="silver" class="primary">Build silver</button>
+          <button data-step="inject_bad_data">Inject messy data</button>
+          <button data-step="check_db">Check source DB</button>
+        </div>
+        <pre id="step-out" class="out">Click a step…</pre>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content: space-between"><h2>3 · Data lake</h2><button id="lake-refresh" class="small">Refresh</button></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Table</th><th class="num">Bronze files</th><th class="num">Bronze rows (all versions)</th><th class="num">Silver rows (latest, clean)</th><th class="num">Quarantined</th><th>Watermark</th></tr></thead>
+        <tbody id="lake"></tbody>
+      </table></div>
+    </div>
+    <div class="grid cols-even">
+      <div class="card"><h2>Latest data-quality results</h2><div id="dq" class="table-wrap"></div></div>
+      <div class="card"><h2>Recent extracts</h2><div id="extracts" class="table-wrap"></div></div>
+    </div>
+  </section>
+</main>
+
+<script src="/static/common.js"></script>
+<script>
+const STATUSES = ["pending", "paid", "shipped", "delivered", "cancelled", "returned"];
+const PAYMENT_METHODS = ["credit_card", "debit_card", "paypal", "bank_transfer", "cash_on_delivery"];
+const ICON = { paid: "💳", shipped: "🚚", delivered: "✅", cancelled: "❌", returned: "↩️" };
+let filter = new Set(["pending", "paid", "shipped"]);
+let selected = null;
+const flashIds = new Set();
+
+// ---------------- tabs
+$$(".tabs button").forEach((b) => (b.onclick = () => {
+  $$(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
+  ["orders", "catalog", "pipeline"].forEach((t) => $(`#tab-${t}`).classList.toggle("hidden", t !== b.dataset.tab));
+  if (b.dataset.tab === "catalog") loadCatalog();
+  if (b.dataset.tab === "pipeline") { loadSim(); loadLake(); }
+}));
+
+// ---------------- orders
+function renderChips() {
+  $("#status-chips").innerHTML = STATUSES.map((s) => `<span class="chip ${filter.has(s) ? "on" : ""}" data-s="${s}">${s}</span>`).join("");
+  $$("#status-chips .chip").forEach((c) => (c.onclick = () => { filter.has(c.dataset.s) ? filter.delete(c.dataset.s) : filter.add(c.dataset.s); renderChips(); loadOrders(); }));
+}
+async function loadOrders() {
+  const q = new URLSearchParams([...filter].map((s) => ["status", s]));
+  q.set("limit", 100);
+  const orders = filter.size ? await api("/api/orders?" + q) : [];
+  $("#orders").innerHTML = orders.map((o) => `
+    <tr class="clickable ${o.order_id === selected ? "selected" : ""} ${flashIds.has(o.order_id) ? "flash" : ""}" data-id="${o.order_id}">
+      <td><b>${o.order_id}</b></td><td>${fmtDateTime(o.order_date)}</td><td>${esc(o.customer)}</td>
+      <td>${badge(o.status)}</td><td class="num">${o.items}</td><td class="num">${money(o.total_amount)}</td></tr>`).join("")
+    || `<tr><td colspan="6" class="muted">No orders with these statuses.</td></tr>`;
+  flashIds.clear();
+  $$("#orders tr[data-id]").forEach((tr) => (tr.onclick = () => showOrder(+tr.dataset.id)));
+}
+async function showOrder(id) {
+  selected = id;
+  $$("#orders tr").forEach((tr) => tr.classList.toggle("selected", +tr.dataset.id === id));
+  const o = await api(`/api/orders/${id}`);
+  const pay = o.payment;
+  $("#detail").innerHTML = `
+    <div class="row" style="justify-content: space-between"><h1>Order #${o.order_id}</h1>${badge(o.status)}</div>
+    <p class="muted">${esc(o.customer)} · ${esc(o.email)}<br>Placed ${fmtDateTime(o.order_date)} · ships to ${esc(o.shipping_city)}, ${esc(o.shipping_country)}<br>
+      Last change ${fmtDateTime(o.updated_at)}</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Product</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Disc.</th><th class="num">Line</th></tr></thead>
+      <tbody>${o.lines.map((l) => `<tr><td>${esc(l.product_name)}</td><td class="num">${l.quantity}</td><td class="num">${money(l.unit_price)}</td>
+        <td class="num">${Math.round(l.discount * 100)}%</td><td class="num">${money(l.line_total)}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><th colspan="4">Total</th><th class="num">${money(o.total_amount)}</th></tr></tfoot>
+    </table></div>
+    <p>${pay ? `💳 ${esc(pay.payment_method)} · ${money(pay.amount)} · <b>${esc(pay.payment_status)}</b> · ${fmtDateTime(pay.paid_at)}` : `<span class="muted">No payment yet</span>`}</p>
+    ${o.next_status.length ? `
+      ${o.next_status.includes("paid") ? `<div class="row" style="margin-bottom:8px">Payment method <select id="pay-method">${PAYMENT_METHODS.map((m) => `<option>${m}</option>`).join("")}</select></div>` : ""}
+      <div class="row">${o.next_status.map((s) => `<button class="${s === "cancelled" || s === "returned" ? "danger" : "primary"}" data-to="${s}">${ICON[s] || ""} Mark ${s}</button>`).join("")}</div>`
+      : `<p class="muted">This order is final.</p>`}`;
+  $$("#detail button[data-to]").forEach((b) => (b.onclick = async () => {
+    try {
+      const r = await api(`/api/orders/${id}/status`, { method: "POST", body: { status: b.dataset.to, payment_method: $("#pay-method")?.value || "credit_card" } });
+      toast(`Order #${id}: ${r.from} → ${r.to}`, "good");
+      showOrder(id); loadOrders();
+    } catch (e) { toast(e.message, "error"); }
+  }));
+}
+
+// ---------------- catalog
+async function loadCatalog() {
+  const q = $("#cat-search").value.trim();
+  const products = await api("/api/products" + (q ? "?q=" + encodeURIComponent(q) : ""));
+  $("#catalog").innerHTML = products.map((p) => `<tr>
+    <td>${p.product_id}</td><td>${esc(p.product_name)}<div class="muted small">${esc(p.sku)}</div></td><td>${esc(p.category_name)}</td>
+    <td class="num ${p.stock < 20 ? "stock-low" : ""}">${int(p.stock)}</td>
+    <td><div class="row"><input type="number" step="0.01" min="0" value="${p.unit_price}" id="price-${p.product_id}" style="width: 100px">
+      <button class="small" onclick="savePrice(${p.product_id})">Save</button></div></td>
+    <td><div class="row"><input type="number" min="1" value="100" id="restock-${p.product_id}" style="width: 80px">
+      <button class="small" onclick="doRestock(${p.product_id})">Add</button></div></td></tr>`).join("");
+}
+$("#cat-search").oninput = throttle(loadCatalog, 300);
+async function savePrice(id) {
+  try { await api(`/api/products/${id}/price`, { method: "POST", body: { unit_price: +$(`#price-${id}`).value } }); toast(`Price updated for #${id}`, "good"); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function doRestock(id) {
+  try { await api(`/api/products/${id}/restock`, { method: "POST", body: { quantity: +$(`#restock-${id}`).value } }); toast(`Restocked #${id}`, "good"); loadCatalog(); }
+  catch (e) { toast(e.message, "error"); }
+}
+
+// ---------------- simulator + pipeline
+async function loadSim(s) {
+  s = s || await api("/api/admin/simulator");
+  $("#sim-state").textContent = s.running ? `— running every ${s.interval}s 🟢` : "— stopped";
+  $("#sim-start").disabled = s.running; $("#sim-stop").disabled = !s.running;
+  $("#sim-log").textContent = s.log.join("\n") || "(not running)";
+}
+$("#sim-start").onclick = async () => loadSim(await api(`/api/admin/simulator/start?interval=${$("#sim-interval").value}`, { method: "POST" }));
+$("#sim-stop").onclick = async () => loadSim(await api("/api/admin/simulator/stop", { method: "POST" }));
+setInterval(() => { if (!$("#tab-pipeline").classList.contains("hidden")) loadSim(); }, 2000);
+
+$$("button[data-step]").forEach((b) => (b.onclick = async () => {
+  $$("button[data-step]").forEach((x) => (x.disabled = true));
+  $("#step-out").textContent = `Running ${b.textContent}…`;
+  try {
+    const r = await api(`/api/admin/pipeline/${b.dataset.step}`, { method: "POST" });
+    $("#step-out").textContent = `$ ${r.command}\n\n${r.output}\n\n(exit code ${r.exit_code})`;
+    loadLake();
+  } catch (e) { $("#step-out").textContent = e.message; }
+  finally { $$("button[data-step]").forEach((x) => (x.disabled = false)); }
+}));
+
+const table = (cols, rows) => rows.length
+  ? `<table><thead><tr>${cols.map((c) => `<th>${c[0]}</th>`).join("")}</tr></thead><tbody>${rows.map((r) =>
+      `<tr>${cols.map((c) => `<td>${c[1](r)}</td>`).join("")}</tr>`).join("")}</tbody></table>`
+  : `<p class="muted">Nothing yet.</p>`;
+
+async function loadLake() {
+  const l = await api("/api/admin/lake");
+  $("#lake").innerHTML = l.layers.map((t) => `<tr><td>${t.table}</td><td class="num">${t.bronze_files}</td><td class="num">${int(t.bronze_rows)}</td>
+    <td class="num">${int(t.silver_rows)}</td><td class="num ${t.quarantined ? "stock-out" : ""}">${int(t.quarantined)}</td>
+    <td class="muted small">${fmtDateTime(l.watermarks[t.table])}</td></tr>`).join("");
+  const kv = (o) => Object.entries(o).map(([k, v]) => `${k}=${v}`).join(", ");
+  $("#dq").innerHTML = table([["Table", (r) => r.table], ["Silver", (r) => int(r.silver_rows)], ["Quarantined", (r) => int(r.quarantined)],
+    ["Errors", (r) => `<span class="stock-out">${kv(r.errors)}</span>`], ["Warnings", (r) => `<span class="stock-low">${kv(r.warnings)}</span>`]], l.dq_latest);
+  $("#extracts").innerHTML = table([["Batch", (r) => r.batch_id], ["Table", (r) => r.table], ["Mode", (r) => r.mode], ["Rows", (r) => int(r.rows)]], l.recent_extracts);
+}
+$("#lake-refresh").onclick = loadLake;
+
+// ---------------- live
+const refreshOrders = throttle(loadOrders, 1000);
+liveEvents((ev) => {
+  if (ev.kind !== "order") return;
+  flashIds.add(ev.id);
+  refreshOrders();
+  if (ev.id === selected) showOrder(selected);
+});
+
+renderChips(); loadOrders();
+</script>
+</body>
+</html>
