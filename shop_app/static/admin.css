@@ -307,3 +307,4 @@ pre.out { margin: 0; padding: 12px; background: var(--k-bg); border: 1px solid v
   .kpi .v { font-size: 18px; }
   .ph .actions { margin-left: 0; }
 }
+.kcol .empty { color: var(--k-text-2); }

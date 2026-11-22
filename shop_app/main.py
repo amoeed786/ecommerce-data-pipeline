@@ -29,6 +29,7 @@ import subprocess
 import sys
 import time
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
 from datetime import datetime
 from pathlib import Path
 
@@ -38,6 +39,7 @@ import secrets
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 
@@ -116,10 +118,18 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ShopLite", description="Marketplace on ShopDB: customers, vendors, riders, admins",
-              lifespan=lifespan)
+              lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)   # docs are admin-only (see below)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 # Compress HTML/JS/CSS/JSON (product lists shrink ~5x). Starlette leaves text/event-stream (live feed) alone.
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+_signup_hits: dict[str, list[float]] = {}
+# Scripts: our own files + inline page scripts (pages are server-owned, untrusted text is always escaped) + pinned
+# Chart.js / Swagger UI from jsDelivr. No plugins, no framing, forms and requests only to this site.
+CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+       "img-src 'self' data: blob: https://fastapi.tiangolo.com; font-src 'self'; connect-src 'self'; object-src 'none'; "
+       "base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
 
 
 @app.middleware("http")
@@ -128,7 +138,30 @@ async def cache_headers(request: Request, call_next):
     may keep them for a week. Pages, scripts and API responses keep revalidating so updates show at once.
     Requests slower than 1.5 s are logged, so a slow screen can be traced to its endpoint."""
     t0 = time.perf_counter()
+    path0 = request.url.path
+    # CSRF defence: a state-changing request from a browser must come from this site (Origin check). Gateway webhooks
+    # (server-to-server, no Origin) are exempt. SameSite=Lax cookies are the second layer.
+    if request.method in ("POST", "PUT", "PATCH", "DELETE") and not path0.startswith("/api/webhooks/"):
+        origin = request.headers.get("origin")
+        if origin and urlparse(origin).netloc != request.headers.get("host"):
+            return JSONResponse(status_code=403, content={"detail": "Cross-site request blocked"})
+    # signup rate limit: 5 accounts per 10 minutes per client address
+    if request.method == "POST" and path0.startswith("/api/auth/register"):
+        ip = request.client.host if request.client else "?"
+        now_s = time.time()
+        hits = [t for t in _signup_hits.get(ip, []) if now_s - t < 600]
+        if len(hits) >= 5:
+            return JSONResponse(status_code=429, content={"detail": "Too many sign-ups from this address - try again in a few minutes"})
+        _signup_hits[ip] = hits + [now_s]
     response = await call_next(request)
+    # security headers on every response
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+    response.headers["Content-Security-Policy"] = CSP
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     path = request.url.path
     ms = (time.perf_counter() - t0) * 1000
     if ms > 1500 and path != "/api/events":
@@ -140,6 +173,26 @@ async def cache_headers(request: Request, call_next):
     elif path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache"  # use the copy only after checking it's still current (ETag)
     return response
+
+
+def _wants_page(request: Request) -> bool:
+    p = request.url.path
+    return not p.startswith(("/api/", "/static/", "/openapi")) and "text/html" in request.headers.get("accept", "")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404 and _wants_page(request):
+        return HTMLResponse((STATIC / "404.html").read_text(encoding="utf-8"), status_code=404)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=getattr(exc, "headers", None))
+
+
+@app.exception_handler(Exception)
+async def server_error(request: Request, exc: Exception):
+    log.exception("unhandled error on %s", request.url.path)   # details go to the log, never to the visitor
+    if _wants_page(request):
+        return HTMLResponse((STATIC / "500.html").read_text(encoding="utf-8"), status_code=500)
+    return JSONResponse(status_code=500, content={"detail": "Something went wrong on our side"})
 
 
 @app.exception_handler(mp.MarketplaceError)
@@ -644,6 +697,17 @@ def admin_order(order_id: int, _: dict = Depends(admin)):
     if o is None:
         raise HTTPException(404, "Order not found")
     return {**o, **db.admin_order_extra(order_id)}
+
+
+@app.get("/openapi.json", include_in_schema=False)
+def openapi_json(_: dict = Depends(admin)):
+    return JSONResponse(app.openapi())
+
+
+@app.get("/docs", include_in_schema=False)
+def api_docs(_: dict = Depends(admin)):
+    from fastapi.openapi.docs import get_swagger_ui_html  # noqa: PLC0415
+    return get_swagger_ui_html(openapi_url="/openapi.json", title="Kartora API (admin)")
 
 
 @app.get("/api/admin/kpis", tags=["admin"])

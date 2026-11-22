@@ -223,11 +223,11 @@ async function mountAdminShell(active, title) {
       <a class="cmdk-btn" href="${base}#/orders" aria-label="Search orders">${I("search")}<span class="lbl">Search orders, pages, actions…</span><kbd>Ctrl K</kbd></a>
       <span class="live" id="live">connecting</span>
       <a class="ibtn" href="/" target="_blank" rel="noopener" title="Storefront" aria-label="Open storefront in a new tab">${I("external-link")}</a>
-      <div class="menu" id="shell-me"><button class="ibtn" aria-label="Admin menu"><span class="avatar" style="background:var(--k-brand)">${esc(initials(me.display_name))}</span></button>
+      <div class="menu" id="shell-me"><button class="ibtn" aria-label="Admin menu"><span class="avatar" style="background:var(--k-brand); color:var(--k-on-brand)">${esc(initials(me.display_name))}</span></button>
         <div class="pop"><div class="hd">${esc(me.display_name)}<div style="text-transform:none; font-weight:400; letter-spacing:0">${esc(me.email)}</div></div><div class="sep"></div>
           <div style="padding:6px 10px"><div class="muted" style="font-size:11px; margin-bottom:6px">Theme</div><div class="seg">${[["light", "sun", "Light"], ["dark", "moon", "Dark"], ["system", "monitor", "Auto"]].map(([v, ic, l]) => `<button class="${theme === v ? "on" : ""}" data-theme-set="${v}">${I(ic, "xs")}${l}</button>`).join("")}</div></div>
           <div class="sep"></div><button class="mi" onclick="logout()">${I("log-out")}Sign out</button></div></div>
-    </header><main class="page"><div class="wrap" id="shell-wrap"></div></main>`;
+    </header><main class="page" tabindex="0" aria-label="${esc(title)}"><div class="wrap" id="shell-wrap"></div></main>`;
   const old = $("main");
   $$("body > header").forEach((h) => h.remove());
   document.body.prepend(app);
@@ -286,3 +286,8 @@ document.addEventListener("DOMContentLoaded", () => {
     $$(".menu.open").forEach((m) => { if (!m.contains(e.target)) m.classList.remove("open"); });
   });
 });
+
+// Scrollable tables must be reachable by keyboard (WCAG): give every scroll container a tab stop.
+new MutationObserver(() => document.querySelectorAll(".table-wrap:not([tabindex]), .dt-scroll:not([tabindex])").forEach((el) => {
+  el.tabIndex = 0; el.setAttribute("role", "region"); el.setAttribute("aria-label", "Scrollable table");
+})).observe(document.documentElement, { childList: true, subtree: true });

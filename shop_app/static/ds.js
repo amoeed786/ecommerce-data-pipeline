@@ -71,7 +71,7 @@ function productCard(p, { eager = false } = {}) {
       ${stock <= 0 ? `<span class="pc-stock out">Out of stock</span>` : stock < 5 ? `<span class="pc-stock">Only ${stock} left</span>`
         : `<span class="pc-stock" aria-hidden="true"></span>`}
       <div class="pc-foot"><button class="k-btn pc-add" type="button" data-add="${p.product_id}" ${stock <= 0 ? "disabled" : ""}
-        aria-label="Add ${esc(p.product_name)} to cart">${icon("shopping-cart", "sm")}<span>Add to cart</span></button></div>
+        aria-label="Add to cart: ${esc(p.product_name)}">${icon("shopping-cart", "sm")}<span>Add to cart</span></button></div>
     </div>
   </article>`;
 }

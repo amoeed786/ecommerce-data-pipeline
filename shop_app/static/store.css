@@ -260,7 +260,7 @@ main { min-height: 100vh; }   /* footer starts below the fold: no jump when the 
 .line-item .acts { display: flex; align-items: center; gap: var(--k-s-1); margin-top: 8px; }
 .line-item .amt { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
 .k-btn.sm { height: 32px; padding: 0 10px; font-size: var(--k-fs-12); }
-.k-btn.danger { color: var(--k-danger); }
+.k-btn.danger { color: var(--st-red); }
 .k-btn.block { width: 100%; }
 .sum-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: var(--k-fs-14); color: var(--k-text-2); font-variant-numeric: tabular-nums; }
 .sum-row.total { border-top: 1px solid var(--k-border); margin-top: 8px; padding-top: 14px; color: var(--k-text); font-size: var(--k-fs-20); font-weight: 800; }
@@ -275,14 +275,14 @@ main { min-height: 100vh; }   /* footer starts below the fold: no jump when the 
 .pay-opt:has(input:checked) { border-color: var(--k-brand); background: var(--k-brand-50); }
 .pay-opt input { accent-color: var(--k-brand); width: 18px; height: 18px; margin: 0; }
 .pay-opt .ic { color: var(--k-text-2); }
-.pay-opt b { display: block; font-size: var(--k-fs-14); } .pay-opt span span { font-size: var(--k-fs-12); color: var(--k-text-3); }
+.pay-opt b { display: block; font-size: var(--k-fs-14); } .pay-opt span span { font-size: var(--k-fs-12); color: var(--k-text-2); }
 .note { display: flex; gap: 10px; padding: 12px var(--k-s-2); border-radius: var(--k-radius-sm); background: var(--k-hover); font-size: var(--k-fs-12); color: var(--k-text-2); }
 .note .ic { width: 16px; height: 16px; flex: none; margin-top: 1px; }
 .status { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: var(--k-radius-pill); font-size: var(--k-fs-12); font-weight: 600;
   background: var(--k-hover); color: var(--k-text-2); text-transform: capitalize; white-space: nowrap; }
-.status.good { background: color-mix(in srgb, var(--k-success) 12%, transparent); color: var(--k-success); }
-.status.warn { background: color-mix(in srgb, var(--k-warning) 14%, transparent); color: var(--k-warning); }
-.status.bad { background: color-mix(in srgb, var(--k-danger) 12%, transparent); color: var(--k-danger); }
+.status.good { background: var(--st-green-bg); color: var(--st-green); }
+.status.warn { background: var(--st-amber-bg); color: var(--st-amber); }
+.status.bad { background: var(--st-red-bg); color: var(--st-red); }
 .status.info { background: var(--k-brand-50); color: var(--k-brand); }
 .banner { display: flex; gap: 12px; align-items: flex-start; padding: var(--k-s-2) var(--k-s-3); border-radius: var(--k-radius); border: 1px solid; margin-bottom: var(--k-s-2); }
 .banner.good { border-color: color-mix(in srgb, var(--k-success) 35%, transparent); background: color-mix(in srgb, var(--k-success) 7%, var(--k-surface)); }
@@ -313,7 +313,7 @@ main { min-height: 100vh; }   /* footer starts below the fold: no jump when the 
 .sf .cols { display: grid; gap: var(--k-s-3); grid-template-columns: 1fr 1fr; padding: var(--k-s-5) 0; }
 @media (min-width: 900px) { .sf .cols { grid-template-columns: 2fr 1fr 1fr 1fr; } }
 .sf .about { grid-column: 1 / -1; } @media (min-width: 900px) { .sf .about { grid-column: auto; } }
-.sf h4 { margin: 0 0 12px; font-size: var(--k-fs-14); }
+.sf h4, .sf .sf-h { margin: 0 0 12px; font-size: var(--k-fs-14); font-weight: 600; }
 .sf a { display: block; padding: 4px 0; color: var(--k-text-2) !important; font-size: var(--k-fs-14); }
 .sf a:hover { color: var(--k-brand) !important; }
 .sf p { color: var(--k-text-3); font-size: var(--k-fs-14); max-width: 340px; }

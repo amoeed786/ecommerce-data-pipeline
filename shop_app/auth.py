@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import secrets
 import time
 from datetime import datetime, timedelta
@@ -68,7 +69,8 @@ def login(email: str, password: str, response: Response, expected_role: str | No
     db.execute("INSERT INTO dbo.user_sessions (token_hash, user_id, created_at, expires_at) VALUES (?,?,?,?)",
                _token_hash(token), row["user_id"], now, now + timedelta(days=SESSION_DAYS))
     db.execute("UPDATE dbo.users SET last_login_at = ? WHERE user_id = ?", now, row["user_id"])
-    response.set_cookie(COOKIE, token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", path="/")
+    response.set_cookie(COOKIE, token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", path="/",
+                        secure=os.getenv("APP_ENV") == "production")  # HTTPS-only cookie in production
     return user_by_id(row["user_id"])
 
 

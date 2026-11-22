@@ -22,7 +22,7 @@
       <button class="k-btn primary" type="submit">Search</button>
     </form>
     <nav class="sh-actions" aria-label="Account and cart">
-      <div id="account"><a class="sh-act" href="/login?as=customer"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg><span class="lbl">Sign in</span></a></div>
+      <div id="account"><a class="sh-act" href="/login?as=customer" aria-label="Sign in"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg><span class="lbl">Sign in</span></a></div>
       <a class="sh-act hide-m" href="#/wishlist" aria-label="Wishlist"><svg class="ic" aria-hidden="true"><use href="#i-heart"/></svg><span class="count" id="wishcount"></span></a>
       <a class="sh-act" href="#/cart" id="carticon" aria-label="Cart"><svg class="ic" aria-hidden="true"><use href="#i-shopping-cart"/></svg><span class="count" id="cartcount"></span><span class="lbl">Cart</span></a>
     </nav>
@@ -36,9 +36,9 @@
   <div class="wrap cols">
     <div class="about"><a class="logo" href="#/"><span id="logo-mark2"></span><span>Kartora</span></a>
       <p>A marketplace of independent stores. Free tracked delivery, secure payments or cash on delivery, and 7-day returns.</p></div>
-    <div><h4>Shop</h4><a href="#/search?on_sale=1&sort=discount">Today's deals</a><a href="#/search?sort=popular">Best sellers</a><a href="#/search?sort=newest">New arrivals</a><a href="#/search?sort=rating">Top rated</a></div>
-    <div><h4>Your account</h4><a href="#/orders">Track an order</a><a href="#/account">Account</a><a href="#/wishlist">Wishlist</a><a href="/login">Sign in or join</a></div>
-    <div><h4>Work with us</h4><a href="/login?as=vendor">Sell on Kartora</a><a href="/login?as=rider">Deliver with Kartora</a><a href="/vendor">Seller center</a></div>
+    <div><h2 class="sf-h">Shop</h2><a href="#/search?on_sale=1&sort=discount">Today's deals</a><a href="#/search?sort=popular">Best sellers</a><a href="#/search?sort=newest">New arrivals</a><a href="#/search?sort=rating">Top rated</a></div>
+    <div><h2 class="sf-h">Your account</h2><a href="#/orders">Track an order</a><a href="#/account">Account</a><a href="#/wishlist">Wishlist</a><a href="/login">Sign in or join</a></div>
+    <div><h2 class="sf-h">Work with us</h2><a href="/login?as=vendor">Sell on Kartora</a><a href="/login?as=rider">Deliver with Kartora</a><a href="/vendor">Seller center</a></div>
   </div>
   <div class="wrap legal">© Kartora demo marketplace · no real payments · product photos are openly licensed and credited on each product page</div>
 </footer>
@@ -108,13 +108,13 @@ async function renderAccount() {
   const me = await loadMe();
   const box = $("#account");
   if (!me) {
-    box.innerHTML = `<a class="sh-act" href="/login?as=customer&next=${encodeURIComponent("/" + location.hash)}">${icon("user")}<span class="lbl">Sign in</span></a>`;
+    box.innerHTML = `<a class="sh-act" aria-label="Sign in" href="/login?as=customer&next=${encodeURIComponent("/" + location.hash)}">${icon("user")}<span class="lbl">Sign in</span></a>`;
     return;
   }
   const items = me.role === "customer"
     ? `<a href="#/orders">${icon("package")}Orders</a><a href="#/wishlist">${icon("heart")}Wishlist</a><a href="#/account">${icon("user")}Account</a>`
     : `<a href="${roleHome(me)}">${icon("arrow-right")}Go to ${me.role === "admin" ? "admin" : me.role === "vendor" ? "seller center" : "rider app"}</a>`;
-  box.innerHTML = `<div class="menu"><button class="sh-act" aria-haspopup="true" aria-expanded="false" onclick="this.setAttribute('aria-expanded', this.parentElement.classList.toggle('open'))">${icon("circle-user")}
+  box.innerHTML = `<div class="menu"><button class="sh-act" aria-label="Account menu" aria-haspopup="true" aria-expanded="false" onclick="this.setAttribute('aria-expanded', this.parentElement.classList.toggle('open'))">${icon("circle-user")}
       <span class="lbl">${esc(me.display_name.split(" ")[0])}</span>${icon("chevron-down", "sm")}</button>
     <div class="drop"><div class="who">Signed in as<br><b style="color:var(--k-text)">${esc(me.email)}</b></div>${items}<button onclick="logout()">${icon("log-out")}Sign out</button></div></div>`;
 }
@@ -147,7 +147,7 @@ async function pageHome() {
           <a class="k-btn lg" href="#/search?sort=popular">Best sellers</a></div>
       </div>
       <div class="hero-tiles">${heroPicks.map((p, i) => { const sale = p.list_price > p.unit_price; return `
-        <a class="hero-tile" href="#/p/${p.product_id}" aria-label="${esc(p.product_name)}, ${money(p.unit_price)}">
+        <a class="hero-tile" href="#/p/${p.product_id}">
           ${imgTag(p.images[0], { sizes: "(max-width: 900px) 30vw, 200px", lazy: false, alt: "" })}
           <span class="cap"><b class="${sale ? "sale" : ""}">${money(p.unit_price)}</b>${esc(p.product_name.split(",")[0].slice(0, 34))}</span></a>`; }).join("")}</div>
     </section>
@@ -352,7 +352,7 @@ async function pageProduct(id) {
         ${(p.reviews || []).map((r) => `<article class="rv">
           <div class="rv-head"><span class="avatar" aria-hidden="true">${esc(initials(r.author || "K"))}</span><span class="who">${esc(r.author || "Kartora customer")}</span>
             <span class="when">${esc(r.city ? r.city + " · " : "")}${new Date(r.created_at).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}</span></div>
-          <h4>${starRating(r.rating)}${esc(r.title)}</h4>
+          <h2 class="sf-h">${starRating(r.rating)}${esc(r.title)}</h2>
           ${r.verified ? `<span class="verified">${icon("badge-check")}Verified purchase</span>` : ""}
           <p>${esc(r.body)}</p>
           ${r.helpful ? `<div class="helpful">${icon("thumbs-up", "sm")}${int(r.helpful)} people found this helpful</div>` : ""}

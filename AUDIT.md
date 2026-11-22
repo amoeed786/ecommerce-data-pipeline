@@ -152,3 +152,27 @@ These are the items above that change the schema, existing data or the environme
 ## Evidence
 
 Screenshots for every page, role, viewport and theme (desktop 1440 px light and dark, mobile 390 px), the axe JSON, the Lighthouse JSON reports and the probe output are in the session scratchpad. They aren't committed, because they are regenerated each run.
+
+## Status after the one-pass fixes (2026-11-22)
+
+Fixed and verified in the running app:
+- **Security:** S-01 security headers (HSTS only over HTTPS), S-02 admin-only API docs, S-03 Origin-based CSRF block, S-04 `Secure` cookie in production, S-05 signup rate limit.
+- **Error pages:** B-01, branded 404 and 500 pages.
+- **Accessibility:**
+  - A-01: the sale badge now has a text-safe background in both themes.
+  - A-02 and A-04: status chips and the danger button use the contrast-checked status palette; also fixed muted text on the payment option, the rider subtitle and kanban empty text.
+  - A-03: avatar text on brand-coloured backgrounds.
+  - A-05: the mobile header's Sign in link and account button have names.
+  - A-06: product button labels start with the visible text; hero tiles take their name from the caption.
+  - A-07: footer headings follow the heading order.
+  - A-08: the seller autopilot switch has a label, and links inside text are underlined.
+  - A-09: scrollable tables and the console's main area can be reached by keyboard.
+- **Realism:** R-07, the demo shopper is now "Ayesha Khan" (login email unchanged).
+
+Not done in this pass (limited budget). These still need work or approval:
+- **Design system** (Phase 2): V-01 to V-07, B-02.
+- **New surfaces and flows** (Phase 3): B-03 to B-07, U-01 to U-03.
+- **Remaining security items:** S-06, S-07/B-08, S-08 to S-10.
+- **Data:** D-01 (UTC migration), D-02 to D-04.
+- **Realism and performance:** R-01 to R-06, P-01 to P-05.
+- **QA:** the Phase 6 test suite.
