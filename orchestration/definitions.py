@@ -100,7 +100,7 @@ def bronze_reconciles_with_shopdb() -> AssetCheckResult:
 # wires each dbt staging model to the exact silver table it reads.
 SILVER_TABLES = ["categories", "customers", "customers_history", "vendors", "riders", "products",
                  "products_history", "inventory", "orders", "shipments", "order_items", "payments", "users",
-                 "commission_rules", "payouts", "ledger_entries"]
+                 "commission_rules", "payouts", "ledger_entries", "reviews"]
 
 
 @multi_asset(

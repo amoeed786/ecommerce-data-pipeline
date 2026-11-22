@@ -138,6 +138,7 @@ PRODUCT_SQL = """
     SELECT p.product_id, p.product_name, p.sku, p.unit_price, p.list_price,
            CASE WHEN p.list_price > p.unit_price THEN CAST(ROUND(100 * (1 - p.unit_price / p.list_price), 0) AS INT) END AS discount_pct,
            coalesce(p.rating, 0) AS rating, p.review_count, p.description, p.created_at, p.is_active, p.image_url,
+           p.brand, p.gallery,
            c.category_id, c.category_name, v.vendor_id, v.vendor_name, v.rating AS vendor_rating,
            coalesce(i.quantity_on_hand, 0) AS stock, coalesce(s.sold, 0) AS sold
     FROM dbo.products p
@@ -147,6 +148,25 @@ PRODUCT_SQL = """
     LEFT JOIN (SELECT product_id, SUM(quantity) AS sold FROM dbo.order_items GROUP BY product_id) s ON s.product_id = p.product_id
     WHERE p.is_active = 1
 """
+PHOTO_DIR = "/static/img/products/"
+
+
+def with_images(rows: list[dict]) -> list[dict]:
+    """gallery (JSON list of photo names) -> `images`: [{src, srcset}] in 240/480/960 WebP.
+    A seller-uploaded photo (image_url) always comes first."""
+    import json
+    for r in rows:
+        names = json.loads(r.pop("gallery", None) or "[]")
+        imgs = [{"src": f"{PHOTO_DIR}{n}-480.webp",
+                 "srcset": f"{PHOTO_DIR}{n}-240.webp 240w, {PHOTO_DIR}{n}-480.webp 480w, {PHOTO_DIR}{n}-960.webp 960w"}
+                for n in names]
+        url = r.get("image_url")
+        if url and not url.startswith(PHOTO_DIR):
+            imgs.insert(0, {"src": url, "srcset": None})
+        r["images"] = imgs
+    return rows
+
+
 SORTS = {
     "popular": "sold DESC", "price_asc": "unit_price ASC", "price_desc": "unit_price DESC",
     "rating": "rating DESC, review_count DESC", "newest": "created_at DESC", "discount": "discount_pct DESC",
@@ -171,8 +191,8 @@ def search_products(category_id=None, q=None, vendor_id=None, min_price=None, ma
     if vendor_id:
         where.append("v.vendor_id = ?"); params.append(vendor_id)
     if q:
-        where.append("(p.product_name LIKE ? OR c.category_name LIKE ? OR v.vendor_name LIKE ? OR p.sku LIKE ?)")
-        params += [f"%{q}%"] * 4
+        where.append("(p.product_name LIKE ? OR c.category_name LIKE ? OR v.vendor_name LIKE ? OR p.sku LIKE ? OR p.brand LIKE ?)")
+        params += [f"%{q}%"] * 5
     if min_price is not None:
         where.append("p.unit_price >= ?"); params.append(min_price)
     if max_price is not None:
@@ -187,13 +207,13 @@ def search_products(category_id=None, q=None, vendor_id=None, min_price=None, ma
     total = scalar(f"SELECT COUNT(*) FROM ({base}) x", *params)
     rows = query(f"SELECT * FROM ({base}) x ORDER BY {SORTS.get(sort, SORTS['popular'])}, product_id "
                  f"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY", *params, int(offset), int(limit))
-    return {"total": total, "items": rows}
+    return {"total": total, "items": with_images(rows)}
 
 
 @catalog_cached
 def home() -> dict:
     def top(order: str, extra: str = "", n: int = 12):
-        return query(f"SELECT TOP {n} * FROM ({PRODUCT_SQL} {extra}) x ORDER BY {order}")
+        return with_images(query(f"SELECT TOP {n} * FROM ({PRODUCT_SQL} {extra}) x ORDER BY {order}"))
     return {
         "flash_deals": top("discount_pct DESC, sold DESC", "AND p.list_price > p.unit_price"),
         "best_sellers": top("sold DESC"),
@@ -209,10 +229,24 @@ def home() -> dict:
 
 @catalog_cached
 def product_detail(product_id: int) -> dict | None:
-    p = query_one(f"SELECT * FROM ({PRODUCT_SQL}) x WHERE product_id = ?", product_id)
+    import json
+    p = query_one(f"SELECT x.*, pp.specs FROM ({PRODUCT_SQL}) x JOIN dbo.products pp ON pp.product_id = x.product_id "
+                  f"WHERE x.product_id = ?", product_id)
     if p:
-        p["related"] = query(f"SELECT TOP 8 * FROM ({PRODUCT_SQL}) x WHERE category_id = ? AND product_id <> ? "
-                             f"ORDER BY sold DESC", p["category_id"], product_id)
+        with_images([p])
+        p["specs"] = json.loads(p["specs"] or "{}")
+        p["related"] = with_images(query(f"SELECT TOP 8 * FROM ({PRODUCT_SQL}) x WHERE category_id = ? AND product_id <> ? "
+                                         f"ORDER BY sold DESC", p["category_id"], product_id))
+        p["reviews"] = query("""
+            SELECT TOP 8 r.review_id, r.rating, r.title, r.body, r.verified, r.helpful, r.created_at,
+                   c.first_name + ' ' + LEFT(c.last_name, 1) + '.' AS author, c.city
+            FROM dbo.reviews r LEFT JOIN dbo.customers c ON c.customer_id = r.customer_id
+            WHERE r.product_id = ? ORDER BY r.helpful DESC, r.created_at DESC""", product_id)
+        # star histogram scaled to the product's total review count (written reviews are a sample)
+        hist = {r["rating"]: r["n"] for r in query(
+            "SELECT rating, COUNT(*) AS n FROM dbo.reviews WHERE product_id = ? GROUP BY rating", product_id)}
+        sample = sum(hist.values()) or 1
+        p["rating_histogram"] = {s: round(100 * hist.get(s, 0) / sample) for s in (5, 4, 3, 2, 1)}
     return p
 
 

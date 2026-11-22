@@ -13,6 +13,7 @@ price changes and customers who move city (useful for SCD2 in a later phase).
 import argparse
 import bisect
 import math
+import os
 import random
 import time
 import uuid
@@ -41,15 +42,16 @@ CATEGORIES = {
 }
 ADJECTIVES = ["Pro", "Classic", "Ultra", "Eco", "Smart", "Deluxe", "Mini", "Max", "Air", "Prime"]
 
-LOCATIONS = {
-    "United States": ["New York", "Los Angeles", "Chicago", "Houston", "Seattle"],
-    "United Kingdom": ["London", "Manchester", "Birmingham"],
-    "Pakistan": ["Karachi", "Lahore", "Islamabad"],
-    "Germany": ["Berlin", "Munich", "Hamburg"],
-    "Canada": ["Toronto", "Vancouver"],
-    "United Arab Emirates": ["Dubai", "Abu Dhabi"],
+# One market (MARKET_COUNTRY, default United States): every customer and order is in that country.
+MARKET_CITIES = {
+    "United States": ["New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Diego", "Dallas",
+                      "Seattle", "Austin", "Boston", "Miami", "Atlanta", "Denver", "San Francisco"],
+    "Pakistan": ["Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan", "Peshawar", "Quetta", "Sialkot", "Hyderabad"],
+    "United Kingdom": ["London", "Manchester", "Birmingham", "Leeds", "Glasgow", "Bristol", "Liverpool", "Edinburgh"],
 }
-COUNTRY_WEIGHTS = [35, 15, 20, 12, 10, 8]
+MARKET = os.environ.get("MARKET_COUNTRY", "United States")
+LOCATIONS = {MARKET: MARKET_CITIES.get(MARKET, MARKET_CITIES["United States"])}
+COUNTRY_WEIGHTS = [1]
 
 PAYMENT_METHODS = ["credit_card", "debit_card", "paypal", "bank_transfer", "cash_on_delivery"]
 PAYMENT_WEIGHTS = [45, 20, 15, 10, 10]
@@ -328,7 +330,8 @@ def random_changes(cur, ts: datetime) -> list[str]:
     if random.random() < 0.05:
         cur.execute("SELECT TOP 1 product_id, unit_price FROM dbo.products WHERE is_active = 1 ORDER BY NEWID()")
         pid, price = cur.fetchone()
-        new_price = money(float(price) * random.uniform(0.85, 1.15))
+        raw = max(1.0, float(price) * random.uniform(0.85, 1.15))
+        new_price = Decimal(f"{int(raw)}.{random.choice(['99', '49']) if raw < 60 else '99'}")  # retail endings
         cur.execute("UPDATE dbo.products SET unit_price = ?, updated_at = ? WHERE product_id = ?", new_price, ts, pid)
         events.append(f"price change p#{pid} {price}->{new_price}")
     if random.random() < 0.05:

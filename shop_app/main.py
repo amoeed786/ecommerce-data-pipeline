@@ -255,6 +255,12 @@ def categories():
     return db.categories()
 
 
+@app.get("/api/config", tags=["store"])
+def store_config():
+    """The one market this store sells in (MARKET_COUNTRY in .env) and its currency."""
+    return {"country": os.environ.get("MARKET_COUNTRY", "United States"), "currency": "USD"}
+
+
 @app.get("/api/products", tags=["store"])
 def products(category_id: int | None = None, q: str | None = None, vendor_id: int | None = None,
              min_price: float | None = None, max_price: float | None = None, min_rating: float | None = None,

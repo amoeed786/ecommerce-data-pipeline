@@ -10,6 +10,15 @@ with sales as (
         max(order_ts)                                       as last_sold_at
     from {{ ref('fct_order_items') }}
     group by product_id
+),
+reviews as (
+    select
+        product_id,
+        count(*)                                            as written_reviews,
+        round(avg(rating), 2)                               as avg_review_rating,
+        round(avg(case when rating <= 2 then 1.0 else 0 end), 4) as low_rating_share
+    from {{ ref('stg_reviews') }}
+    group by product_id
 )
 select
     p.product_id,
@@ -26,9 +35,13 @@ select
     round(s.returned_orders / nullif(s.orders, 0), 4)   as return_rate,
     s.last_sold_at,
     i.quantity_on_hand                                  as stock,
+    coalesce(r.written_reviews, 0)                      as written_reviews,
+    r.avg_review_rating,
+    r.low_rating_share,
     rank() over (order by coalesce(s.revenue, 0) desc)  as revenue_rank,
     rank() over (partition by p.category_name order by coalesce(s.revenue, 0) desc) as category_rank
 from {{ ref('dim_product') }} p
 left join sales s using (product_id)
 left join {{ ref('stg_inventory') }} i using (product_id)
+left join reviews r using (product_id)
 where p.is_current

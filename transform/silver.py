@@ -215,6 +215,18 @@ TABLES: list[dict] = [
         },
     },
     {
+        "name": "reviews", "pk": "review_id",
+        "clean": f"SELECT * REPLACE ({tidy('title')} AS title, trim(body) AS body) FROM src",
+        "errors": {
+            "product_missing": "product_id NOT IN (SELECT product_id FROM silver_products)",
+            "rating_out_of_range": "rating NOT BETWEEN 1 AND 5",
+        },
+        "warnings": {
+            "customer_missing": "customer_id IS NOT NULL AND customer_id NOT IN (SELECT customer_id FROM silver_customers)",
+            "empty_body": "body IS NULL OR length(body) < 3",
+        },
+    },
+    {
         # The source has a password_hash column - extract.py never pulls it, so it can't reach the lake.
         "name": "users", "pk": "user_id",
         "clean": f"SELECT * REPLACE (lower(trim(email)) AS email, {tidy('display_name')} AS display_name) FROM src",

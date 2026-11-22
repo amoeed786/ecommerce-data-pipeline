@@ -37,6 +37,7 @@ PRIMARY_KEYS = {
     "commission_rules": "rule_id",
     "payouts": "payout_id",
     "ledger_entries": "entry_id",
+    "reviews": "review_id",
 }
 
 

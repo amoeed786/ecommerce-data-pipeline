@@ -33,3 +33,5 @@ sources:
         description: Transfers of seller earnings.
       - name: ledger_entries
         description: Seller ledger - sale (+), commission (-), and their reversals on returns.
+      - name: reviews
+        description: Written customer reviews (1-5 stars) per product.

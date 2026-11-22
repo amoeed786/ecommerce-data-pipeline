@@ -25,7 +25,9 @@ ICONS = [
     "check", "house", "layout-grid", "menu", "sliders-horizontal", "list", "package", "clock", "zap", "flame", "tag",
     "trash-2", "credit-card", "bike", "phone", "log-out", "sparkles", "badge-percent", "arrow-right", "info",
     "circle-alert", "package-check", "circle-check", "eye", "history", "gift", "headphones", "smartphone", "shirt",
-    "book-open", "dumbbell", "toy-brick", "apple", "sofa", "lipstick" ,
+    "book-open", "dumbbell", "toy-brick", "apple", "sofa",
+    "thumbs-up", "badge-check", "lock", "share-2", "wallet", "map", "navigation", "chevron-up", "image", "timer",
+    "circle-user", "receipt", "arrow-left", "copy",
 ]
 SHAPES = {"path", "circle", "line", "polyline", "polygon", "rect", "ellipse"}
 SAFE_ATTR = re.compile(r"^(d|cx|cy|r|rx|ry|x|y|x1|x2|y1|y2|width|height|points)$")

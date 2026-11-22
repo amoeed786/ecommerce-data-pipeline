@@ -2,135 +2,206 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kartora · Everything you love, delivered</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kartora · Shop independent stores, delivered</title>
+  <meta name="description" content="Kartora is a marketplace of independent stores: electronics, fashion, home, beauty and more, with free tracked delivery and 7-day returns.">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/ds.css">
+  <link rel="stylesheet" href="/static/store.css">
 </head>
-<body>
-<div class="topstrip"><div class="inner">
-  <span>🚚 Free delivery on every order</span><span>💵 Cash on delivery</span><span>↩️ 7-day easy returns</span>
-  <span class="spacer"></span><span id="live" class="live">connecting…</span>
-  <a href="/login?as=vendor">🏪 Sell on Kartora</a><a href="/login?as=rider">🛵 Deliver with us</a>
-</div></div>
-<div class="storehead"><div class="inner">
-  <a href="#/" data-brandmark="" data-size="36"></a>
-  <form class="searchbar" id="search"><input id="q" type="search" placeholder="Search Kartora - products, brands and stores" autocomplete="off"><button>Search</button></form>
-  <div id="account"></div>
-  <a class="headlink" href="#/cart">🛒 Cart <span class="cart-badge" id="cartcount">0</span></a>
-</div></div>
-<nav class="catbar"><div class="inner" id="catbar"></div></nav>
-<main class="page" id="view"></main>
-<footer class="site">
-  <div class="inner">
-    <div><span data-brandmark="" data-size="30" style="color:#fff"></span>
-      <p class="small" style="max-width:320px; margin-top:12px">Everything you love, delivered. A marketplace of independent stores with live order tracking, cash on delivery and easy returns.</p></div>
-    <div><h4>Shop</h4><a href="#/search?on_sale=1&sort=discount">Flash deals</a><a href="#/search?sort=popular">Best sellers</a><a href="#/search?sort=newest">New arrivals</a><a href="#/orders">Track my order</a></div>
-    <div><h4>Earn with us</h4><a href="/login?as=vendor">Open a store</a><a href="/login?as=rider">Become a rider</a><a href="/vendor">Seller center</a><a href="/rider">Rider app</a></div>
-    <div><h4>Help</h4><a href="#/account">My account</a><a href="/login">Sign in / Join</a><a href="#/orders">Order tracking</a></div>
+<body class="k">
+<a class="skip" href="#view">Skip to content</a>
+<header class="sh">
+  <div class="wrap sh-row">
+    <a class="logo" href="#/" aria-label="Kartora home"><span id="logo-mark"></span><span class="name">Kartora</span></a>
+    <form class="search" id="search" role="search">
+      <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+      <label class="sr" for="q">Search products, brands and stores</label>
+      <input id="q" type="search" placeholder="Search products, brands and stores" autocomplete="off" enterkeyhint="search">
+      <button class="k-btn primary" type="submit">Search</button>
+    </form>
+    <nav class="sh-actions" aria-label="Account and cart">
+      <div id="account"><a class="sh-act" href="/login?as=customer"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg><span class="lbl">Sign in</span></a></div>
+      <a class="sh-act hide-m" href="#/wishlist" aria-label="Wishlist"><svg class="ic" aria-hidden="true"><use href="#i-heart"/></svg><span class="count" id="wishcount"></span></a>
+      <a class="sh-act" href="#/cart" id="carticon" aria-label="Cart"><svg class="ic" aria-hidden="true"><use href="#i-shopping-cart"/></svg><span class="count" id="cartcount"></span><span class="lbl">Cart</span></a>
+    </nav>
   </div>
-  <div class="legal">© Kartora demo marketplace · no real payments · product photos are openly licensed, credited on each product page</div>
+  <nav class="catnav" aria-label="Categories"><div class="wrap" id="catnav"></div></nav>
+</header>
+
+<main id="view" class="wrap" tabindex="-1"></main>
+
+<footer class="sf">
+  <div class="wrap cols">
+    <div class="about"><a class="logo" href="#/"><span id="logo-mark2"></span><span>Kartora</span></a>
+      <p>A marketplace of independent stores. Free tracked delivery, secure payments or cash on delivery, and 7-day returns.</p></div>
+    <div><h4>Shop</h4><a href="#/search?on_sale=1&sort=discount">Today's deals</a><a href="#/search?sort=popular">Best sellers</a><a href="#/search?sort=newest">New arrivals</a><a href="#/search?sort=rating">Top rated</a></div>
+    <div><h4>Your account</h4><a href="#/orders">Track an order</a><a href="#/account">Account</a><a href="#/wishlist">Wishlist</a><a href="/login">Sign in or join</a></div>
+    <div><h4>Work with us</h4><a href="/login?as=vendor">Sell on Kartora</a><a href="/login?as=rider">Deliver with Kartora</a><a href="/vendor">Seller center</a></div>
+  </div>
+  <div class="wrap legal">© Kartora demo marketplace · no real payments · product photos are openly licensed and credited on each product page</div>
 </footer>
 
+<nav class="bn" aria-label="Main">
+  <a href="#/" data-tab="home"><svg class="ic" aria-hidden="true"><use href="#i-house"/></svg>Home</a>
+  <a href="#/categories" data-tab="categories"><svg class="ic" aria-hidden="true"><use href="#i-layout-grid"/></svg>Categories</a>
+  <a href="#/search?sort=popular" data-tab="search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>Search</a>
+  <a href="#/cart" data-tab="cart" id="carticon-m"><svg class="ic" aria-hidden="true"><use href="#i-shopping-cart"/></svg><span class="count" id="cartcount-m"></span>Cart</a>
+  <a href="#/account" data-tab="account"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Account</a>
+</nav>
+
 <script src="/static/common.js"></script>
+<script src="/static/ds.js"></script>
 <script>
 // ===================================================================== state
-const S = { categories: [], products: {}, cart: JSON.parse(localStorage.getItem("shoplite.cart") || "[]") };
+const S = { categories: [], products: {}, market: { country: "United States", currency: "USD" },
+  cart: JSON.parse(localStorage.getItem("shoplite.cart") || "[]") };
 const view = $("#view");
-const saveCart = () => { localStorage.setItem("shoplite.cart", JSON.stringify(S.cart)); $("#cartcount").textContent = S.cart.reduce((a, l) => a + l.quantity, 0); };
-const remember = (list) => list.forEach((p) => (S.products[p.product_id] = p));
-const PAYMENT_LABELS = { cash_on_delivery: ["💵", "Cash on delivery", "Pay the rider when it arrives"], credit_card: ["💳", "Credit card", "Visa, Mastercard - pay securely on the next page"],
-  debit_card: ["💳", "Debit card", "Pay from your bank card on the next page"], paypal: ["🅿️", "PayPal", "Pay with your PayPal balance"], bank_transfer: ["🏦", "Bank transfer", "Online bank payment"] };
-const SHIP_MSG = { confirmed: "was confirmed by the store", packing: "is being packed", ready: "is packed and waiting for a rider",
-  assigned: "has a rider on the way to the store", picked_up: "is on the way to you 🛵", delivered: "was delivered 🎉", cancelled: "was cancelled" };
-
-function card(p) {
-  remember([p]);
-  return `<a class="pcard" href="#/p/${p.product_id}">${productArt(p)}
-    <div class="name">${esc(p.product_name)}</div>
-    <div><span class="price">${money(p.unit_price)}</span>${p.list_price > p.unit_price ? `<span class="was">${money(p.list_price)}</span>` : ""}</div>
-    <div class="meta">${stars(p.rating)} <span>(${int(p.review_count)})</span> · ${int(p.sold)} sold</div>
-    <div class="soldby">🏪 ${esc(p.vendor_name)}${p.stock <= 0 ? ' · <span style="color:var(--bad)">out of stock</span>' : p.stock < 10 ? ` · <span style="color:var(--warn)">only ${p.stock} left</span>` : ""}</div></a>`;
+const remember = (list) => list.forEach((p) => p && (S.products[p.product_id] = { ...S.products[p.product_id], ...p }));
+function saveCart() {
+  try { localStorage.setItem("shoplite.cart", JSON.stringify(S.cart)); } catch {}
+  const n = S.cart.reduce((a, l) => a + l.quantity, 0) || "";
+  $("#cartcount").textContent = n; $("#cartcount-m").textContent = n;
+  $("#carticon").setAttribute("aria-label", `Cart, ${n || 0} items`);
 }
+const updateWishCount = () => ($("#wishcount").textContent = wishlist.size || "");
+const PAYMENT = {
+  cash_on_delivery: ["banknote", "Cash on delivery", "Pay the rider when your order arrives"],
+  credit_card: ["credit-card", "Credit card", "Visa or Mastercard, on our secure payment page"],
+  debit_card: ["credit-card", "Debit card", "Pay from your bank card, on our secure payment page"],
+  paypal: ["wallet", "PayPal", "Pay with your PayPal balance"],
+  bank_transfer: ["receipt", "Bank transfer", "Online bank payment"],
+};
+const SHIP_MSG = { confirmed: "was confirmed by the store", packing: "is being packed", ready: "is packed and waiting for a rider",
+  assigned: "has a rider heading to the store", picked_up: "is on its way to you", delivered: "was delivered", cancelled: "was cancelled" };
+const STATUS_TONE = { delivered: "good", paid: "good", completed: "good", cancelled: "bad", returned: "bad", failed: "bad", refunded: "bad",
+  pending: "warn", processing: "warn" };
+const status = (s) => `<span class="status ${STATUS_TONE[s] || "info"}">${esc(label(s))}</span>`;
+const hashQuery = () => new URLSearchParams(location.hash.split("?")[1] || "");
+const shortDate = (d) => d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+const thumb = (p) => { const im = productImages(p)[0];
+  return `<span class="pc-fallback">${icon(CATEGORY_ICON[p.category_name] || "shopping-bag")}</span>${im ? imgTag(im, { sizes: "72px", w: 240 }) : ""}`; };
+
 function addToCart(id, qty = 1, silent = false) {
   const p = S.products[id];
   const line = S.cart.find((l) => l.product_id === id);
   const want = Math.min(20, (line ? line.quantity : 0) + qty);
-  if (p && want > p.stock) return toast(`Only ${p.stock} in stock`, "error");
+  if (p && want > p.stock) { toast(p.stock > 0 ? `Only ${p.stock} left in stock` : "This item is out of stock", "error"); return false; }
   line ? (line.quantity = want) : S.cart.push({ product_id: id, quantity: want });
   saveCart();
-  if (!silent) toast(`Added to cart${p ? ": " + p.product_name : ""}`, "good");
+  if (!silent) toast("Added to cart", "good");
+  return true;
 }
-function hashQuery() { return new URLSearchParams(location.hash.split("?")[1] || ""); }
+function rememberViewed(p) {
+  try {
+    const slim = (({ related, reviews, specs, rating_histogram, description, ...rest }) => rest)(p);
+    const list = JSON.parse(localStorage.getItem("kartora.recent") || "[]").filter((x) => x.product_id !== p.product_id);
+    localStorage.setItem("kartora.recent", JSON.stringify([slim, ...list].slice(0, 12)));
+  } catch {}
+}
+const recentlyViewed = () => { try { return JSON.parse(localStorage.getItem("kartora.recent") || "[]"); } catch { return []; } };
+const cards = (list, opts) => { remember(list); return list.map((p) => productCard(p, opts)).join(""); };
 
 // ===================================================================== header
 async function renderAccount() {
   const me = await loadMe();
   const box = $("#account");
-  if (!me) { box.innerHTML = `<a class="headlink" href="/login?as=customer&next=${encodeURIComponent("/" + location.hash)}">👤 Sign in / Join</a>`; return; }
+  if (!me) {
+    box.innerHTML = `<a class="sh-act" href="/login?as=customer&next=${encodeURIComponent("/" + location.hash)}">${icon("user")}<span class="lbl">Sign in</span></a>`;
+    return;
+  }
   const items = me.role === "customer"
-    ? `<a href="#/orders">📦 My orders</a><a href="#/account">👤 My account</a>`
-    : `<a href="${roleHome(me)}">➡️ Go to ${me.role === "admin" ? "admin" : me.role === "vendor" ? "seller center" : "rider app"}</a>`;
-  box.innerHTML = `<div class="menu"><button class="headlink" onclick="this.parentElement.classList.toggle('open')">👤 ${esc(me.display_name.split(" ")[0])} ▾</button>
-    <div class="drop"><div class="muted small" style="padding:6px 10px">${esc(me.email)}</div>${items}<button onclick="logout()">↪ Sign out</button></div></div>`;
+    ? `<a href="#/orders">${icon("package")}Orders</a><a href="#/wishlist">${icon("heart")}Wishlist</a><a href="#/account">${icon("user")}Account</a>`
+    : `<a href="${roleHome(me)}">${icon("arrow-right")}Go to ${me.role === "admin" ? "admin" : me.role === "vendor" ? "seller center" : "rider app"}</a>`;
+  box.innerHTML = `<div class="menu"><button class="sh-act" aria-haspopup="true" onclick="this.parentElement.classList.toggle('open')">${icon("circle-user")}
+      <span class="lbl">${esc(me.display_name.split(" ")[0])}</span>${icon("chevron-down", "sm")}</button>
+    <div class="drop"><div class="who">Signed in as<br><b style="color:var(--k-text)">${esc(me.email)}</b></div>${items}<button onclick="logout()">${icon("log-out")}Sign out</button></div></div>`;
 }
-$("#search").onsubmit = (e) => { e.preventDefault(); location.hash = `#/search?q=${encodeURIComponent($("#q").value.trim())}`; };
+$("#search").onsubmit = (e) => { e.preventDefault(); const q = $("#q").value.trim(); location.hash = q ? `#/search?q=${encodeURIComponent(q)}` : "#/search"; $("#q").blur(); };
 
-// ===================================================================== pages
-let heroTimer;
+// ===================================================================== home
+let cdTimer;
+function countdown() {
+  clearTimeout(cdTimer);
+  const el = $("#cd"); if (!el) return;
+  const end = new Date(); end.setHours(24, 0, 0, 0);
+  const s = Math.max(0, Math.floor((end - new Date()) / 1000));
+  el.innerHTML = [s / 3600, (s % 3600) / 60, s % 60].map((v) => `<b>${String(Math.floor(v)).padStart(2, "0")}</b>`).join(":");
+  cdTimer = setTimeout(countdown, 1000);
+}
 async function pageHome() {
   const h = await apiCached("/api/home");
-  const all = [...h.flash_deals, ...h.best_sellers, ...h.top_rated];
-  const pick = (fn, n = 3) => [...new Map(all.filter((p) => p.image_url && fn(p)).map((p) => [p.product_id, p])).values()].slice(0, n);
-  const elec = h.categories.find((c) => c.category_name === "Electronics") || {};
-  const slides = [
-    ["linear-gradient(120deg,#2e1a9e,#6d4bff 60%,#ff6a3d)", "⚡ Flash sale", "Up to 40% off today", "Deals from every store - ending at midnight.", pick((p) => p.discount_pct >= 25), "#/search?on_sale=1&sort=discount"],
-    ["linear-gradient(120deg,#0f172a,#1e3a8a 60%,#0891b2)", "New in", "Tech that just works", "Phones, laptops and audio from trusted electronics stores.", pick((p) => p.category_name === "Electronics"), `#/c/${elec.category_id}`],
-    ["linear-gradient(120deg,#14532d,#16a34a 60%,#facc15)", "Free delivery", "Every order, tracked live", "Pay cash on delivery and watch your rider on the way.", pick((p) => p.sold > 300), "#/search?sort=popular"],
-  ];
+  document.title = "Kartora · Shop independent stores, delivered";
+  const withPhoto = (list) => list.filter((p) => productImages(p).length).map((p) => ({ ...p, images: productImages(p) }));
+  const heroPicks = [...withPhoto(h.flash_deals).slice(0, 2), ...withPhoto(h.top_rated).filter((p) => !h.flash_deals.slice(0, 2).some((d) => d.product_id === p.product_id)).slice(0, 1)];
+  const maxOff = Math.max(0, ...h.flash_deals.map((p) => p.discount_pct || 0));
+  const recent = recentlyViewed();
   view.innerHTML = `
-    <div class="hero">${slides.map(([bg, pill, t, d, prods, href], i) => `<div class="slide ${i ? "" : "on"}" style="background:${bg}">
-      <div><span class="pill">${pill}</span><h2>${t}</h2><p>${d}</p><button onclick="location.hash='${href}'">Shop now →</button></div>
-      <div class="hero-pics">${prods.map((p) => `<a class="hp" href="#/p/${p.product_id}">${productArt(p, "md")}<span>${money(p.unit_price)}</span></a>`).join("")}</div></div>`).join("")}
-      <div class="dots">${slides.map((_, i) => `<span class="${i ? "" : "on"}" data-i="${i}"></span>`).join("")}</div></div>
-    <div class="trust">
-      <div><span class="ic">🚚</span><span><b>Free delivery</b><span class="muted small">on every order</span></span></div>
-      <div><span class="ic">💵</span><span><b>Cash on delivery</b><span class="muted small">pay when it arrives</span></span></div>
-      <div><span class="ic">📍</span><span><b>Live tracking</b><span class="muted small">see your rider move</span></span></div>
-      <div><span class="ic">↩️</span><span><b>7-day returns</b><span class="muted small">change of mind is OK</span></span></div>
-    </div>
-    <div class="section"><div class="section-head"><h2>Shop by category</h2></div>
-      <div class="cat-tiles">${h.categories.map((c) => `<a class="cat-tile" href="#/c/${c.category_id}">${categoryArt(c.category_name)}<b>${esc(c.category_name)}</b><span class="muted small">${c.products} items</span></a>`).join("")}</div></div>
-    <div class="section"><div class="section-head"><h2>⚡ Flash deals</h2><span class="countdown">Ends in <b id="cd-h">00</b>:<b id="cd-m">00</b>:<b id="cd-s">00</b></span>
-      <a href="#/search?on_sale=1&sort=discount">See all →</a></div><div class="hscroll">${h.flash_deals.map(card).join("")}</div></div>
-    <div class="section lazy-paint"><div class="section-head"><h2>🔥 Best sellers</h2><a href="#/search?sort=popular">See all →</a></div><div class="pgrid">${h.best_sellers.map(card).join("")}</div></div>
-    <div class="section lazy-paint"><div class="section-head"><h2>⭐ Top rated</h2><a href="#/search?sort=rating">See all →</a></div><div class="hscroll">${h.top_rated.map(card).join("")}</div></div>
-    <div class="section lazy-paint"><div class="section-head"><h2>🏪 Official stores</h2></div>
-      <div class="cat-tiles" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr))">${h.vendors.map((v) => `
-        <a class="cat-tile" style="align-items:flex-start; text-align:left; padding:14px" href="#/store/${v.vendor_id}">
-          <b style="font-size:15px">${esc(v.vendor_name)}</b><span class="muted small">${esc(v.tagline || "")}</span>
-          <span class="small">${stars(v.rating)} ${v.rating} · ${v.products} products · ${esc(v.city || "")}</span></a>`).join("")}</div></div>`;
-  let i = 0;
-  const show = (n) => { i = n; $$(".slide").forEach((s, k) => s.classList.toggle("on", k === i)); $$(".dots span").forEach((d, k) => d.classList.toggle("on", k === i)); };
-  $$(".dots span").forEach((d) => (d.onclick = () => show(+d.dataset.i)));
-  clearInterval(heroTimer);
-  heroTimer = setInterval(() => { if (!$(".slide")) return clearInterval(heroTimer); show((i + 1) % slides.length); }, 5000);
-  const tick = () => {
-    if (!$("#cd-h")) return;
-    const end = new Date(); end.setHours(24, 0, 0, 0);
-    const s = Math.floor((end - new Date()) / 1000);
-    [["#cd-h", s / 3600], ["#cd-m", (s % 3600) / 60], ["#cd-s", s % 60]].forEach(([id, v]) => ($(id).textContent = String(Math.floor(v)).padStart(2, "0")));
-    setTimeout(tick, 1000);
-  };
-  tick();
+    <section class="hero" aria-labelledby="hero-h">
+      <div>
+        <span class="eyebrow">${icon("zap", "sm")}This week's deals</span>
+        <h1 id="hero-h">Up to ${maxOff}% off top picks from independent stores</h1>
+        <p>Hundreds of products, one checkout. Free tracked delivery across the ${esc(S.market.country)}, and 7-day returns on every order.</p>
+        <div class="cta"><a class="k-btn primary lg" href="#/search?on_sale=1&sort=discount">Shop deals ${icon("arrow-right", "sm")}</a>
+          <a class="k-btn lg" href="#/search?sort=popular">Best sellers</a></div>
+      </div>
+      <div class="hero-tiles">${heroPicks.map((p, i) => { const sale = p.list_price > p.unit_price; return `
+        <a class="hero-tile" href="#/p/${p.product_id}" aria-label="${esc(p.product_name)}, ${money(p.unit_price)}">
+          ${imgTag(p.images[0], { sizes: "(max-width: 900px) 30vw, 200px", lazy: false, alt: "" })}
+          <span class="cap"><b class="${sale ? "sale" : ""}">${money(p.unit_price)}</b>${esc(p.product_name.split(",")[0]).slice(0, 34)}</span></a>`; }).join("")}</div>
+    </section>
+
+    <section class="sec" aria-labelledby="cat-h"><div class="sec-head"><h2 class="k-h2" id="cat-h">Shop by category</h2></div>
+      <div class="cats">${h.categories.map((c) => `<a class="cat" href="#/c/${c.category_id}"><span class="circle">${icon(CATEGORY_ICON[c.category_name] || "shopping-bag")}</span>${esc(c.category_name)}</a>`).join("")}</div></section>
+
+    <section class="sec" aria-labelledby="deal-h"><div class="sec-head">
+      <h2 class="k-h2" id="deal-h">Today's deals <span class="timer" aria-label="Deals end at midnight">${icon("timer", "sm")}<span id="cd"></span></span></h2>
+      <a class="k-link" href="#/search?on_sale=1&sort=discount">See all ${icon("chevron-right", "sm")}</a></div>
+      <div class="hrow">${cards(h.flash_deals)}</div></section>
+
+    <section class="sec props" aria-label="Why shop with Kartora">
+      <div class="prop">${icon("truck")}<div><b>Free delivery</b><span>Tracked live, door to door</span></div></div>
+      <div class="prop">${icon("shield-check")}<div><b>Secure payment</b><span>Card, PayPal or cash on delivery</span></div></div>
+      <div class="prop">${icon("rotate-ccw")}<div><b>7-day returns</b><span>Changed your mind? No problem</span></div></div>
+      <div class="prop">${icon("badge-check")}<div><b>Verified stores</b><span>Rated by real customers</span></div></div>
+    </section>
+
+    <section class="sec lazy" aria-labelledby="best-h"><div class="sec-head"><h2 class="k-h2" id="best-h">Best sellers</h2>
+      <a class="k-link" href="#/search?sort=popular">See all ${icon("chevron-right", "sm")}</a></div>
+      <div class="pc-grid">${cards(h.best_sellers)}</div></section>
+
+    <section class="sec lazy" aria-labelledby="top-h"><div class="sec-head"><h2 class="k-h2" id="top-h">Top rated</h2>
+      <a class="k-link" href="#/search?sort=rating">See all ${icon("chevron-right", "sm")}</a></div>
+      <div class="hrow">${cards(h.top_rated)}</div></section>
+
+    ${recent.length ? `<section class="sec lazy" aria-labelledby="rec-h"><div class="sec-head"><h2 class="k-h2" id="rec-h">Recently viewed</h2></div>
+      <div class="hrow">${cards(recent)}</div></section>` : ""}
+
+    <section class="sec lazy" aria-labelledby="st-h"><div class="sec-head"><h2 class="k-h2" id="st-h">Stores on Kartora</h2></div>
+      <div class="stores">${h.vendors.map((v) => `<a class="store-card" href="#/store/${v.vendor_id}">
+        <span class="avatar" aria-hidden="true">${esc(initials(v.vendor_name))}</span>
+        <span style="min-width:0"><b>${esc(v.vendor_name)}</b><span class="meta">${icon("star")}${Number(v.rating).toFixed(1)} · ${int(v.products)} products${v.city ? ` · ${esc(v.city)}` : ""}</span></span></a>`).join("")}</div></section>`;
+  countdown();
 }
 
+function pageCategories() {
+  document.title = "Categories · Kartora";
+  view.innerHTML = `<div class="crumbs"><a href="#/">Home</a>${icon("chevron-right")}Categories</div>
+    <h1 class="k-h1">All categories</h1>
+    <div class="cats" style="margin-top:var(--k-s-3)">${S.categories.map((c) => `<a class="cat" href="#/c/${c.category_id}"><span class="circle">${icon(CATEGORY_ICON[c.category_name] || "shopping-bag")}</span>
+      ${esc(c.category_name)}<span class="k-muted" style="font-weight:400">${int(c.products)} items</span></a>`).join("")}</div>`;
+}
+
+// ===================================================================== listing (category, search, store)
 async function pageListing(base = {}) {
   const q = hashQuery();
-  const f = { ...base, q: q.get("q") || base.q || "", sort: q.get("sort") || "popular", min_price: q.get("min_price") || "",
-    max_price: q.get("max_price") || "", min_rating: q.get("min_rating") || "", on_sale: q.get("on_sale") === "1", in_stock: q.get("in_stock") === "1" };
+  const f = { ...base, q: q.get("q") || "", sort: q.get("sort") || "popular", min_price: q.get("min_price") || "", max_price: q.get("max_price") || "",
+    min_rating: q.get("min_rating") || "", on_sale: q.get("on_sale") === "1", in_stock: q.get("in_stock") === "1" };
   const vendor = base.vendor_id ? await apiCached(`/api/vendors/${base.vendor_id}`) : null;
   const cat = base.category_id ? S.categories.find((c) => c.category_id === +base.category_id) : null;
-  const title = vendor ? vendor.vendor_name : cat ? cat.category_name : f.q ? `Results for “${f.q}”` : f.on_sale ? "Flash deals" : "All products";
+  const title = vendor ? vendor.vendor_name : cat ? cat.category_name : f.q ? `Results for “${f.q}”` : f.on_sale ? "Today's deals" : "All products";
+  document.title = `${title} · Kartora`;
   $("#q").value = f.q;
   const params = new URLSearchParams({ sort: f.sort, limit: 40 });
   ["q", "min_price", "max_price", "min_rating", "category_id", "vendor_id"].forEach((k) => f[k] && params.set(k, f[k]));
@@ -143,288 +214,420 @@ async function pageListing(base = {}) {
     Object.entries(changes).forEach(([k, v]) => (v === "" || v === false || v == null ? n.delete(k) : n.set(k, v === true ? "1" : v)));
     location.hash = location.hash.split("?")[0] + (n.toString() ? "?" + n : "");
   };
+  const chips = [
+    f.q && ["q", `“${f.q}”`], f.min_price && ["min_price", `From ${money(f.min_price)}`], f.max_price && ["max_price", `Up to ${money(f.max_price)}`],
+    f.min_rating && ["min_rating", `${f.min_rating}+ stars`], f.on_sale && ["on_sale", "On sale"], f.in_stock && ["in_stock", "In stock"],
+  ].filter(Boolean);
+  const radio = (name, checked, href, text) => `<label><input type="radio" name="${name}" ${checked ? "checked" : ""} data-href="${href}">${text}</label>`;
   view.innerHTML = `
-    ${vendor ? `<div class="section" style="background: linear-gradient(120deg, var(--accent-soft), var(--panel))">
-      <h1>🏪 ${esc(vendor.vendor_name)}</h1><p class="muted" style="margin:4px 0 8px">${esc(vendor.tagline || "")}</p>
-      <div class="row small">${stars(vendor.rating)} <b>${vendor.rating}</b> · ${vendor.products} products · ${int(vendor.orders_delivered)} orders delivered · ${esc(vendor.city || "")}, ${esc(vendor.country || "")}</div></div>` : ""}
+    <div class="crumbs"><a href="#/">Home</a>${icon("chevron-right")}${vendor ? "Stores" : cat ? `<a href="#/categories">Categories</a>` : "Search"}${icon("chevron-right")}<span>${esc(title)}</span></div>
+    ${vendor ? `<div class="store-hero panel" style="margin:0 0 var(--k-s-3)"><span class="avatar" aria-hidden="true">${esc(initials(vendor.vendor_name))}</span>
+      <div><h1 class="k-h2">${esc(vendor.vendor_name)}</h1><div class="k-muted">${esc(vendor.tagline || "")}</div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px">${starRating(vendor.rating)}<span class="k-muted">· ${int(vendor.products)} products · ${int(vendor.orders_delivered)} orders delivered · ${esc(vendor.city || "")}</span></div></div></div>` : ""}
     <div class="listing">
-      <aside class="filters">
-        <h3>Category</h3>
-        <label><input type="radio" name="cat" ${!base.category_id ? "checked" : ""} onclick="location.hash='${vendor ? `#/store/${vendor.vendor_id}` : "#/search"}'"> All</label>
-        ${vendor ? "" : S.categories.map((c) => `<label><input type="radio" name="cat" ${+base.category_id === c.category_id ? "checked" : ""} onclick="location.hash='#/c/${c.category_id}'"> ${esc(c.category_name)}</label>`).join("")}
-        <h3>Price</h3>
-        <div class="row"><input id="minp" type="number" min="0" placeholder="Min" value="${f.min_price}" style="width:80px"> – <input id="maxp" type="number" min="0" placeholder="Max" value="${f.max_price}" style="width:80px">
-          <button class="small" id="applyp">Go</button></div>
-        <h3>Rating</h3>
-        ${[4, 3].map((r) => `<label><input type="radio" name="rating" ${+f.min_rating === r ? "checked" : ""} data-r="${r}"> ${stars(r)} &amp; up</label>`).join("")}
-        <label><input type="radio" name="rating" ${!f.min_rating ? "checked" : ""} data-r=""> Any</label>
-        <h3>Offers</h3>
-        <label><input type="checkbox" id="onsale" ${f.on_sale ? "checked" : ""}> On sale</label>
-        <label><input type="checkbox" id="instock" ${f.in_stock ? "checked" : ""}> In stock only</label>
+      <aside class="filters" id="filters" aria-label="Filters">
+        ${vendor ? "" : `<div class="fgroup" style="padding-top:0"><h3>Category</h3>${radio("cat", !base.category_id, "#/search", "All categories")}
+          ${S.categories.map((c) => radio("cat", +base.category_id === c.category_id, `#/c/${c.category_id}`, esc(c.category_name))).join("")}</div>`}
+        <div class="fgroup"><h3>Price</h3><form class="prange" id="pform"><input class="k-input" id="minp" type="number" min="0" inputmode="decimal" placeholder="Min" aria-label="Minimum price" value="${esc(f.min_price)}">
+          <span class="k-muted">–</span><input class="k-input" id="maxp" type="number" min="0" inputmode="decimal" placeholder="Max" aria-label="Maximum price" value="${esc(f.max_price)}">
+          <button class="k-btn icon" aria-label="Apply price">${icon("arrow-right", "sm")}</button></form></div>
+        <div class="fgroup"><h3>Customer rating</h3>
+          ${[4.5, 4, 3.5].map((r) => `<label><input type="radio" name="rating" ${+f.min_rating === r ? "checked" : ""} data-r="${r}">${starRating(r)}<span>&amp; up</span></label>`).join("")}
+          <label><input type="radio" name="rating" ${!f.min_rating ? "checked" : ""} data-r="">Any rating</label></div>
+        <div class="fgroup" style="border:0"><h3>Availability</h3>
+          <label><input type="checkbox" id="onsale" ${f.on_sale ? "checked" : ""}>On sale</label>
+          <label><input type="checkbox" id="instock" ${f.in_stock ? "checked" : ""}>In stock</label></div>
       </aside>
-      <section>
-        <div class="listbar"><div><h1 style="display:inline">${esc(title)}</h1> <span class="muted">${int(res.total)} items</span></div>
-          <label class="row small">Sort by <select id="sort">${[["popular", "Best selling"], ["price_asc", "Price: low to high"], ["price_desc", "Price: high to low"],
-            ["rating", "Top rated"], ["discount", "Biggest discount"], ["newest", "Newest"]].map(([v, t]) => `<option value="${v}" ${f.sort === v ? "selected" : ""}>${t}</option>`).join("")}</select></label></div>
-        <div class="pgrid" id="grid">${res.items.map(card).join("") || `<div class="section muted">No products match these filters.</div>`}</div>
-        <div style="text-align:center; margin-top:16px">${res.total > 40 ? `<button id="more">Load more</button>` : ""}</div>
+      <section aria-labelledby="list-h">
+        <div class="listbar"><div>${vendor ? "" : `<h1 class="k-h2" id="list-h" style="display:inline">${esc(title)}</h1> `}<span class="count">${int(res.total)} results</span></div>
+          <div style="display:flex; gap:8px"><button class="k-btn ftoggle" id="ftoggle" aria-expanded="false" aria-controls="filters">${icon("sliders-horizontal", "sm")}Filters</button>
+          <label class="sr" for="sort">Sort by</label><select id="sort">${[["popular", "Best selling"], ["rating", "Top rated"], ["price_asc", "Price: low to high"], ["price_desc", "Price: high to low"],
+            ["discount", "Biggest discount"], ["newest", "Newest"]].map(([v, t]) => `<option value="${v}" ${f.sort === v ? "selected" : ""}>${t}</option>`).join("")}</select></div></div>
+        ${chips.length ? `<div class="chips">${chips.map(([k, t]) => `<button class="k-chip" data-clear="${k}" aria-label="Remove filter ${esc(t)}">${esc(t)} ${icon("x", "sm")}</button>`).join("")}
+          <button class="k-btn ghost sm" data-clear="all">Clear all</button></div>` : ""}
+        ${res.items.length ? `<div class="pc-grid" id="grid">${cards(res.items)}</div>` : `<div class="empty panel">${icon("search")}<h2>No matches</h2>
+          <p>Try a different search or remove a filter.</p><a class="k-btn primary" href="#/search">See all products</a></div>`}
+        <div style="text-align:center; margin-top:var(--k-s-3)">${res.total > 40 ? `<button class="k-btn lg" id="more">Show more</button>` : ""}</div>
       </section>
     </div>`;
+  $$("[data-href]").forEach((el) => (el.onchange = () => (location.hash = el.dataset.href)));
   $("#sort").onchange = (e) => setQ({ sort: e.target.value });
-  $("#applyp").onclick = () => setQ({ min_price: $("#minp").value, max_price: $("#maxp").value });
+  $("#pform").onsubmit = (e) => { e.preventDefault(); setQ({ min_price: $("#minp").value, max_price: $("#maxp").value }); };
   $$("[data-r]").forEach((el) => (el.onchange = () => setQ({ min_rating: el.dataset.r })));
   $("#onsale").onchange = (e) => setQ({ on_sale: e.target.checked });
   $("#instock").onchange = (e) => setQ({ in_stock: e.target.checked });
-  $("#more")?.addEventListener("click", async () => {
+  $("#ftoggle").onclick = (e) => { const open = $("#filters").classList.toggle("open"); e.currentTarget.setAttribute("aria-expanded", open); };
+  $$("[data-clear]").forEach((el) => (el.onclick = () => el.dataset.clear === "all"
+    ? setQ({ q: "", min_price: "", max_price: "", min_rating: "", on_sale: "", in_stock: "" }) : setQ({ [el.dataset.clear]: "" })));
+  $("#more")?.addEventListener("click", async (e) => {
+    e.currentTarget.disabled = true;
     offset += 40; params.set("offset", offset);
     const more = await apiCached("/api/products?" + params);
-    $("#grid").insertAdjacentHTML("beforeend", more.items.map(card).join(""));
-    if (offset + 40 >= res.total) $("#more").remove();
+    $("#grid").insertAdjacentHTML("beforeend", cards(more.items));
+    if (offset + 40 >= res.total) $("#more").remove(); else $("#more").disabled = false;
   });
 }
 
+// ===================================================================== product page
+let PHOTO_CREDITS;
+async function photoCredits(images) {
+  PHOTO_CREDITS ||= await fetch("/static/img/products/credits.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+  return images.map((im) => {
+    const file = im.src.split("/").pop();
+    return PHOTO_CREDITS[file.replace(/-(240|480|960)\.webp$/, "")] || PHOTO_CREDITS[file];
+  });
+}
 async function pageProduct(id) {
   const p = await apiCached(`/api/products/${id}`);
-  remember([p, ...p.related]);
-  let qty = 1;
+  remember([p, ...p.related]); rememberViewed(p);
+  document.title = `${p.product_name} · Kartora`;
+  const images = productImages(p);
+  const sale = p.list_price > p.unit_price && p.discount_pct > 0;
+  const stock = Number(p.stock);
+  const specs = Object.entries(p.specs || {}).filter(([, v]) => v && v !== "see title" && v !== "-");
+  const highlights = specs.filter(([k]) => k !== "Brand").slice(0, 4);
+  const d1 = new Date(Date.now() + 2 * 864e5), d2 = new Date(Date.now() + 4 * 864e5);
+  const hist = p.rating_histogram || {};
+  let qty = 1, idx = 0;
   view.innerHTML = `
-    <div class="meta" style="margin-bottom:10px"><a href="#/">Home</a> › <a href="#/c/${p.category_id}">${esc(p.category_name)}</a> › ${esc(p.product_name)}</div>
-    <div class="pdp section">
-      <div>${productArt(p, "xl")}<div id="credit"></div></div>
-      <div>
-        <h1>${esc(p.product_name)}</h1>
-        <div class="meta" style="margin:6px 0 12px">${stars(p.rating)} ${p.rating || "No ratings yet"} · ${int(p.review_count)} ratings · ${int(p.sold)} sold · SKU ${esc(p.sku)}</div>
-        <div style="border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:12px 0">
-          <span class="price">${money(p.unit_price)}</span>
-          ${p.list_price > p.unit_price ? `<span class="was" style="font-size:15px">${money(p.list_price)}</span> <span class="badge s-cancelled">-${p.discount_pct}%</span>` : ""}
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="#/">Home</a>${icon("chevron-right")}<a href="#/c/${p.category_id}">${esc(p.category_name)}</a>${icon("chevron-right")}<span>${esc(p.brand || p.product_name)}</span></nav>
+    <div class="pdp">
+      <div class="gal">
+        <div class="thumbs" role="tablist" aria-label="Product photos">${images.map((im, i) => `<button class="thumb" role="tab" data-i="${i}" aria-current="${i === 0}" aria-label="Photo ${i + 1} of ${images.length}">
+          <img src="${esc(im.srcset ? im.src.replace("-480.", "-240.") : im.src)}" alt="" width="72" height="72" loading="lazy" decoding="async"></button>`).join("")}</div>
+        <div class="gal-main" id="galmain">
+          <span class="pc-fallback">${icon(CATEGORY_ICON[p.category_name] || "shopping-bag")}</span>
+          ${images.length ? imgTag(images[0], { alt: p.product_name, sizes: "(max-width: 900px) 100vw, 600px", lazy: false, w: 960 }) : ""}
+          ${sale ? `<span class="pc-badge k-badge-sale">-${p.discount_pct}%</span>` : ""}
+          ${images.length > 1 ? `<button class="gal-nav prev" aria-label="Previous photo">${icon("chevron-left")}</button><button class="gal-nav next" aria-label="Next photo">${icon("chevron-right")}</button>` : ""}
         </div>
-        <p>${esc(p.description || "")}</p>
-        <div class="row" style="margin-top:12px">Quantity
-          <div class="qty"><button id="minus">−</button><span id="qty">1</span><button id="plus">+</button></div>
-          <span class="${p.stock <= 0 ? "stock-out" : p.stock < 10 ? "stock-low" : "muted"} small">${p.stock <= 0 ? "Out of stock" : p.stock < 10 ? `Only ${p.stock} left - order soon` : `${int(p.stock)} available`}</span></div>
-        <div class="big-btns"><button class="buy" id="buy" ${p.stock <= 0 ? "disabled" : ""}>Buy now</button>
-          <button class="primary" id="add" ${p.stock <= 0 ? "disabled" : ""}>Add to cart</button></div>
+        <div class="credit" id="credit"></div>
       </div>
-      <aside class="side-box">
-        <div class="line"><span>📍</span><div><b>Delivery</b><div class="muted">${esc(ME?.role === "customer" ? "To your address" : "Pakistan, UK, US, UAE, Germany, Canada")}</div></div></div>
-        <div class="line"><span>🚚</span><div><b>Standard delivery · Free</b><div class="muted">Usually 1–3 days, tracked live</div></div></div>
-        <div class="line"><span>💵</span><div><b>Cash on delivery available</b></div></div>
-        <div class="line"><span>↩️</span><div><b>7-day easy returns</b><div class="muted">Change of mind is OK</div></div></div>
-        <div class="line" style="display:block"><div class="muted small">Sold by</div><b>🏪 ${esc(p.vendor_name)}</b>
-          <div class="small">${stars(p.vendor_rating)} ${p.vendor_rating} seller rating</div>
-          <a class="small" href="#/store/${p.vendor_id}">Visit store →</a></div>
-      </aside>
+
+      <div class="pi">
+        ${p.brand ? `<a class="brand" href="#/search?q=${encodeURIComponent(p.brand)}">${esc(p.brand)}</a>` : ""}
+        <h1>${esc(p.product_name)}</h1>
+        <div class="rating-line">${starRating(p.rating)}<a href="#reviews" data-scroll="reviews">${int(p.review_count)} ratings</a><span class="k-muted">· ${int(p.sold)} sold</span></div>
+        <div class="price-block">
+          <span class="now ${sale ? "sale" : ""}">${money(p.unit_price)}</span>${sale ? `<s class="was" aria-label="was ${money(p.list_price)}">${money(p.list_price)}</s>
+          <span class="save">You save ${money(p.list_price - p.unit_price)} (${p.discount_pct}%)</span>` : ""}
+          <span class="tax">Price includes all fees · free delivery</span>
+        </div>
+        ${highlights.length ? `<ul class="highlights">${highlights.map(([k, v]) => `<li>${icon("check")}<span><b style="color:var(--k-text); font-weight:600">${esc(k)}:</b> ${esc(v)}</span></li>`).join("")}</ul>` : ""}
+        <div class="buybox">
+          <div class="stock-line ${stock <= 0 ? "out" : stock < 5 ? "low" : ""}">${icon(stock <= 0 ? "circle-alert" : stock < 5 ? "clock" : "circle-check", "sm")}
+            ${stock <= 0 ? "Out of stock" : stock < 5 ? `Only ${stock} left, order soon` : "In stock"}</div>
+          ${stock > 0 ? `<div style="font-size:var(--k-fs-14)">${icon("truck", "sm")} Free delivery <b>${shortDate(d1)} – ${shortDate(d2)}</b></div>` : ""}
+          <div style="display:flex; gap:var(--k-s-2); align-items:center">
+            <div class="qty" role="group" aria-label="Quantity"><button id="minus" aria-label="Decrease quantity" disabled>${icon("minus", "sm")}</button>
+              <output id="qty" aria-live="polite">1</output><button id="plus" aria-label="Increase quantity" ${stock <= 1 ? "disabled" : ""}>${icon("plus", "sm")}</button></div>
+            <button class="k-btn ghost" id="wish" aria-pressed="${wishlist.has(p.product_id)}" style="color:${wishlist.has(p.product_id) ? "var(--k-sale)" : "inherit"}">${icon("heart", "sm")}<span>${wishlist.has(p.product_id) ? "Saved" : "Save"}</span></button>
+          </div>
+          <div class="buy-row"><button class="k-btn primary lg" id="add" ${stock <= 0 ? "disabled" : ""}>${icon("shopping-cart", "sm")}Add to cart</button>
+            <button class="k-btn lg" id="buy" ${stock <= 0 ? "disabled" : ""}>Buy now</button></div>
+          <div class="assure">
+            <div>${icon("rotate-ccw")}<span><b>7-day easy returns</b><span>Return it for any reason within 7 days of delivery</span></span></div>
+            <div>${icon("shield-check")}<span><b>Secure payment</b><span>Card, PayPal, bank transfer or cash on delivery</span></span></div>
+          </div>
+          <div class="seller"><span class="avatar" aria-hidden="true">${esc(initials(p.vendor_name))}</span>
+            <div style="flex:1; min-width:0"><div class="meta">Sold and shipped by</div><b>${esc(p.vendor_name)}</b>
+              <div class="meta">${Number(p.vendor_rating).toFixed(1)} / 5 seller rating</div></div>
+            <a class="k-btn sm" href="#/store/${p.vendor_id}">Visit store</a></div>
+        </div>
+      </div>
     </div>
-    ${p.related.length ? `<div class="section"><div class="section-head"><h2>More from ${esc(p.category_name)}</h2></div><div class="hscroll">${p.related.map(card).join("")}</div></div>` : ""}`;
-  photoCredit(p).then((html) => { if ($("#credit")) $("#credit").innerHTML = html; });
-  const setQty = (d) => { qty = Math.max(1, Math.min(20, Math.min(p.stock, qty + d))); $("#qty").textContent = qty; };
+
+    <div class="pdp-sections">
+      <section aria-labelledby="about-h"><h2 class="k-h3" id="about-h" style="margin-bottom:var(--k-s-2)">About this item</h2>
+        <p class="desc">${esc(p.description || "")}</p>
+        ${specs.length ? `<table class="specs"><caption class="sr">Specifications</caption><tbody>${specs.map(([k, v]) => `<tr><th scope="row">${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}
+          <tr><th scope="row">SKU</th><td>${esc(p.sku)}</td></tr><tr><th scope="row">Category</th><td>${esc(p.category_name)}</td></tr></tbody></table>` : ""}
+      </section>
+      <section id="reviews" aria-labelledby="rv-h"><h2 class="k-h3" id="rv-h" style="margin-bottom:var(--k-s-2)">Customer reviews</h2>
+        <div class="rv-sum"><div class="rv-big"><div class="n">${Number(p.rating).toFixed(1)}</div>${starRating(p.rating)}<div class="c">${int(p.review_count)} ratings</div></div>
+          <div class="hist">${[5, 4, 3, 2, 1].map((s) => `<div><span>${s} star</span><span class="bar" role="img" aria-label="${hist[s] || 0}% ${s} star"><i style="width:${hist[s] || 0}%"></i></span><span>${hist[s] || 0}%</span></div>`).join("")}</div></div>
+        ${(p.reviews || []).map((r) => `<article class="rv">
+          <div class="rv-head"><span class="avatar" aria-hidden="true">${esc(initials(r.author || "K"))}</span><span class="who">${esc(r.author || "Kartora customer")}</span>
+            <span class="when">${esc(r.city ? r.city + " · " : "")}${new Date(r.created_at).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}</span></div>
+          <h4>${starRating(r.rating)}${esc(r.title)}</h4>
+          ${r.verified ? `<span class="verified">${icon("badge-check")}Verified purchase</span>` : ""}
+          <p>${esc(r.body)}</p>
+          ${r.helpful ? `<div class="helpful">${icon("thumbs-up", "sm")}${int(r.helpful)} people found this helpful</div>` : ""}
+        </article>`).join("") || `<p class="k-muted">No written reviews yet.</p>`}
+      </section>
+    </div>
+
+    ${p.related.length ? `<section class="sec lazy" aria-labelledby="rel-h"><div class="sec-head"><h2 class="k-h2" id="rel-h">More in ${esc(p.category_name)}</h2>
+      <a class="k-link" href="#/c/${p.category_id}">See all ${icon("chevron-right", "sm")}</a></div><div class="hrow">${cards(p.related)}</div></section>` : ""}
+
+    <div class="mbar"><span class="p ${sale ? "sale" : ""}">${money(p.unit_price)}</span>
+      <button class="k-btn primary lg" id="add-m" ${stock <= 0 ? "disabled" : ""}>${icon("shopping-cart", "sm")}Add to cart</button></div>`;
+
+  // gallery
+  const show = (i) => {
+    idx = (i + images.length) % images.length;
+    const old = $("#galmain img"); if (old) old.remove();
+    $("#galmain").insertAdjacentHTML("beforeend", imgTag(images[idx], { alt: p.product_name, sizes: "(max-width: 900px) 100vw, 600px", lazy: false, w: 960 }));
+    $$(".thumb").forEach((t) => t.setAttribute("aria-current", +t.dataset.i === idx));
+  };
+  $$(".thumb").forEach((t) => (t.onclick = () => show(+t.dataset.i)));
+  $(".gal-nav.prev")?.addEventListener("click", () => show(idx - 1));
+  $(".gal-nav.next")?.addEventListener("click", () => show(idx + 1));
+  let x0 = null;
+  $("#galmain").addEventListener("touchstart", (e) => (x0 = e.touches[0].clientX), { passive: true });
+  $("#galmain").addEventListener("touchend", (e) => { if (x0 == null || images.length < 2) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) show(idx + (dx < 0 ? 1 : -1)); x0 = null; });
+  photoCredits(images).then((cs) => {
+    const list = cs.map((c, i) => c && `<a href="${esc(c.source)}" target="_blank" rel="noopener">Photo ${i + 1}</a> by ${esc(c.creator || "unknown")} (${esc(String(c.license || "").toUpperCase())}${c.license_version ? " " + esc(c.license_version) : ""})`).filter(Boolean);
+    if (list.length && $("#credit")) $("#credit").innerHTML = `Photos show this product type. ${list.join(" · ")}`;
+  });
+  // quantity + actions
+  const setQty = (d) => {
+    qty = Math.max(1, Math.min(20, stock, qty + d));
+    $("#qty").textContent = qty; $("#minus").disabled = qty <= 1; $("#plus").disabled = qty >= Math.min(20, stock);
+  };
   $("#minus").onclick = () => setQty(-1);
   $("#plus").onclick = () => setQty(1);
-  $("#add").onclick = () => addToCart(p.product_id, qty);
-  $("#buy").onclick = () => { addToCart(p.product_id, qty, true); location.hash = "#/checkout"; };
+  const add = (btn) => { if (addToCart(p.product_id, qty, true)) { flyToCart($("#galmain img.in") || $("#galmain"), innerWidth < 768 ? $("#carticon-m") : $("#carticon")); toast(`Added ${qty} to cart`, "good"); } };
+  $("#add").onclick = () => add();
+  $("#add-m").onclick = () => add();
+  $("#buy").onclick = () => { if (addToCart(p.product_id, qty, true)) location.hash = "#/checkout"; };
+  $("#wish").onclick = (e) => {
+    const b = e.currentTarget; toggleWish(p.product_id, b); updateWishCount();
+    b.querySelector("span").textContent = wishlist.has(p.product_id) ? "Saved" : "Save"; b.style.color = wishlist.has(p.product_id) ? "var(--k-sale)" : "inherit";
+  };
+  $("[data-scroll]").onclick = (e) => { e.preventDefault(); $("#reviews").scrollIntoView({ behavior: "smooth" }); };
 }
 
+// ===================================================================== wishlist
+async function pageWishlist() {
+  document.title = "Wishlist · Kartora";
+  const ids = [...wishlist];
+  const list = (await Promise.all(ids.map((id) => S.products[id] || apiCached(`/api/products/${id}`).catch(() => null)))).filter(Boolean);
+  view.innerHTML = `<div class="crumbs"><a href="#/">Home</a>${icon("chevron-right")}Wishlist</div><h1 class="k-h1" style="margin-bottom:var(--k-s-3)">Wishlist</h1>
+    ${list.length ? `<div class="pc-grid">${cards(list)}</div>` : `<div class="empty panel">${icon("heart")}<h2>Nothing saved yet</h2>
+      <p>Tap the heart on any product to save it for later.</p><a class="k-btn primary" href="#/">Discover products</a></div>`}`;
+}
+
+// ===================================================================== cart
 async function cartProducts() {
-  const missing = S.cart.filter((l) => !S.products[l.product_id]);
+  const missing = S.cart.filter((l) => !S.products[l.product_id] || S.products[l.product_id].stock == null);
   await Promise.all(missing.map((l) => apiCached(`/api/products/${l.product_id}`).then((p) => remember([p])).catch(() => {})));
-  S.cart = S.cart.filter((l) => S.products[l.product_id]);  // drop products that no longer exist
+  S.cart = S.cart.filter((l) => S.products[l.product_id]);
   saveCart();
   return S.cart.map((l) => ({ ...l, p: S.products[l.product_id] }));
 }
 function setCartQty(id, qty) {
   const line = S.cart.find((l) => l.product_id === id);
   if (!line) return;
-  line.quantity = Math.max(0, Math.min(20, Math.min(S.products[id]?.stock ?? 20, qty)));
+  line.quantity = Math.max(0, Math.min(20, S.products[id]?.stock ?? 20, qty));
   S.cart = S.cart.filter((l) => l.quantity > 0);
-  saveCart(); render();
+  saveCart(); render({ quiet: true });
 }
-function byVendor(lines) {
-  const groups = {};
-  lines.forEach((l) => (groups[l.p.vendor_name] ||= []).push(l));
-  return groups;
-}
+function byVendor(lines) { const g = {}; lines.forEach((l) => (g[l.p.vendor_name] ||= []).push(l)); return g; }
 
 async function pageCart() {
+  document.title = "Cart · Kartora";
   const lines = await cartProducts();
   if (!lines.length) {
-    view.innerHTML = `<div class="section" style="text-align:center; padding:48px"><div style="font-size:64px">🛒</div><h1>Your cart is empty</h1>
-      <p class="muted">Browse the deals and add something you love.</p><button class="primary" onclick="location.hash='#/'">Continue shopping</button></div>`;
+    view.innerHTML = `<div class="empty panel" style="margin-top:var(--k-s-3)">${icon("shopping-cart")}<h2>Your cart is empty</h2>
+      <p>Find something you love in today's deals.</p><a class="k-btn primary lg" href="#/search?on_sale=1&sort=discount">Shop deals</a></div>`;
     return;
   }
   const subtotal = lines.reduce((a, l) => a + l.p.unit_price * l.quantity, 0);
+  const savings = lines.reduce((a, l) => a + (l.p.list_price > l.p.unit_price ? (l.p.list_price - l.p.unit_price) * l.quantity : 0), 0);
   const groups = byVendor(lines);
-  view.innerHTML = `<div class="two-col"><div>
-    <div class="section"><h1>Cart (${lines.reduce((a, l) => a + l.quantity, 0)} items)</h1>
-      <p class="muted small">Items from different stores ship separately - each store packs its own parcel.</p></div>
-    ${Object.entries(groups).map(([vendor, ls]) => `<div class="section"><div class="section-head"><h2>🏪 ${esc(vendor)}</h2><span class="muted small">ships separately</span></div>
-      ${ls.map((l) => `<div class="cart-line"><a href="#/p/${l.product_id}" style="width:72px">${productArt(l.p, "sm")}</a>
-        <div><a href="#/p/${l.product_id}" style="color:var(--text)">${esc(l.p.product_name)}</a>
-          <div class="meta">${money(l.p.unit_price)} each ${l.p.stock < l.quantity ? '<span class="stock-out">· not enough stock</span>' : ""}</div>
-          <button class="small danger" onclick="setCartQty(${l.product_id}, 0)" style="margin-top:4px">Remove</button></div>
-        <div class="qty"><button onclick="setCartQty(${l.product_id}, ${l.quantity - 1})">−</button><span>${l.quantity}</span><button onclick="setCartQty(${l.product_id}, ${l.quantity + 1})">+</button></div>
-        <b class="num">${money(l.p.unit_price * l.quantity)}</b></div>`).join("")}</div>`).join("")}
+  const n = lines.reduce((a, l) => a + l.quantity, 0);
+  view.innerHTML = `<h1 class="k-h1" style="margin:var(--k-s-3) 0">Cart <span class="k-muted" style="font-size:var(--k-fs-20); font-weight:500">(${n} item${n > 1 ? "s" : ""})</span></h1>
+    <div class="two"><div style="display:grid; gap:var(--k-s-2)">
+    ${Object.entries(groups).map(([vendor, ls]) => `<div class="panel"><div class="group-head">${icon("store", "sm")}${esc(vendor)} <span class="k-muted">ships separately</span></div>
+      ${ls.map((l) => `<div class="line-item"><a class="thumbbox" href="#/p/${l.product_id}" aria-hidden="true" tabindex="-1">${thumb(l.p)}</a>
+        <div style="min-width:0"><a class="name" href="#/p/${l.product_id}">${esc(l.p.product_name)}</a>
+          <div class="meta">${money(l.p.unit_price)} each${l.p.stock < l.quantity ? ` · <span style="color:var(--k-danger)">only ${l.p.stock} in stock</span>` : ""}</div>
+          <div class="acts"><div class="qty sm" role="group" aria-label="Quantity"><button onclick="setCartQty(${l.product_id}, ${l.quantity - 1})" aria-label="Decrease">${icon(l.quantity > 1 ? "minus" : "trash-2", "sm")}</button>
+            <output>${l.quantity}</output><button onclick="setCartQty(${l.product_id}, ${l.quantity + 1})" aria-label="Increase" ${l.quantity >= Math.min(20, l.p.stock) ? "disabled" : ""}>${icon("plus", "sm")}</button></div>
+            <button class="k-btn ghost sm danger" onclick="setCartQty(${l.product_id}, 0)">Remove</button></div></div>
+        <div class="amt">${money(l.p.unit_price * l.quantity)}</div></div>`).join("")}</div>`).join("")}
     </div>
-    <aside class="section summary" style="position:sticky; top:130px">
-      <h2>Order summary</h2>
-      <div class="row2"><span>Subtotal</span><span>${money(subtotal)}</span></div>
-      <div class="row2"><span>Delivery (${Object.keys(groups).length} parcel${Object.keys(groups).length > 1 ? "s" : ""})</span><span style="color:var(--good)">Free</span></div>
-      <div class="row2 total"><span>Total</span><span>${money(subtotal)}</span></div>
-      <p class="muted small">Have a coupon? Enter it at checkout (try <b>SAVE10</b>).</p>
-      <button class="buy" style="width:100%; padding:12px; font-weight:700" onclick="location.hash='#/checkout'">Proceed to checkout</button>
+    <aside class="panel"><h2 class="k-h3" style="margin-bottom:var(--k-s-2)">Order summary</h2>
+      <div class="sum-row"><span>Subtotal</span><span>${money(subtotal)}</span></div>
+      ${savings > 0 ? `<div class="sum-row"><span>You save</span><span style="color:var(--k-sale)">−${money(savings)}</span></div>` : ""}
+      <div class="sum-row"><span>Delivery (${Object.keys(groups).length} parcel${Object.keys(groups).length > 1 ? "s" : ""})</span><span class="free">Free</span></div>
+      <div class="sum-row total"><span>Total</span><span>${money(subtotal)}</span></div>
+      <a class="k-btn primary lg block" style="margin-top:var(--k-s-2)" href="#/checkout">Checkout ${icon("arrow-right", "sm")}</a>
+      <div class="note" style="margin-top:var(--k-s-2)">${icon("tag")}<span>Have a coupon? Add it at checkout (try SAVE10).</span></div>
     </aside></div>`;
 }
 
+// ===================================================================== checkout
 async function pageCheckout() {
+  document.title = "Checkout · Kartora";
   const me = await loadMe();
-  if (!me) { location.href = `/login?next=${encodeURIComponent("/#/checkout")}`; return; }
-  if (me.role !== "customer") { view.innerHTML = `<div class="section"><h1>Checkout is for customers</h1><p class="muted">You're signed in as <b>${me.role}</b>. Sign in with a customer account to place orders.</p><button onclick="logout()">Sign out</button></div>`; return; }
+  if (!me) { location.href = `/login?as=customer&next=${encodeURIComponent("/#/checkout")}`; return; }
+  if (me.role !== "customer") { view.innerHTML = `<div class="empty panel" style="margin-top:var(--k-s-3)">${icon("user")}<h2>Checkout is for customer accounts</h2>
+    <p>You're signed in as ${esc(me.role)}. Sign in with a customer account to place orders.</p><button class="k-btn primary" onclick="logout()">Sign out</button></div>`; return; }
   const lines = await cartProducts();
   if (!lines.length) { location.hash = "#/cart"; return; }
   const prof = await api("/api/me/profile");
   const subtotal = lines.reduce((a, l) => a + l.p.unit_price * l.quantity, 0);
-  view.innerHTML = `<div class="two-col"><div>
-    <div class="section"><h2>1 · Delivery address</h2>
-      <div class="grid" style="grid-template-columns:1fr 1fr; gap:10px">
-        <div class="field">Full name<input value="${esc(prof.first_name + " " + prof.last_name)}" disabled></div>
-        <div class="field">Phone<input id="phone" value="${esc(prof.phone || "")}"></div>
-        <div class="field">City<input id="city" value="${esc(prof.city || "")}" required></div>
-        <div class="field">Country<input id="country" value="${esc(prof.country || "")}" required></div>
-      </div></div>
-    <div class="section"><h2>2 · Payment</h2><div class="pay-opts">${Object.entries(PAYMENT_LABELS).map(([k, [icon, name, sub]], i) => `
-      <label class="pay-opt"><input type="radio" name="pay" value="${k}" ${i ? "" : "checked"}> <span style="font-size:22px">${icon}</span>
-        <span><b>${name}</b><div class="muted small">${sub}</div></span></label>`).join("")}</div>
-      <p class="muted small">🔒 Online methods take you to our secure payment page (sandbox: use test card 4242 4242 4242 4242). Your order goes to the stores as soon as the payment is confirmed. Cash is collected by the rider.</p></div>
-    <div class="section"><h2>3 · Review items</h2>${Object.entries(byVendor(lines)).map(([vendor, ls]) => `
-      <div style="margin-bottom:10px"><b>🏪 ${esc(vendor)}</b> <span class="muted small">· parcel ${Object.keys(byVendor(lines)).indexOf(vendor) + 1}</span>
-      ${ls.map((l) => `<div class="cart-line" style="grid-template-columns:48px 1fr auto"><div style="width:48px">${productArt(l.p, "sm")}</div><div>${esc(l.p.product_name)} <span class="muted">× ${l.quantity}</span></div><b>${money(l.p.unit_price * l.quantity)}</b></div>`).join("")}</div>`).join("")}</div>
+  const groups = byVendor(lines);
+  view.innerHTML = `<h1 class="k-h1" style="margin:var(--k-s-3) 0">Checkout</h1>
+  <div class="two"><div style="display:grid; gap:var(--k-s-2)">
+    <section class="panel" aria-labelledby="ad-h"><h2 class="k-h3" id="ad-h" style="margin-bottom:var(--k-s-2)">1. Delivery address</h2>
+      <div class="form-grid">
+        <label class="fld">Full name<input class="k-input" value="${esc(prof.first_name + " " + prof.last_name)}" disabled></label>
+        <label class="fld">Phone<input class="k-input" id="phone" type="tel" autocomplete="tel" value="${esc(prof.phone || "")}"></label>
+        <label class="fld">City<input class="k-input" id="city" autocomplete="address-level2" value="${esc(prof.city || "")}" required></label>
+        <label class="fld">Country<input class="k-input" id="country" value="${esc(S.market.country)}" readonly></label>
+      </div></section>
+    <section class="panel" aria-labelledby="pay-h"><h2 class="k-h3" id="pay-h" style="margin-bottom:var(--k-s-2)">2. Payment</h2>
+      ${Object.entries(PAYMENT).map(([k, [ic, name, sub]], i) => `<label class="pay-opt"><input type="radio" name="pay" value="${k}" ${i ? "" : "checked"}>${icon(ic)}
+        <span><b>${name}</b><span>${sub}</span></span></label>`).join("")}
+      <div class="note" style="margin-top:var(--k-s-2)">${icon("lock")}<span>Card payments happen on our secure payment page (sandbox: use test card 4242 4242 4242 4242). Your order goes to the stores once payment is confirmed.</span></div></section>
+    <section class="panel" aria-labelledby="rv-h2"><h2 class="k-h3" id="rv-h2" style="margin-bottom:var(--k-s-2)">3. Review items</h2>
+      ${Object.entries(groups).map(([vendor, ls], gi) => `<div style="margin-bottom:var(--k-s-2)"><div class="group-head">${icon("package", "sm")}Parcel ${gi + 1} <span class="k-muted">from ${esc(vendor)}</span></div>
+        ${ls.map((l) => `<div class="line-item" style="grid-template-columns:56px 1fr auto"><span class="thumbbox">${thumb(l.p)}</span><div class="name">${esc(l.p.product_name)} <span class="k-muted">× ${l.quantity}</span></div>
+          <div class="amt">${money(l.p.unit_price * l.quantity)}</div></div>`).join("")}</div>`).join("")}</section>
   </div>
-  <aside class="section summary" style="position:sticky; top:130px">
-    <h2>Order summary</h2>
-    <div class="row"><input id="coupon" placeholder="Coupon code" style="flex:1"><span class="muted small">SAVE5 · SAVE10 · SAVE20</span></div>
-    <div class="row2" style="margin-top:10px"><span>Subtotal</span><span>${money(subtotal)}</span></div>
-    <div class="row2"><span>Delivery</span><span style="color:var(--good)">Free</span></div>
-    <div class="row2 total"><span>Total</span><span id="total">${money(subtotal)}</span></div>
-    <button class="buy" id="place" style="width:100%; padding:12px; font-weight:700; margin-top:8px">Place order</button>
-    <p class="muted small">By placing your order you agree to our demo terms. Prices and stock are re-checked when you order.</p>
+  <aside class="panel"><h2 class="k-h3" style="margin-bottom:var(--k-s-2)">Order summary</h2>
+    <label class="fld">Coupon<input class="k-input" id="coupon" placeholder="SAVE5, SAVE10 or SAVE20" autocomplete="off"></label>
+    <div class="sum-row" style="margin-top:var(--k-s-2)"><span>Subtotal</span><span>${money(subtotal)}</span></div>
+    <div class="sum-row" id="disc-row" hidden><span>Coupon</span><span id="disc" style="color:var(--k-sale)"></span></div>
+    <div class="sum-row"><span>Delivery</span><span class="free">Free</span></div>
+    <div class="sum-row total"><span>Total</span><span id="total">${money(subtotal)}</span></div>
+    <button class="k-btn primary lg block" id="place" style="margin-top:var(--k-s-2)">Place order</button>
+    <p class="k-muted" style="font-size:var(--k-fs-12)">Prices and stock are checked again when you place the order.</p>
   </aside></div>`;
   $("#coupon").oninput = (e) => {
     const pct = { SAVE5: 0.05, SAVE10: 0.1, SAVE20: 0.2 }[e.target.value.trim().toUpperCase()] || 0;
-    $("#total").innerHTML = pct ? `<span class="was">${money(subtotal)}</span> ${money(subtotal * (1 - pct))}` : money(subtotal);
+    $("#disc-row").hidden = !pct; $("#disc").textContent = `−${money(subtotal * pct)}`;
+    $("#total").textContent = money(subtotal * (1 - pct));
   };
-  $("#place").onclick = async () => {
-    $("#place").disabled = true;
+  $("#place").onclick = async (e) => {
+    const btn = e.currentTarget;
+    if (!$("#city").value.trim()) { toast("Please enter your city", "error"); $("#city").focus(); return; }
+    btn.disabled = true; btn.textContent = "Placing order…";
     try {
       const res = await api("/api/orders", { method: "POST", body: {
         items: S.cart, payment_method: $("input[name=pay]:checked").value, coupon: $("#coupon").value,
-        ship_city: $("#city").value, ship_country: $("#country").value } });
+        ship_city: $("#city").value, ship_country: S.market.country } });
       S.cart = []; saveCart();
-      _apiCache.clear();  // stock just changed - don't show cached numbers
-      if ($("#phone").value !== (prof.phone || "")) api("/api/me/profile", { method: "PUT", body: { phone: $("#phone").value, city: prof.city || "", country: prof.country || "" } });
-      toast(`Order #${res.order_id} placed!`, "good", 5000);
-      if (res.payment_url) { location.href = res.payment_url; return; }  // online payment: off to the payment page`n      location.hash = `#/orders/${res.order_id}?placed=1`;
-    } catch (e) { toast(e.message, "error", 6000); $("#place").disabled = false; }
+      _apiCache.clear();  // stock just changed
+      if ($("#phone").value !== (prof.phone || "")) api("/api/me/profile", { method: "PUT", body: { phone: $("#phone").value, city: prof.city || "", country: prof.country || "" } }).catch(() => {});
+      if (res.payment_url) { location.href = res.payment_url; return; }   // online payment: secure payment page
+      location.hash = `#/orders/${res.order_id}?placed=1`;
+    } catch (err) { toast(err.message, "error", 6000); btn.disabled = false; btn.textContent = "Place order"; }
   };
 }
 
+// ===================================================================== orders + account
 async function needCustomer() {
   const me = await loadMe();
-  if (!me) { location.href = `/login?next=${encodeURIComponent("/" + location.hash)}`; return null; }
-  if (me.role !== "customer") { view.innerHTML = `<div class="section"><h1>Customer area</h1><p class="muted">Sign in with a customer account to see orders.</p></div>`; return null; }
+  if (!me) { location.href = `/login?as=customer&next=${encodeURIComponent("/" + location.hash)}`; return null; }
+  if (me.role !== "customer") { view.innerHTML = `<div class="empty panel" style="margin-top:var(--k-s-3)">${icon("user")}<h2>Customer area</h2><p>Sign in with a customer account to see orders.</p></div>`; return null; }
   return me;
 }
-
 async function pageOrders() {
+  document.title = "Orders · Kartora";
   if (!(await needCustomer())) return;
   const orders = await api("/api/me/orders");
-  view.innerHTML = `<div class="section"><h1>My orders</h1><p class="muted small">Status updates arrive live.</p></div>
-    ${orders.map((o) => `<a class="section" style="display:block; color:var(--text)" href="#/orders/${o.order_id}">
-      <div class="row" style="justify-content:space-between"><div><b>Order #${o.order_id}</b> <span class="muted small">placed ${fmtDateTime(o.order_date)} · ${o.items} item(s) · ${o.shipment_count} parcel(s)</span></div>
-        <div>${o.awaiting_payment ? `<span class="badge s-pending">💳 awaiting payment</span>` : badge(o.status)} <b>${money(o.total_amount)}</b></div></div>
-      <div class="row" style="margin-top:10px">${o.lines.slice(0, 6).map((l) => `<div style="width:56px" title="${esc(l.product_name)} × ${l.quantity}">${productArt(l, "sm")}</div>`).join("")}
-        <span class="spacer"></span><span class="small" style="color:var(--accent)">Track order →</span></div></a>`).join("")
-      || `<div class="section muted">No orders yet. <a href="#/">Start shopping</a></div>`}`;
+  view.innerHTML = `<h1 class="k-h1" style="margin:var(--k-s-3) 0">Your orders</h1>
+    ${orders.map((o) => `<a class="panel order-card" href="#/orders/${o.order_id}">
+      <div class="top"><div><b>Order #${o.order_id}</b><div class="k-muted" style="font-size:var(--k-fs-12)">${fmtDateTime(o.order_date)} · ${o.items} item${o.items > 1 ? "s" : ""} · ${o.shipment_count} parcel${o.shipment_count > 1 ? "s" : ""}</div></div>
+        <div style="display:flex; gap:12px; align-items:center">${o.awaiting_payment ? `<span class="status warn">Awaiting payment</span>` : status(o.status)}<b class="num">${money(o.total_amount)}</b></div></div>
+      <div class="pics">${o.lines.slice(0, 6).map((l) => `<span class="thumbbox" title="${esc(l.product_name)} × ${l.quantity}">${thumb(l)}</span>`).join("")}
+        <span style="flex:1"></span><span class="k-link" style="align-self:center">Track ${icon("chevron-right", "sm")}</span></div></a>`).join("")
+      || `<div class="empty panel">${icon("package")}<h2>No orders yet</h2><p>When you place an order, you can track it here.</p><a class="k-btn primary" href="#/">Start shopping</a></div>`}`;
 }
-
+const STEPS = [["Placed", "created_at", "receipt"], ["Confirmed", "confirmed_at", "circle-check"], ["Packed", "ready_at", "package"],
+  ["On the way", "picked_up_at", "truck"], ["Delivered", "delivered_at", "house"]];
+function stepper(s) {
+  if (s.status === "cancelled") return `<p class="k-muted">${icon("x", "sm")} Cancelled ${fmtDateTime(s.cancelled_at)}</p>`;
+  const reached = STEPS.map(([, col]) => !!s[col]);
+  const nowIdx = reached.lastIndexOf(true) + 1;
+  return `<ol class="steps" style="list-style:none; padding:0">${STEPS.map(([text, col, ic], i) => `<li class="step ${reached[i] ? "done" : i === nowIdx && s.status !== "returned" ? "now" : ""}">
+    <span class="dot">${icon(reached[i] ? "check" : ic)}</span>${text}<time>${s[col] ? fmtDateTime(s[col]) : ""}</time></li>`).join("")}</ol>`;
+}
 async function pageOrder(id) {
+  document.title = `Order #${id} · Kartora`;
   if (!(await needCustomer())) return;
   const o = await api(`/api/me/orders/${id}`);
   const placed = hashQuery().get("placed"), paid = hashQuery().get("paid");
-  view.innerHTML = `
-    ${o.awaiting_payment ? `<div class="section" style="border-color:var(--warn); background:color-mix(in srgb, var(--warn) 9%, var(--panel))">
-      <div class="row" style="justify-content:space-between"><div><h1 style="margin:0">💳 Awaiting payment</h1>
-        <p class="muted" style="margin:4px 0 0">${o.payment_failure ? `Last attempt failed: <b>${esc(o.payment_failure)}</b>. ` : ""}Your order goes to the stores as soon as it's paid. Unpaid orders are cancelled after 30 minutes.</p></div>
-        <button class="buy" id="paynow" style="padding:12px 22px; font-weight:800">Pay ${money(o.total_amount)} now</button></div></div>` : ""}
-    ${paid && !o.awaiting_payment ? `<div class="section" style="border-color:var(--good); background:color-mix(in srgb, var(--good) 8%, var(--panel))">
-      <h1>✅ Payment received - thank you!</h1><p class="muted" style="margin:0">Your order is now with the stores. Follow it live below.</p></div>` : ""}
-    ${placed ? `<div class="section" style="border-color:var(--good); background:color-mix(in srgb, var(--good) 8%, var(--panel))">
-      <h1>🎉 Thank you! Your order is placed.</h1><p class="muted" style="margin:0">We'll update this page live as stores pack your parcels and riders bring them to you.</p></div>` : ""}
-    <div class="section"><div class="row" style="justify-content:space-between">
-      <div><h1>Order #${o.order_id}</h1><div class="muted small">Placed ${fmtDateTime(o.order_date)} · ships to ${esc(o.shipping_city)}, ${esc(o.shipping_country)}</div></div>
-      <div style="text-align:right">${badge(o.status)}<div class="small" style="margin-top:4px">${PAYMENT_LABELS[o.payment_method]?.[1] || esc(o.payment_method)} · ${badge(o.payment_status)}</div></div></div>
-      <div class="row" style="margin-top:10px">${o.can_cancel ? `<button class="danger" id="cancel">Cancel order</button>` : ""}${o.can_return ? `<button id="return">Return order</button>` : ""}
-        <span class="spacer"></span><b>Total ${money(o.total_amount)}</b></div></div>
-    ${o.shipments.map((s, i) => `<div class="section" id="ship-${s.shipment_id}">
-      <div class="row" style="justify-content:space-between"><h2 style="margin:0">Parcel ${i + 1} of ${o.shipments.length} · 🏪 ${esc(s.vendor_name)}</h2>${badge(s.status)}</div>
-      ${shipmentStepper(s)}
-      ${s.rider_name ? `<p class="small">🛵 Rider <b>${esc(s.rider_name)}</b> (${esc(s.vehicle)})${s.status === "assigned" ? " is heading to the store" : s.status === "picked_up" ? " is on the way to you" : ""}</p>` : ""}
-      ${o.lines.filter((l) => l.shipment_id === s.shipment_id).map((l) => `<div class="cart-line" style="grid-template-columns:56px 1fr auto">
-        <a href="#/p/${l.product_id}" style="width:56px">${productArt(l, "sm")}</a><div>${esc(l.product_name)} <span class="muted">× ${l.quantity}</span>
-        ${l.discount > 0 ? `<span class="badge s-delivered">${Math.round(l.discount * 100)}% coupon</span>` : ""}</div><b>${money(l.line_total)}</b></div>`).join("")}</div>`).join("")}`;
+  view.innerHTML = `<div class="crumbs"><a href="#/orders">Your orders</a>${icon("chevron-right")}Order #${o.order_id}</div>
+    ${o.awaiting_payment ? `<div class="banner warn">${icon("credit-card")}<div style="flex:1"><h2>Awaiting payment</h2>
+      <p>${o.payment_failure ? `Last attempt failed: ${esc(o.payment_failure)}. ` : ""}Your order goes to the stores once it's paid. Unpaid orders are cancelled after 30 minutes.</p></div>
+      <button class="k-btn primary" id="paynow">Pay ${money(o.total_amount)}</button></div>` : ""}
+    ${paid && !o.awaiting_payment ? `<div class="banner good">${icon("circle-check")}<div><h2>Payment received, thank you</h2><p>Your order is with the stores now. Follow it live below.</p></div></div>` : ""}
+    ${placed ? `<div class="banner good">${icon("circle-check")}<div><h2>Thank you, your order is placed</h2><p>This page updates live as stores pack your parcels and riders bring them to you.</p></div></div>` : ""}
+    <div class="panel"><div style="display:flex; justify-content:space-between; gap:var(--k-s-2); flex-wrap:wrap">
+      <div><h1 class="k-h2">Order #${o.order_id}</h1><div class="k-muted" style="font-size:var(--k-fs-14)">Placed ${fmtDateTime(o.order_date)} · ships to ${esc(o.shipping_city)}, ${esc(o.shipping_country)}</div></div>
+      <div style="text-align:right">${status(o.status)}<div class="k-muted" style="font-size:var(--k-fs-12); margin-top:6px">${PAYMENT[o.payment_method]?.[1] || esc(label(o.payment_method))} · ${esc(label(o.payment_status))}</div></div></div>
+      <div style="display:flex; gap:8px; align-items:center; margin-top:var(--k-s-2)">${o.can_cancel ? `<button class="k-btn danger" id="cancel">Cancel order</button>` : ""}${o.can_return ? `<button class="k-btn" id="return">${icon("rotate-ccw", "sm")}Return order</button>` : ""}
+        <span style="flex:1"></span><b style="font-size:var(--k-fs-20)">${money(o.total_amount)}</b></div></div>
+    ${o.shipments.map((s, i) => `<section class="panel" style="margin-top:var(--k-s-2)" id="ship-${s.shipment_id}">
+      <div style="display:flex; justify-content:space-between; gap:8px; align-items:center"><h2 class="k-h3">Parcel ${i + 1} of ${o.shipments.length} <span class="k-muted" style="font-weight:400; font-size:var(--k-fs-14)">from ${esc(s.vendor_name)}</span></h2>${status(s.status)}</div>
+      ${stepper(s)}
+      ${s.rider_name ? `<p style="font-size:var(--k-fs-14)">${icon("bike", "sm")} Rider <b>${esc(s.rider_name)}</b> (${esc(s.vehicle)})${s.status === "assigned" ? " is heading to the store" : s.status === "picked_up" ? " is on the way to you" : ""}</p>` : ""}
+      ${o.lines.filter((l) => l.shipment_id === s.shipment_id).map((l) => `<div class="line-item" style="grid-template-columns:56px 1fr auto">
+        <a class="thumbbox" href="#/p/${l.product_id}" tabindex="-1" aria-hidden="true">${thumb(l)}</a><div><a class="name" href="#/p/${l.product_id}">${esc(l.product_name)}</a> <span class="k-muted">× ${l.quantity}</span>
+        ${l.discount > 0 ? `<div class="meta">${Math.round(l.discount * 100)}% coupon applied</div>` : ""}</div><div class="amt">${money(l.line_total)}</div></div>`).join("")}</section>`).join("")}`;
   $("#paynow")?.addEventListener("click", async () => {
-    try { location.href = (await api(`/api/me/orders/${id}/pay`, { method: "POST" })).payment_url; }
-    catch (e) { toast(e.message, "error"); }
+    try { location.href = (await api(`/api/me/orders/${id}/pay`, { method: "POST" })).payment_url; } catch (e) { toast(e.message, "error"); }
   });
   $("#cancel")?.addEventListener("click", async () => {
     if (!confirm("Cancel this order? Online payments are refunded.")) return;
-    try { await api(`/api/me/orders/${id}/cancel`, { method: "POST" }); toast("Order cancelled"); render(); } catch (e) { toast(e.message, "error"); }
+    try { await api(`/api/me/orders/${id}/cancel`, { method: "POST" }); toast("Order cancelled"); render({ quiet: true }); } catch (e) { toast(e.message, "error"); }
   });
   $("#return")?.addEventListener("click", async () => {
     if (!confirm("Return this order? You'll get a refund once it's back.")) return;
-    try { await api(`/api/me/orders/${id}/return`, { method: "POST" }); toast("Return requested"); render(); } catch (e) { toast(e.message, "error"); }
+    try { await api(`/api/me/orders/${id}/return`, { method: "POST" }); toast("Return requested"); render({ quiet: true }); } catch (e) { toast(e.message, "error"); }
   });
 }
-
 async function pageAccount() {
+  document.title = "Account · Kartora";
   const me = await needCustomer();
   if (!me) return;
   const p = await api("/api/me/profile");
-  view.innerHTML = `<div class="two-col"><div class="section"><h1>My account</h1>
-    <p class="muted">${esc(p.first_name)} ${esc(p.last_name)} · ${esc(p.email)} · customer since ${esc(p.signup_date)}</p>
-    <form id="prof" class="grid" style="grid-template-columns:1fr 1fr; gap:10px; max-width:520px">
-      <div class="field">Phone<input name="phone" value="${esc(p.phone || "")}"></div><div></div>
-      <div class="field">City<input name="city" value="${esc(p.city || "")}"></div>
-      <div class="field">Country<input name="country" value="${esc(p.country || "")}"></div>
-      <div><button class="primary">Save</button></div></form></div>
-    <aside class="section"><h2>Quick links</h2><p><a href="#/orders">📦 My orders</a></p><p><a href="#/cart">🛒 My cart</a></p><button onclick="logout()">Sign out</button></aside></div>`;
+  view.innerHTML = `<h1 class="k-h1" style="margin:var(--k-s-3) 0">Your account</h1>
+    <div class="two"><section class="panel"><div style="display:flex; gap:var(--k-s-2); align-items:center; margin-bottom:var(--k-s-3)">
+      <span class="avatar" style="width:56px; height:56px" aria-hidden="true">${esc(initials(p.first_name + " " + p.last_name))}</span>
+      <div><b style="font-size:var(--k-fs-16)">${esc(p.first_name)} ${esc(p.last_name)}</b><div class="k-muted">${esc(p.email)} · customer since ${esc(p.signup_date)}</div></div></div>
+      <form id="prof" class="form-grid">
+        <label class="fld">Phone<input class="k-input" name="phone" type="tel" autocomplete="tel" value="${esc(p.phone || "")}"></label>
+        <label class="fld">City<input class="k-input" name="city" autocomplete="address-level2" value="${esc(p.city || "")}"></label>
+        <input type="hidden" name="country" value="${esc(S.market.country)}">
+        <div><button class="k-btn primary">Save changes</button></div></form></section>
+    <aside class="panel" style="display:grid; gap:8px"><a class="k-btn" href="#/orders">${icon("package", "sm")}Your orders</a><a class="k-btn" href="#/wishlist">${icon("heart", "sm")}Wishlist</a>
+      <button class="k-btn ghost" onclick="logout()">${icon("log-out", "sm")}Sign out</button></aside></div>`;
   $("#prof").onsubmit = async (e) => {
     e.preventDefault();
-    try { await api("/api/me/profile", { method: "PUT", body: Object.fromEntries(new FormData(e.target)) }); toast("Saved", "good"); }
-    catch (err) { toast(err.message, "error"); }
+    try { await api("/api/me/profile", { method: "PUT", body: Object.fromEntries(new FormData(e.target)) }); toast("Saved", "good"); } catch (err) { toast(err.message, "error"); }
   };
 }
 
 // ===================================================================== router
 const ROUTES = [
-  [/^#\/c\/(\d+)/, (m) => pageListing({ category_id: +m[1] })],
+  [/^#\/c\/(\d+)/, (m) => pageListing({ category_id: +m[1] }), "categories"],
   [/^#\/store\/(\d+)/, (m) => pageListing({ vendor_id: +m[1] })],
-  [/^#\/search/, () => pageListing()],
+  [/^#\/search/, () => pageListing(), "search"],
+  [/^#\/categories/, pageCategories, "categories"],
   [/^#\/p\/(\d+)/, (m) => pageProduct(+m[1])],
-  [/^#\/cart/, pageCart], [/^#\/checkout/, pageCheckout],
-  [/^#\/orders\/(\d+)/, (m) => pageOrder(+m[1])], [/^#\/orders/, pageOrders], [/^#\/account/, pageAccount],
-  [/.*/, pageHome],
+  [/^#\/wishlist/, pageWishlist],
+  [/^#\/cart/, pageCart, "cart"], [/^#\/checkout/, pageCheckout, "cart"],
+  [/^#\/orders\/(\d+)/, (m) => pageOrder(+m[1]), "account"], [/^#\/orders/, pageOrders, "account"], [/^#\/account/, pageAccount, "account"],
+  [/.*/, pageHome, "home"],
 ];
-const scrollPos = new Map();           // where you were on each listing page, restored when you come back
+const scrollPos = new Map();
 const RESTORE = /^#\/?$|^#\/c\/|^#\/search|^#\/store\//;
 const routeBase = (h) => (h || "#/").split("?")[0];
+const skCards = (n) => `<div class="pc-grid">${Array.from({ length: n }, productCardSkeleton).join("")}</div>`;
 function skeletonFor(h) {
-  if (/^#\/p\//.test(h)) return `<div class="section pdp">${skeletonBlock(420)}<div>${skeletonBlock(40)}${skeletonBlock(160)}</div>${skeletonBlock(260)}</div>`;
-  if (/^#\/(c|search|store)/.test(h)) return `<div class="listing"><div>${skeletonBlock(420)}</div><section>${skeletonBlock(36)}${skeletonCards(10)}</section></div>`;
-  if (/^#\/?$/.test(h)) return `${skeletonBlock(260)}<div class="section">${skeletonCards(6)}</div>`;
-  return skeletonBlock(320);
+  if (/^#\/p\//.test(h)) return `<div class="crumbs"><span class="k-sk" style="width:220px; height:12px"></span></div><div class="pdp"><div class="k-sk" style="aspect-ratio:1"></div>
+    <div><div class="k-sk" style="height:32px; width:80%"></div><div class="k-sk" style="height:16px; width:40%; margin-top:12px"></div><div class="k-sk" style="height:48px; width:35%; margin:32px 0"></div><div class="k-sk" style="height:260px"></div></div></div>`;
+  if (/^#\/(c|search|store)/.test(h)) return `<div class="crumbs"><span class="k-sk" style="width:220px; height:12px"></span></div><div class="listing"><div class="filters k-sk" style="height:420px"></div><section><div class="k-sk" style="height:32px; width:40%; margin-bottom:16px"></div>${skCards(8)}</section></div>`;
+  if (/^#\/?$/.test(h)) return `<div class="hero k-sk"></div><div class="sec">${skCards(6)}</div>`;
+  return `<div class="k-sk" style="height:320px; margin-top:24px"></div>`;
 }
 let rendering = null, renderAgain = null, lastBase = null;
-// Renders run one at a time: a quick second click waits, then the latest address wins - an older page
-// can never finish late and overwrite a newer one.
 async function render(opts = {}) {
   if (rendering) { renderAgain = opts; return rendering; }
   rendering = doRender(opts);
@@ -433,18 +636,21 @@ async function render(opts = {}) {
 }
 async function doRender({ quiet = false } = {}) {
   const h = location.hash || "#/";
-  const [re, fn] = ROUTES.find(([r]) => r.test(h));
+  const [re, fn, tab] = ROUTES.find(([r]) => r.test(h));
   const catMatch = h.match(/^#\/c\/(\d+)/);
-  $$("#catbar a").forEach((a) => a.classList.toggle("on", catMatch && a.dataset.id === catMatch[1]));
-  const sameRoute = routeBase(h) === lastBase;          // e.g. only a filter changed
+  $$("#catnav a").forEach((a) => a.classList.toggle("on", !!catMatch && a.dataset.id === catMatch[1]));
+  $$(".bn a").forEach((a) => a.classList.toggle("on", a.dataset.tab === tab));
+  $$(".menu.open").forEach((m) => m.classList.remove("open"));
+  const sameRoute = routeBase(h) === lastBase;
   const skel = quiet || sameRoute ? null : setTimeout(() => (view.innerHTML = skeletonFor(h)), 120);  // only if slow
-  try { await fn(h.match(re)); } catch (e) { view.innerHTML = `<div class="section"><h1>Something went wrong</h1><p class="muted">${esc(e.message)}</p></div>`; }
+  try { await fn(h.match(re)); }
+  catch (e) { view.innerHTML = `<div class="empty panel" style="margin-top:var(--k-s-3)">${icon("circle-alert")}<h2>Something went wrong</h2><p>${esc(e.message)}</p>
+    <button class="k-btn primary" onclick="render()">Try again</button></div>`; }
   clearTimeout(skel);
-  if (quiet) return;                                     // live refresh: no animation, no scrolling
+  if (quiet) return;
   if (!sameRoute) {
     view.classList.remove("view-in"); void view.offsetWidth; view.classList.add("view-in");
-    const y = RESTORE.test(h) ? scrollPos.get(h) || 0 : 0;
-    window.scrollTo({ top: y, behavior: "instant" });
+    window.scrollTo({ top: RESTORE.test(h) ? scrollPos.get(h) || 0 : 0, behavior: "instant" });
   }
   lastBase = routeBase(h);
 }
@@ -453,12 +659,17 @@ window.addEventListener("hashchange", (e) => {
   if (RESTORE.test(old)) scrollPos.set(old, window.scrollY);
   render();
 });
-// Start loading a product's details as soon as the pointer rests on its card
-document.addEventListener("pointerover", (e) => {
-  const a = e.target.closest && e.target.closest("a.pcard, a.hp");
+// Start loading a product's details as soon as the pointer rests on (or a finger touches) its card
+const prefetchProduct = (e) => {
+  const a = e.target.closest && e.target.closest("a[href^='#/p/']");
   const m = a && a.getAttribute("href").match(/#\/p\/(\d+)/);
   if (m) prefetch(`/api/products/${m[1]}`);
-}, { passive: true });
+};
+document.addEventListener("pointerover", prefetchProduct, { passive: true });
+document.addEventListener("touchstart", prefetchProduct, { passive: true });
+document.addEventListener("click", (e) => { $$(".menu.open").forEach((m) => { if (!m.contains(e.target)) m.classList.remove("open"); }); });
+wireProductCards(view, (id) => addToCart(id, 1, true), () => (innerWidth < 768 ? $("#carticon-m") : $("#carticon")));
+view.addEventListener("click", (e) => { if (e.target.closest("[data-wish]")) setTimeout(updateWishCount); });
 
 // ===================================================================== live updates
 const rerender = throttle(() => render({ quiet: true }), 1500);
@@ -468,14 +679,15 @@ liveEvents((ev) => {
 });
 
 (async () => {
-  saveCart();
-  if (/^#?\/?$/.test(location.hash)) prefetch("/api/home");      // start the home page data right away…
-  const [cats] = await Promise.all([apiCached("/api/categories", 300000), loadMe()]);  // …alongside these two
+  $("#logo-mark").innerHTML = LOGO_SVG(32); $("#logo-mark2").innerHTML = LOGO_SVG(28);
+  saveCart(); updateWishCount();
+  if (/^#?\/?$/.test(location.hash)) prefetch("/api/home");
+  const [cats, cfg] = await Promise.all([apiCached("/api/categories", 300000), apiCached("/api/config", 300000).catch(() => null), loadMe()]);
   S.categories = cats;
-  $("#catbar").innerHTML = `<a href="#/search">All categories</a>` +
-    S.categories.map((c) => `<a href="#/c/${c.category_id}" data-id="${c.category_id}">${esc(c.category_name)}</a>`).join("") +
-    `<a href="#/search?on_sale=1&sort=discount">⚡ Flash deals</a>`;
-  await renderAccount();
+  if (cfg) S.market = cfg;
+  $("#catnav").innerHTML = `<a href="#/search?on_sale=1&sort=discount">${icon("zap", "sm")}Today's deals</a>` +
+    S.categories.map((c) => `<a href="#/c/${c.category_id}" data-id="${c.category_id}">${esc(c.category_name)}</a>`).join("");
+  renderAccount();
   render();
 })();
 </script>
