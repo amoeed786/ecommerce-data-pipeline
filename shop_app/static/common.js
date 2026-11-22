@@ -12,7 +12,14 @@ const brandMark = (sub = "", size = 30) =>
 const $ = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 
-const money = (v) => "$" + Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// One market: Pakistan, PKR. Prices are whole rupees ("Rs 4,999"); amounts with paisa keep 2 decimals.
+const CURRENCY = { symbol: "Rs", locale: "en-PK" };
+const money = (v) => {
+  const n = Number(v || 0), whole = Math.abs(n % 1) < 0.005;
+  return `${n < 0 ? "−" : ""}${CURRENCY.symbol} ${Math.abs(n).toLocaleString(CURRENCY.locale, { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 })}`;
+};
+const moneyShort = (v) => { const a = Math.abs(v), s = v < 0 ? "−" : "";
+  return `${s}${CURRENCY.symbol} ${a >= 1e7 ? (a / 1e7).toFixed(1) + " Cr" : a >= 1e5 ? (a / 1e5).toFixed(1) + " Lac" : a >= 1e3 ? (a / 1e3).toFixed(0) + "k" : a.toFixed(0)}`; };
 const int = (v) => Number(v || 0).toLocaleString();
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "");

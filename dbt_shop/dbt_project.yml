@@ -8,6 +8,11 @@ profile: shop
 model-paths: ["models"]
 test-paths: ["tests"]
 macro-paths: ["macros"]
+seed-paths: ["seeds"]   # currency_restatements.csv: when the market switched currency, and at what rate
+
+seeds:
+  shop:
+    +schema: reference
 clean-targets: ["target", "dbt_packages"]
 
 models:

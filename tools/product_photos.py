@@ -1,4 +1,4 @@
-﻿"""Product photo pipeline: find openly licensed photos per product TYPE, review them, publish as WebP.
+"""Product photo pipeline: find openly licensed photos per product TYPE, review them, publish as WebP.
 
   fetch    download candidates (Openverse: Wikimedia + Flickr, commercial-use licences) into
            data_lake/_state/photo_candidates/<type>/  (untrusted downloads stay in their own folder)
@@ -38,11 +38,11 @@ TYPES = {
     "tshirt": "t-shirt product white background", "jeans": "jeans denim product", "sneakers": "sneakers product white background",
     "jacket": "jacket product white background", "dress": "dress product mannequin", "handbag": "handbag product white background",
     "sunglasses": "sunglasses isolated white", "blender": "blender kitchen appliance", "coffee-maker": "coffee maker machine",
-    "air-fryer": "air fryer", "cookware": "cookware pot pan set", "desk-lamp": "desk lamp isolated", "pillow": "pillow white bedding",
-    "vacuum": "vacuum cleaner product", "book": "hardcover book isolated", "yoga-mat": "yoga mat rolled", "dumbbells": "dumbbells weights isolated",
+    "air-fryer": "air fryer", "cookware": "frying pan", "desk-lamp": "desk lamp isolated", "pillow": "pillow white bedding",
+    "vacuum": "vacuum cleaner", "book": "hardcover book isolated", "yoga-mat": "yoga mat rolled", "dumbbells": "dumbbells weights isolated",
     "football": "soccer ball isolated", "tennis-racket": "tennis racket isolated", "bike-helmet": "bicycle helmet product",
-    "running-shoes": "running shoes product", "moisturizer": "skincare cream jar product", "perfume": "perfume bottle product",
-    "lipstick": "lipstick product", "shampoo": "shampoo bottle product", "serum": "serum dropper bottle product",
+    "running-shoes": "running shoes product", "moisturizer": "face cream", "perfume": "perfume bottle product",
+    "lipstick": "lipstick product", "shampoo": "shampoo bottle product", "serum": "dropper bottle",
     "puzzle": "jigsaw puzzle pieces", "building-blocks": "toy building bricks", "plush-toy": "teddy bear plush toy",
     "rc-car": "remote control car toy", "board-game": "board game box", "coffee-beans": "coffee beans bag", "tea": "green tea leaves cup",
     "olive-oil": "olive oil bottle", "honey": "honey jar", "chocolate": "dark chocolate bar",

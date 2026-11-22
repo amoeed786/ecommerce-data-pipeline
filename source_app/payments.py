@@ -31,7 +31,7 @@ from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 HOLD_DAYS = float(os.getenv("PAYOUT_HOLD_DAYS", "7"))           # return window before earnings can be paid out
-MIN_PAYOUT = Decimal(os.getenv("PAYOUT_MIN_AMOUNT", "10"))      # don't send tiny transfers
+MIN_PAYOUT = Decimal(os.getenv("PAYOUT_MIN_AMOUNT", "2500"))    # PKR - don't send tiny transfers
 PAYMENT_TIMEOUT_MIN = float(os.getenv("PAYMENT_TIMEOUT_MINUTES", "30"))  # unpaid online orders are cancelled after this
 DEFAULT_COMMISSION = Decimal("0.10")
 ONLINE_METHODS = ("credit_card", "debit_card", "paypal", "bank_transfer")

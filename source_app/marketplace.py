@@ -124,7 +124,7 @@ def create_order(cur, customer_id: int, lines: list[tuple[int, int]], payment_me
         shipment_ids[vendor_id] = cur.execute(
             "INSERT INTO dbo.shipments (order_id, vendor_id, status, delivery_fee, created_at, updated_at) "
             "OUTPUT INSERTED.shipment_id VALUES (?,?,?,?,?,?)",
-            order_id, vendor_id, "pending", money(random.uniform(1.5, 4.5)), ts, ts,
+            order_id, vendor_id, "pending", money(random.randrange(150, 351, 10)), ts, ts,   # rider fee, PKR
         ).fetchval()
     for product_id, vendor_id, q, price, line_total in priced:
         cur.execute(

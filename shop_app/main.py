@@ -258,7 +258,7 @@ def categories():
 @app.get("/api/config", tags=["store"])
 def store_config():
     """The one market this store sells in (MARKET_COUNTRY in .env) and its currency."""
-    return {"country": os.environ.get("MARKET_COUNTRY", "United States"), "currency": "USD"}
+    return {"country": os.environ.get("MARKET_COUNTRY", "Pakistan"), "currency": "PKR", "phone_prefix": "+92"}
 
 
 @app.get("/api/products", tags=["store"])
@@ -613,7 +613,18 @@ def admin_order(order_id: int, _: dict = Depends(admin)):
     o = db.order_detail(order_id)
     if o is None:
         raise HTTPException(404, "Order not found")
-    return o
+    return {**o, **db.admin_order_extra(order_id)}
+
+
+@app.get("/api/admin/kpis", tags=["admin"])
+def admin_kpis(days: int = Query(28, ge=7, le=90), _: dict = Depends(admin)):
+    return db.admin_kpis(days)
+
+
+@app.get("/api/admin/trends", tags=["admin"])
+def admin_trends(_: dict = Depends(admin)):
+    """Vendor prep-time trend (14 days) and rider deliveries/earnings (7 days)."""
+    return {"vendor_prep": db.vendor_prep_trends(), "rider_week": db.rider_week()}
 
 
 @app.post("/api/admin/orders/start-all", tags=["admin"])

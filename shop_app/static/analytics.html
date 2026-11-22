@@ -144,7 +144,7 @@ Chart.defaults.plugins.tooltip.padding = 10; Chart.defaults.interaction = { mode
 const CATEGORIES = ["Beauty", "Books", "Electronics", "Fashion", "Grocery", "Home & Kitchen", "Sports", "Toys"];  // fixed order = fixed color
 const catColor = (c) => SERIES[CATEGORIES.indexOf(c) % SERIES.length] || MUTED;
 const pct = (v, d = 1) => (v == null || isNaN(v) ? "–" : (v * 100).toFixed(d) + "%");
-const kMoney = (v) => "$" + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(Math.abs(v) >= 100000 ? 0 : 1) + "k" : Math.round(v));
+const kMoney = (v) => moneyShort(v);
 const day = (d) => new Date(d + "T00:00").toLocaleDateString([], { month: "short", day: "numeric" });
 const mins = (m) => (m == null ? "–" : m < 1 ? `${Math.round(m * 60)} s` : m < 90 ? `${m.toFixed(m < 10 ? 1 : 0)} min` : m < 2880 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} days`);
 const charts = {};

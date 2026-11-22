@@ -3,429 +3,817 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin · Kartora</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <meta name="robots" content="noindex">
+  <title>Control room · Kartora</title>
+  <script>  // theme + density before first paint (no flash)
+    try { const t = localStorage.getItem("ka.theme"); if (t && t !== "system") document.documentElement.dataset.theme = t;
+          if (localStorage.getItem("ka.density") === "comfortable") document.documentElement.classList.add("comfortable"); } catch {}
+  </script>
+  <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/ds.css">
+  <link rel="stylesheet" href="/static/admin.css">
 </head>
-<body>
-<header></header>
-<main>
-  <div class="tabs">
-    <button data-tab="control" class="on">🎛️ Order control</button>
-    <button data-tab="board">🚚 Live shipments</button>
-    <button data-tab="vendors">🏪 Vendors</button>
-    <button data-tab="riders">🛵 Riders</button>
-    <button data-tab="users">👤 Users</button>
-    <button data-tab="finance">💰 Finance</button>
-    <button data-tab="catalog">🏷️ Catalog</button>
-    <button data-tab="pipeline">🛠️ Simulator &amp; pipeline</button>
-  </div>
-
-  <!-- ============ ORDER CONTROL ============ -->
-  <section id="tab-control" class="grid">
-    <div class="card row" style="gap:24px; align-items:center">
-      <div class="row"><label class="switch"><input type="checkbox" id="auto"><span></span></label>
-        <div><b>Auto-approve orders</b><div class="muted small" id="auto-text"></div></div></div>
-      <div><b>Simulation speed</b> <span id="speed-val" class="badge"></span><br>
-        <input type="range" id="speed" min="0" max="5" step="1" style="width:200px"></div>
-      <div class="spacer"></div>
-      <div class="small muted" id="engine"></div>
-      <button class="primary" id="start-all">▶ Start all pending</button>
-    </div>
-    <div class="portal-kpis" id="pipe-kpis" style="margin:0"></div>
-    <div class="grid cols-2">
-      <div class="card">
-        <div class="row" style="justify-content:space-between"><h2>Orders</h2><span class="muted small">new and changed orders flash in live</span></div>
-        <div id="status-chips" class="chips"></div>
-        <div class="table-wrap" style="max-height: 640px; overflow-y: auto"><table>
-          <thead><tr><th>#</th><th>Placed</th><th>Customer</th><th>Status</th><th class="num">Parcels</th><th class="num">Total</th><th></th></tr></thead>
-          <tbody id="orders"></tbody></table></div>
-      </div>
-      <div class="card" id="detail" style="align-self:start; position:sticky; top:70px"><p class="muted">Click an order to see its parcels and step in for any vendor or rider.</p></div>
-    </div>
-  </section>
-
-  <!-- ============ LIVE SHIPMENTS ============ -->
-  <section id="tab-board" class="hidden">
-    <p class="muted small" style="margin-top:0">Every open parcel, moving left to right as stores and riders work. 🤖 = autopilot, 👤 = a person.</p>
-    <div class="kanban" id="kanban"></div>
-  </section>
-
-  <!-- ============ VENDORS / RIDERS / USERS ============ -->
-  <section id="tab-vendors" class="card hidden"><h2>Vendors</h2>
-    <p class="muted small">Autopilot vendors accept and pack by themselves. Turn it off to make a store wait for a person in the seller center.</p>
-    <div class="table-wrap" id="vendors"></div></section>
-  <section id="tab-riders" class="card hidden"><h2>Riders</h2>
-    <p class="muted small">Ready parcels go to available riders - online people first, then autopilot riders.</p>
-    <div class="table-wrap" id="riders"></div></section>
-  <section id="tab-users" class="card hidden"><h2>Users</h2><div class="table-wrap" id="users"></div></section>
-
-  <!-- ============ FINANCE ============ -->
-  <section id="tab-finance" class="hidden grid">
-    <div class="portal-kpis" id="fin-kpis" style="margin:0"></div>
-    <div class="grid cols-2">
-      <div class="card">
-        <div class="row" style="justify-content:space-between"><h2>Seller balances</h2>
-          <button class="primary" id="run-payouts">💸 Run payouts</button></div>
-        <p class="muted small" style="margin-top:0" id="fin-hint"></p>
-        <div class="table-wrap" id="fin-balances"></div>
-      </div>
-      <div class="card">
-        <h2>Commission rates</h2>
-        <p class="muted small" style="margin-top:0">Most specific wins: a seller's own rate, else its category, else the default.
-          A rate is locked into each sale when it's delivered - changing it never rewrites past earnings.</p>
-        <div class="row" style="margin-bottom:10px"><b>Default</b><input type="number" id="rate-default" min="0" max="50" step="0.5" style="width:80px"> %
-          <button class="small" data-save-rate="default">Save</button></div>
-        <div class="table-wrap" id="fin-rates"></div>
-      </div>
-    </div>
-    <div class="grid cols-2">
-      <div class="card"><h2>Payouts</h2><p class="muted small" style="margin-top:0">Run payouts groups each seller's available earnings. Send the transfer, then mark it paid with the bank reference.</p>
-        <div class="table-wrap" id="fin-payouts"></div></div>
-      <div class="card"><h2>Commission earned · last 30 days</h2><div id="fin-chart"></div>
-        <p class="muted small" id="fin-gateway"></p></div>
-    </div>
-  </section>
-
-  <!-- ============ CATALOG ============ -->
-  <section id="tab-catalog" class="card hidden">
-    <div class="row" style="justify-content:space-between"><h2>Catalog</h2><input id="cat-search" type="search" placeholder="Search products, stores…" style="width:280px"></div>
-    <p class="muted small">Price changes are kept as history in bronze - SCD2 in the gold layer uses them to know the price on any given day.</p>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Product</th><th>Store</th><th class="num">Sold</th><th class="num">Stock</th><th>Price</th><th>Was (sale)</th><th>Restock</th></tr></thead>
-      <tbody id="catalog"></tbody></table></div>
-  </section>
-
-  <!-- ============ PIPELINE ============ -->
-  <section id="tab-pipeline" class="hidden grid">
-    <div class="card">
-      <div class="row" style="justify-content:space-between"><h2>⚡ Automatic pipeline</h2><span id="auto-state"></span></div>
-      <p class="muted small" style="margin-top:0">A Dagster sensor checks ShopDB every 30 seconds. When there are new or changed rows, it runs
-        extract → silver → dbt → gold export by itself, so every entry reaches gold and <a href="#" data-admin-href="/analytics">Analytics</a> without you running anything.
-        Start it with <code>python start.py</code>. The manual buttons below are still there for learning.</p>
-      <div class="portal-kpis" id="auto-kpis" style="margin:10px 0"></div>
-      <div class="table-wrap" id="auto-runs"></div>
-    </div>
-    <div class="grid cols-even">
-      <div class="card">
-        <h2>1 · Shopper simulator <span id="sim-state" class="muted small"></span></h2>
-        <p class="muted small">Runs <code>python source_app/generator.py stream</code>: new customers and marketplace orders every few seconds.
-          Vendors and riders (or their autopilot) then move the orders.</p>
-        <div class="row">
-          <label>Every <input id="sim-interval" type="number" min="1" max="60" value="5" style="width:64px"> s</label>
-          <button id="sim-start" class="primary">▶ Start</button><button id="sim-stop">■ Stop</button>
-        </div>
-        <pre id="sim-log" class="out">(not running)</pre>
-      </div>
-      <div class="card">
-        <h2>2 · Run a pipeline step</h2>
-        <p class="muted small">Same scripts you run in the terminal. The command and its output appear below.</p>
-        <div class="row">
-          <button data-step="extract" class="primary">① Extract → bronze</button>
-          <button data-step="silver" class="primary">② Build silver</button>
-          <button data-step="dbt_build" class="primary">③ dbt build (gold)</button>
-          <button data-step="export_gold" class="primary">④ Export gold</button>
-        </div>
-        <div class="row" style="margin-top:8px">
-          <button data-step="check_bronze">Check bronze</button><button data-step="inject_bad_data">Inject messy data</button>
-          <button data-step="check_db">Check source DB</button><a class="small" href="#" data-admin-href="/analytics" style="margin-left:auto">See results in Analytics →</a>
-        </div>
-        <pre id="step-out" class="out">Click a step…</pre>
-      </div>
-    </div>
-    <div class="card"><div class="row" style="justify-content:space-between"><h2>3 · Data lake</h2><button id="lake-refresh" class="small">Refresh</button></div>
-      <div class="table-wrap"><table><thead><tr><th>Table</th><th class="num">Bronze files</th><th class="num">Bronze rows (all versions)</th>
-        <th class="num">Silver rows (latest, clean)</th><th class="num">Quarantined</th><th>Watermark</th></tr></thead><tbody id="lake"></tbody></table></div></div>
-    <div class="grid cols-even">
-      <div class="card"><h2>Latest data-quality results</h2><div id="dq" class="table-wrap"></div></div>
-      <div class="card"><h2>Recent extracts</h2><div id="extracts" class="table-wrap"></div></div>
-    </div>
-  </section>
-</main>
+<body class="k">
+<div class="app" id="app">
+  <aside class="side" aria-label="Admin navigation">
+    <div class="side-head"><span id="logo"></span><span class="name">Kartora</span><span class="tag">Admin</span></div>
+    <nav id="sidenav"></nav>
+    <div class="side-foot"><a class="nav" href="#" id="collapse" aria-label="Collapse sidebar"><svg class="ic"><use href="#i-panel-left"/></svg><span class="lbl">Collapse</span></a></div>
+  </aside>
+  <header class="top">
+    <span class="crumb" id="crumb">Orders</span>
+    <button class="cmdk-btn" id="cmdk-open" aria-label="Search and commands (Ctrl+K)"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+      <span class="lbl">Search orders, pages, actions…</span><kbd>Ctrl K</kbd></button>
+    <span class="live" id="livedot"><i></i><span>connecting</span></span>
+    <div class="menu" id="bell-menu"><button class="ibtn" id="bell" aria-label="Notifications"><svg class="ic"><use href="#i-bell"/></svg><span class="dot-n" id="bell-n" hidden></span></button>
+      <div class="pop notif" id="notif"></div></div>
+    <a class="ibtn" href="/" target="_blank" rel="noopener" aria-label="Open storefront in a new tab" title="Storefront"><svg class="ic"><use href="#i-external-link"/></svg></a>
+    <div class="menu" id="me-menu"><button class="ibtn" id="me-btn" aria-label="Admin menu"><span class="avatar" id="me-av" style="background:var(--k-brand)">A</span></button>
+      <div class="pop" id="me-pop"></div></div>
+  </header>
+  <main class="page" id="page"><div class="wrap" id="view"></div></main>
+</div>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Details" aria-hidden="true"></aside>
+<dialog class="dlg" id="dlg"></dialog>
+<dialog class="cmdk" id="cmdk"><div class="q"><svg class="ic"><use href="#i-search"/></svg><input id="cmdk-q" placeholder="Type a page, an action, or an order number…" autocomplete="off"><kbd>Esc</kbd></div><div class="list" id="cmdk-list"></div></dialog>
 
 <script src="/static/common.js"></script>
+<script src="/static/ds.js"></script>
 <script>
-const ORDER_STATUSES = ["pending", "processing", "shipped", "delivered", "cancelled", "returned"];
-const BOARD = ["pending", "confirmed", "packing", "ready", "assigned", "picked_up", "delivered"];
-const SPEEDS = [0.5, 1, 2, 5, 10, 20];
-let filter = new Set(["pending", "processing", "shipped"]);
-let selected = null, tab = "control";
-const flashIds = new Set();
-const table = (cols, rows) => rows.length
-  ? `<table><thead><tr>${cols.map((c) => `<th class="${c[2] || ""}">${c[0]}</th>`).join("")}</tr></thead><tbody>${rows.map((r) =>
-      `<tr>${cols.map((c) => `<td class="${c[2] || ""}">${c[1](r)}</td>`).join("")}</tr>`).join("")}</tbody></table>` : `<p class="muted">Nothing yet.</p>`;
-const sw = (attrs, on) => `<label class="switch"><input type="checkbox" ${attrs} ${on ? "checked" : ""}><span></span></label>`;
+// ===================================================================== shared UI kit
+const NAV = [
+  ["Operations", [["orders", "Orders", "inbox"], ["shipments", "Live shipments", "kanban"], ["riders", "Riders", "bike"]]],
+  ["Marketplace", [["vendors", "Vendors", "store"], ["catalog", "Catalog", "boxes"], ["users", "Users", "users"]]],
+  ["Money", [["finance", "Finance", "landmark"], ["payouts", "Payouts", "send"]]],
+  ["Data", [["pipeline", "Pipeline", "workflow"], ["@analytics", "Analytics", "chart-column"], ["@docs", "API docs", "file-code"]]],
+];
+const TONE = { pending: "", processing: "blue", confirmed: "blue", packing: "blue", shipped: "purple", ready: "purple", assigned: "purple",
+  picked_up: "purple", delivered: "green", paid: "green", completed: "green", success: "green", available: "green", cancelled: "red", failed: "red",
+  returned: "amber", refunded: "amber", busy: "purple", offline: "", scheduled: "blue" };
+const pill = (s, text) => `<span class="pill ${TONE[s] ?? ""}">${esc(text || label(s))}</span>`;
+const PALETTE = ["#5b3df5", "#0e7490", "#b45309", "#be185d", "#15803d", "#1d4ed8", "#7c2d12", "#6d28d9", "#0f766e", "#9f1239"];
+const colorFor = (s) => PALETTE[[...String(s)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % PALETTE.length];
+const logoSq = (name) => `<span class="logo-sq" style="background:${colorFor(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
+const avatar = (name) => `<span class="avatar" style="background:${colorFor(name + "r")}" aria-hidden="true">${esc(initials(name))}</span>`;
+const sw = (attrs, on, lbl) => `<label class="switch"><input type="checkbox" ${attrs} ${on ? "checked" : ""} aria-label="${esc(lbl)}"><span></span></label>`;
+const mins = (s) => (s == null ? "–" : s < 60 ? `${Math.round(s)}s` : s < 3600 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`);
+const PAY_LABEL = { cash_on_delivery: "Cash on delivery", credit_card: "Credit card", debit_card: "Debit card", paypal: "Mobile wallet", bank_transfer: "Bank transfer" };
+const DAGSTER = "http://localhost:3000";
+
 async function act(path, body, msg, method = "POST") {
-  try { await api(path, { method, body }); if (msg) toast(msg, "good"); return true; } catch (e) { toast(e.message, "error"); return false; }
+  try { const r = await api(path, { method, body }); if (msg) toast(msg, "good"); return r || true; } catch (e) { toast(e.message, "error", 6000); return false; }
+}
+function confirmDlg({ title, body, ok = "Confirm", danger = false, input = null }) {
+  return new Promise((resolve) => {
+    const d = $("#dlg");
+    d.innerHTML = `<form method="dialog"><div class="b"><h2>${esc(title)}</h2><p>${body}</p>
+      ${input ? `<input class="input" id="dlg-in" placeholder="${esc(input)}" required minlength="3">` : ""}</div>
+      <div class="f"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn ${danger ? "danger solid" : "primary"}" value="ok">${esc(ok)}</button></div></form>`;
+    d.onclose = () => resolve(d.returnValue === "ok" ? (input ? $("#dlg-in").value.trim() : true) : false);
+    d.showModal(); (input ? $("#dlg-in") : d.querySelector(".btn.primary, .btn.danger"))?.focus();
+  });
+}
+function sparkline(values, { w = 88, h = 32 } = {}) {
+  const v = values.map((x) => Number(x) || 0);
+  if (v.length < 2) return "";
+  const max = Math.max(...v), min = Math.min(...v), span = max - min || 1;
+  const pts = v.map((y, i) => [(i / (v.length - 1)) * w, h - 2 - ((y - min) / span) * (h - 4)]);
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join("");
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path class="area" d="${d}L${w},${h}L0,${h}Z"/><path class="line" d="${d}"/></svg>`;
+}
+// KPI card: value, delta vs previous period (goodWhen: "up" | "down"), sparkline
+function kpi(lbl, value, cur, prev, series, { goodWhen = "up", sub = "", fmt = (x) => x } = {}) {
+  let d = "";
+  if (prev != null && cur != null) {
+    const ch = prev ? (cur - prev) / Math.abs(prev) : cur ? 1 : 0;
+    const dir = Math.abs(ch) < 0.005 ? "flat" : ch > 0 ? "up" : "down";
+    const good = dir === "flat" ? "flat" : dir === goodWhen ? "up" : "down";
+    d = `<span class="d ${good}">${dir === "flat" ? "" : icon(dir === "up" ? "arrow-up-right" : "arrow-down-right")}${dir === "flat" ? "no change" : `${(Math.abs(ch) * 100).toFixed(1)}%`}</span>`;
+  }
+  return `<div class="kpi"><div class="l">${lbl}</div><div class="row"><div><div class="v">${value}</div>${d}${sub ? `<div class="s">${sub}</div>` : ""}</div>${sparkline(series || [])}</div></div>`;
+}
+const skelTable = (rows = 8, cols = 6) => `<div class="card"><div class="dt-bar"><div class="sk" style="width:240px; height:30px"></div></div>
+  <table class="dt"><tbody>${Array.from({ length: rows }, () => `<tr>${Array.from({ length: cols }, (_, i) => `<td><div class="sk" style="width:${[40, 120, 80, 60, 70, 90][i % 6]}px"></div></td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+const skelKpis = (n = 5) => `<div class="kpis">${Array.from({ length: n }, () => `<div class="kpi"><div class="sk" style="width:60%"></div><div class="sk" style="width:40%; height:22px; margin-top:10px"></div></div>`).join("")}</div>`;
+
+// ---------------------------------------------------------------- generic data table
+// cols: [{ key, label, num, sort (bool|fn), render(row), width }]. Options: search(row)->text, filters: {name, options:[[value,label]], test(row,value), multi},
+// select: true, bulk: [[label, icon, fn(rows), danger]], onRow(row), rowId, pageSize, flash(Set), empty
+class DataTable {
+  constructor(el, opts) { Object.assign(this, { page: 0, q: "", sortKey: null, sortDir: 1, sel: new Set(), pageSize: 25, filterVals: new Set(opts.filterDefault || []) }, opts); this.el = el; }
+  setRows(rows) { this.rows = rows; const ids = new Set(rows.map((r) => this.rowId(r))); this.sel.forEach((id) => ids.has(id) || this.sel.delete(id)); this.render(); }
+  view() {
+    let r = this.rows || [];
+    if (this.q && this.search) { const q = this.q.toLowerCase(); r = r.filter((x) => this.search(x).toLowerCase().includes(q)); }
+    if (this.filter && this.filterVals.size) r = r.filter((x) => [...this.filterVals].some((v) => this.filter.test(x, v)));
+    if (this.sortKey) {
+      const c = this.cols.find((c) => c.key === this.sortKey), get = typeof c.sort === "function" ? c.sort : (x) => x[c.key];
+      r = [...r].sort((a, b) => { const va = get(a), vb = get(b); return (va == null) - (vb == null) || (va > vb ? 1 : va < vb ? -1 : 0) * this.sortDir; });
+    }
+    return r;
+  }
+  render() {
+    const all = this.view(), pages = Math.max(1, Math.ceil(all.length / this.pageSize));
+    this.page = Math.min(this.page, pages - 1);
+    const rows = all.slice(this.page * this.pageSize, (this.page + 1) * this.pageSize);
+    const counts = this.filter ? Object.fromEntries(this.filter.options.map(([v]) => [v, (this.rows || []).filter((x) => this.filter.test(x, v)).length])) : {};
+    const allSel = rows.length && rows.every((r) => this.sel.has(this.rowId(r)));
+    const focus = document.activeElement === this.el.querySelector(".dt-q");
+    this.el.innerHTML = `<div class="card">
+      <div class="dt-bar">${this.search ? `<div class="dt-search">${icon("search")}<input class="input dt-q" type="search" placeholder="${esc(this.placeholder || "Search…")}" value="${esc(this.q)}" aria-label="Search table"></div>` : ""}
+        ${this.filter ? this.filter.options.map(([v, l]) => `<button class="chip ${this.filterVals.has(v) ? "on" : ""}" data-f="${esc(v)}" aria-pressed="${this.filterVals.has(v)}">${esc(l)} <span class="n">${counts[v]}</span></button>`).join("") : ""}
+        <span style="margin-left:auto" class="muted">${int(all.length)} ${this.noun || "rows"}</span>${this.toolbar || ""}</div>
+      ${this.select ? `<div class="bulk ${this.sel.size ? "on" : ""}"><span>${this.sel.size} selected</span>${(this.bulk || []).map(([l, ic], i) => `<button class="btn sm ${this.bulk[i][3] ? "danger" : ""}" data-bulk="${i}">${icon(ic)}${esc(l)}</button>`).join("")}
+        <button class="btn sm ghost" data-bulk="clear">Clear</button></div>` : ""}
+      <div class="dt-scroll"><table class="dt"><thead><tr>${this.select ? `<th class="cb"><input type="checkbox" data-all ${allSel ? "checked" : ""} aria-label="Select all on this page"></th>` : ""}
+        ${this.cols.map((c) => `<th class="${c.num ? "num" : ""} ${c.sort !== false && c.key ? "sortable" : ""}" ${c.key && c.sort !== false ? `data-sort="${c.key}" aria-sort="${this.sortKey === c.key ? (this.sortDir > 0 ? "ascending" : "descending") : "none"}"` : ""} ${c.width ? `style="width:${c.width}"` : ""}>${esc(c.label)}${this.sortKey === c.key ? icon(this.sortDir > 0 ? "arrow-up" : "arrow-down") : ""}</th>`).join("")}</tr></thead>
+        <tbody>${rows.map((r) => { const id = this.rowId(r); return `<tr class="${this.onRow ? "click" : ""} ${this.sel.has(id) ? "sel" : ""} ${this.flash?.has(id) ? "flash" : ""}" data-id="${id}">
+          ${this.select ? `<td class="cb"><input type="checkbox" data-cb="${id}" ${this.sel.has(id) ? "checked" : ""} aria-label="Select row"></td>` : ""}
+          ${this.cols.map((c) => `<td class="${c.num ? "num" : ""}">${c.render ? c.render(r) : esc(r[c.key] ?? "")}</td>`).join("")}</tr>`; }).join("")}</tbody></table>
+        ${rows.length ? "" : `<div class="empty">${icon("inbox")}${esc(this.empty || "Nothing to show")}</div>`}</div>
+      ${pages > 1 ? `<div class="dt-foot"><span>Showing ${int(this.page * this.pageSize + 1)}–${int(Math.min(all.length, (this.page + 1) * this.pageSize))} of ${int(all.length)}</span>
+        <div class="pg"><button class="btn sm" data-pg="-1" ${this.page ? "" : "disabled"} aria-label="Previous page">${icon("chevron-left")}</button><span>Page ${this.page + 1} / ${pages}</span>
+        <button class="btn sm" data-pg="1" ${this.page < pages - 1 ? "" : "disabled"} aria-label="Next page">${icon("chevron-right")}</button></div></div>` : ""}</div>`;
+    this.flash?.clear();
+    const q = this.el.querySelector(".dt-q");
+    if (q) { q.oninput = throttle(() => { this.q = q.value; this.page = 0; this.render(); }, 200); if (focus) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
+    this.el.querySelectorAll("[data-f]").forEach((b) => (b.onclick = () => {
+      const v = b.dataset.f; if (this.filter.multi === false) this.filterVals = new Set(this.filterVals.has(v) ? [] : [v]); else this.filterVals.has(v) ? this.filterVals.delete(v) : this.filterVals.add(v);
+      this.page = 0; this.onFilter ? this.onFilter([...this.filterVals]) : this.render(); }));
+    this.el.querySelectorAll("[data-sort]").forEach((th) => (th.onclick = () => { const k = th.dataset.sort; this.sortDir = this.sortKey === k ? -this.sortDir : (this.cols.find((c) => c.key === k).num ? -1 : 1); this.sortKey = k; this.render(); }));
+    this.el.querySelectorAll("[data-pg]").forEach((b) => (b.onclick = () => { this.page += +b.dataset.pg; this.render(); }));
+    this.el.querySelector("[data-all]")?.addEventListener("change", (e) => { rows.forEach((r) => (e.target.checked ? this.sel.add(this.rowId(r)) : this.sel.delete(this.rowId(r)))); this.render(); });
+    this.el.querySelectorAll("[data-cb]").forEach((c) => c.addEventListener("change", () => { const id = isNaN(c.dataset.cb) ? c.dataset.cb : +c.dataset.cb; c.checked ? this.sel.add(id) : this.sel.delete(id); this.render(); }));
+    this.el.querySelectorAll("[data-bulk]").forEach((b) => (b.onclick = async () => {
+      if (b.dataset.bulk === "clear") { this.sel.clear(); return this.render(); }
+      const chosen = (this.rows || []).filter((r) => this.sel.has(this.rowId(r)));
+      if (await this.bulk[+b.dataset.bulk][2](chosen) !== false) { this.sel.clear(); this.render(); }
+    }));
+    if (this.onRow) this.el.querySelectorAll("tbody tr[data-id]").forEach((tr) => (tr.onclick = (e) => {
+      if (e.target.closest("input, button, a, select, label")) return;
+      const id = isNaN(tr.dataset.id) ? tr.dataset.id : +tr.dataset.id; this.onRow((this.rows || []).find((r) => this.rowId(r) === id));
+    }));
+    this.afterRender?.(this.el);
+  }
 }
 
-// ---------------- tabs
-const LOADERS = { control: () => { loadOverview(); loadOrders(); }, board: loadBoard, vendors: loadVendors, riders: loadRiders,
-  users: loadUsers, finance: loadFinance, catalog: loadCatalog, pipeline: () => { loadAuto(); loadSim(); loadLake(); } };
-
-// ---------------- finance: commission, seller balances, payouts
-async function loadFinance() {
-  const f = await api("/api/admin/finance"), t = f.totals;
-  const tiles = [
-    ["Commission · 30 days", money(t.commission_30d), `${money(t.commission_all)} all-time - the platform's revenue`],
-    ["Sales (GMV) · 30 days", money(t.gmv_30d), "orders not cancelled or returned"],
-    ["Owed to sellers", money(t.owed_to_sellers), `${money(t.ready_for_payout)} ready to pay out now`],
-    ["Paid out to sellers", money(t.paid_out_all), "all-time"],
-    ["Refunds · 30 days", money(t.refunds_30d), `${t.awaiting_online} online payment(s) awaited · ${money(t.cod_to_collect)} cash to collect`],
-  ];
-  setHTML($("#fin-kpis"), tiles.map(([l, v, s]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="small muted">${s}</div></div>`).join(""));
-  $("#fin-hint").textContent = `Earnings are held ${f.hold_days} days after delivery (the return window), then become available. Payouts start at ${money(f.min_payout)}.`;
-  $("#fin-balances").innerHTML = table([
-    ["Seller", (b) => `<b>${esc(b.vendor_name)}</b>`], ["Available", (b) => `<b>${money(b.available)}</b>`, "num"], ["In return window", (b) => money(b.pending), "num"],
-    ["Scheduled", (b) => money(b.scheduled), "num"], ["Paid", (b) => money(b.paid), "num"], ["Commission all-time", (b) => money(b.commission), "num"],
-  ], f.balances);
-  $("#rate-default").value = (f.rules.default * 100).toFixed(1);
-  const pct = (r) => (r == null ? "" : (r * 100).toFixed(1));
-  $("#fin-rates").innerHTML = `<table><thead><tr><th>Category</th><th>Rate %</th><th></th></tr></thead><tbody>${
-    f.rules.categories.map((c) => `<tr><td>${esc(c.category_name)}</td>
-      <td><input type="number" min="0" max="50" step="0.5" value="${pct(c.rate)}" placeholder="default" id="rate-c-${c.category_id}" style="width:80px"></td>
-      <td><button class="small" data-save-rate="category" data-id="${c.category_id}">Save</button>
-        ${c.rate != null ? `<button class="small" data-clear-rate="category" data-id="${c.category_id}">Use default</button>` : ""}</td></tr>`).join("")}</tbody></table>
-    <h3 style="font-size:13px; margin:14px 0 6px">Seller overrides</h3>
-    <table><tbody>${f.rules.vendors.filter((v) => v.rate != null).map((v) => `<tr><td>${esc(v.vendor_name)}</td><td><b>${pct(v.rate)}%</b></td>
-      <td><button class="small" data-clear-rate="vendor" data-id="${v.vendor_id}">Remove</button></td></tr>`).join("") || `<tr><td class="muted small">None - every seller pays its category rate.</td></tr>`}</tbody></table>
-    <div class="row" style="margin-top:8px"><select id="ov-vendor">${f.rules.vendors.map((v) => `<option value="${v.vendor_id}">${esc(v.vendor_name)}</option>`).join("")}</select>
-      <input type="number" id="ov-rate" min="0" max="50" step="0.5" placeholder="%" style="width:80px"><button class="small" id="ov-save">Add override</button></div>`;
-  const saveRate = async (scope, id, value) => {
-    const rate_percent = value === null || value === "" ? null : +value;
-    if (await act("/api/admin/commission", { scope, target_id: id ?? null, rate_percent }, rate_percent == null ? "Override removed" : `Rate set to ${rate_percent}%`, "PUT")) loadFinance();
-  };
-  $$("[data-save-rate]").forEach((b) => (b.onclick = () => saveRate(b.dataset.saveRate, b.dataset.id ? +b.dataset.id : null,
-    b.dataset.saveRate === "default" ? $("#rate-default").value : $(`#rate-c-${b.dataset.id}`).value)));
-  $$("[data-clear-rate]").forEach((b) => (b.onclick = () => saveRate(b.dataset.clearRate, +b.dataset.id, null)));
-  $("#ov-save").onclick = () => saveRate("vendor", +$("#ov-vendor").value, $("#ov-rate").value);
-  $("#fin-payouts").innerHTML = table([
-    ["Payout", (p) => `#${p.payout_id}<div class="muted small">${fmtDateTime(p.created_at)}</div>`], ["Seller", (p) => esc(p.vendor_name)],
-    ["Amount", (p) => `<b>${money(p.amount)}</b>`, "num"],
-    ["Status", (p) => p.status === "paid" ? `<span class="badge s-delivered">paid</span><div class="muted small">${esc(p.reference || "")}</div>` : badge("processing")],
-    ["", (p) => p.status === "scheduled" ? `<button class="small primary" data-paid="${p.payout_id}">Mark paid</button>` : ""],
-  ], f.payouts);
-  $$("[data-paid]").forEach((b) => (b.onclick = async () => {
-    const ref = prompt(`Bank transfer reference for payout #${b.dataset.paid}:`);
-    if (ref && await act(`/api/admin/payouts/${b.dataset.paid}/paid`, { reference: ref }, "Payout marked paid")) loadFinance();
-  }));
-  const maxC = Math.max(1, ...f.commission_by_day.map((d) => d.commission));
-  setHTML($("#fin-chart"), `<div style="display:flex; gap:3px; align-items:flex-end; height:150px">${f.commission_by_day.map((d) =>
-    `<div title="${d.day}: ${money(d.commission)}" style="flex:1; height:${Math.max(1, d.commission / maxC * 100)}%; background:var(--accent); border-radius:3px 3px 0 0"></div>`).join("")}</div>
-    <div class="small muted" style="margin-top:6px">by delivery date · total ${money(f.commission_by_day.reduce((s, d) => s + d.commission, 0))}</div>`);
-  $("#fin-gateway").innerHTML = `Payment gateway: <b>${esc(f.gateway)}</b>${f.gateway === "sandbox" ? " (test mode - set PAYMENT_GATEWAY in .env once a real gateway adapter is added)" : ""}`;
+// ---------------------------------------------------------------- drawer
+let drawerFor = null;
+function openDrawer(html, key) {
+  drawerFor = key; const d = $("#drawer"); d.innerHTML = html; d.classList.add("on"); d.setAttribute("aria-hidden", "false"); $("#scrim").classList.add("on");
+  d.querySelector("[data-close]")?.addEventListener("click", closeDrawer);
+  setTimeout(() => d.querySelector("[data-close]")?.focus(), 50);
 }
-$("#run-payouts").onclick = async () => {
-  try {
-    const r = await api("/api/admin/payouts/run", { method: "POST" });
-    toast(r.created.length ? `${r.created.length} payout(s) created - ${money(r.created.reduce((s, p) => s + p.amount, 0))}` : "Nothing ready to pay out yet", "good", 5000);
-    loadFinance();
-  } catch (e) { toast(e.message, "error"); }
+function closeDrawer() { drawerFor = null; $("#drawer").classList.remove("on"); $("#drawer").setAttribute("aria-hidden", "true"); $("#scrim").classList.remove("on"); }
+$("#scrim").onclick = closeDrawer;
+
+// ===================================================================== pages
+const view = $("#view");
+const PAGES = {};
+let current = null, timers = [];
+const every = (ms, fn) => timers.push(setInterval(fn, ms));
+
+// ---------------------------------------------------------------- Orders
+const ORDER_STATUSES = ["pending", "processing", "shipped", "delivered", "cancelled", "returned"];
+const SPEEDS = [0.5, 1, 2, 5, 10, 20];
+const orderFlash = new Set();
+let ordersTable, orderFilter = ["pending", "processing", "shipped"];
+PAGES.orders = {
+  title: "Orders",
+  async render() {
+    view.innerHTML = `<div class="ph"><h1>Orders</h1><span class="sub">Every order in ${esc(BRAND.name)} · updates live</span>
+        <div class="actions"><button class="btn primary" id="start-all">${icon("play")}Start all pending</button></div></div>
+      <div id="o-kpis">${skelKpis()}</div>
+      <div class="card strip" id="o-strip"><div class="sk" style="width:60%"></div></div>
+      <div id="o-table">${skelTable()}</div>`;
+    ordersTable = new DataTable($("#o-table"), {
+      rowId: (o) => o.order_id, noun: "orders", placeholder: "Search order #, customer, city…", select: true, flash: orderFlash, pageSize: 25,
+      search: (o) => `${o.order_id} ${o.customer} ${o.email} ${o.shipping_city}`,
+      filter: { options: ORDER_STATUSES.map((s) => [s, s]), test: (o, v) => o.status === v }, filterDefault: orderFilter,
+      onFilter: (vals) => { orderFilter = vals; loadOrders(); },
+      empty: "No orders with these statuses",
+      cols: [
+        { key: "order_id", label: "Order", num: false, render: (o) => `<b class="mono">#${o.order_id}</b>`, width: "90px" },
+        { key: "order_date", label: "Placed", render: (o) => `<span title="${esc(fmtDateTime(o.order_date))}">${ago(o.order_date)}</span>` },
+        { key: "customer", label: "Customer", render: (o) => `<div class="cell2">${avatar(o.customer)}<div><div class="t">${esc(o.customer)}</div><div class="m">${esc(o.shipping_city || "")}</div></div></div>` },
+        { key: "status", label: "Status", render: (o) => o.awaiting_payment ? pill("pending", "awaiting payment") : pill(o.status) },
+        { key: "payment_method", label: "Payment", render: (o) => `<span class="muted">${esc(PAY_LABEL[o.payment_method] || label(o.payment_method))}</span>` },
+        { key: "items", label: "Items", num: true }, { key: "shipment_count", label: "Parcels", num: true },
+        { key: "total_amount", label: "Total", num: true, render: (o) => `<b>${money(o.total_amount)}</b>` },
+        { key: "", label: "", sort: false, render: (o) => o.status === "pending" && !o.awaiting_payment ? `<button class="btn sm primary" data-start="${o.order_id}">${icon("play")}Start</button>` : "" },
+      ],
+      bulk: [
+        ["Start", "play", async (rows) => {
+          const ok = rows.filter((o) => o.status === "pending" && !o.awaiting_payment);
+          if (!ok.length) { toast("None of the selected orders can be started", "error"); return false; }
+          let n = 0; for (const o of ok) if (await act(`/api/admin/orders/${o.order_id}/start`)) n++;
+          toast(`Started ${n} order${n === 1 ? "" : "s"}`, "good"); loadOrders(); loadOverview();
+        }],
+        ["Cancel", "x", async (rows) => {
+          const ok = rows.filter((o) => ["pending", "processing"].includes(o.status));
+          if (!ok.length) { toast("Only pending or processing orders can be cancelled", "error"); return false; }
+          if (!(await confirmDlg({ title: `Cancel ${ok.length} order${ok.length > 1 ? "s" : ""}?`, body: "Stock goes back on sale and online payments are refunded. Parcels a rider already has can't be cancelled.", ok: "Cancel orders", danger: true }))) return false;
+          let n = 0; for (const o of ok) { try { await api(`/api/admin/orders/${o.order_id}/cancel`, { method: "POST" }); n++; } catch {} }
+          toast(`Cancelled ${n} of ${ok.length}`, n ? "good" : "error"); loadOrders(); loadOverview();
+        }, true],
+      ],
+      onRow: (o) => showOrder(o.order_id),
+      afterRender: (el) => el.querySelectorAll("[data-start]").forEach((b) => (b.onclick = async () => {
+        b.disabled = true; if (await act(`/api/admin/orders/${b.dataset.start}/start`, null, `Order #${b.dataset.start} sent to the stores`)) { loadOrders(); loadOverview(); } else b.disabled = false; })),
+    });
+    $("#start-all").onclick = async () => {
+      const r = await act("/api/admin/orders/start-all"); if (r) { toast(`Started ${r.started} order${r.started === 1 ? "" : "s"} - they're with the stores now`, "good"); loadOrders(); loadOverview(); }
+    };
+    await Promise.all([loadKpis(), loadOverview(), loadOrders()]);
+    every(4000, loadOverview);
+  },
+  live(ev) { if (ev.kind === "order" || ev.kind === "shipment") { orderFlash.add(ev.order_id); refreshOrders(); } },
 };
-
-async function loadAuto() {
-  const s = await api("/api/admin/pipeline-status");
-  const last = s.runs[0];
-  $("#auto-state").innerHTML = s.dagster_up ? `<span class="badge s-delivered">● running</span>`
-    : `<span class="badge s-cancelled">● off</span> <span class="muted small">start it with <code>python start.py</code></span>`;
-  const tiles = [
-    ["Gold last refreshed", s.gold_built_at ? ago(s.gold_built_at) : "never", s.gold_built_at ? fmtDateTime(s.gold_built_at) : ""],
-    ["Waiting to be processed", s.pending_tables.length ? `${s.pending_tables.length} tables` : "nothing",
-      s.pending_tables.length ? `oldest change ${ago(s.oldest_pending_change)} · ${s.pending_tables.join(", ")}` : "the lake is up to date"],
-    ["Last automatic run", last ? badge(last.status === "success" ? "completed" : "failed") : "–", last ? `${ago(last.finished_at)} · took ${duration(last.seconds)}` : "no runs yet"],
-  ];
-  $("#auto-kpis").innerHTML = tiles.map(([l, v, sub]) => `<div class="card kpi"><div class="label">${l}</div><div class="value" style="font-size:20px">${v}</div><div class="small muted">${esc(sub)}</div></div>`).join("");
-  $("#auto-runs").innerHTML = table([["Finished", (r) => fmtDateTime(r.finished_at)], ["Result", (r) => badge(r.status === "success" ? "completed" : "failed")],
-    ["Trigger", (r) => esc(r.trigger === "shopdb_changes" ? "new data in ShopDB" : r.trigger)], ["Tables with changes", (r) => `<span class="small">${esc(r.changed_tables || "–")}</span>`],
-    ["Took", (r) => duration(r.seconds), "num"]], s.runs);
+async function loadKpis() {
+  const k = (await api("/api/admin/kpis?days=28")).days;
+  if (!$("#o-kpis")) return;
+  const cur = k.slice(-7), prev = k.slice(-14, -7), sum = (a, f) => a.reduce((s, d) => s + (Number(d[f]) || 0), 0);
+  const avg = (a, f) => { const v = a.map((d) => d[f]).filter((x) => x != null); return v.length ? v.reduce((s, x) => s + Number(x), 0) / v.length : null; };
+  const aov = (a) => (sum(a, "orders") ? sum(a, "gmv") / sum(a, "orders") : 0);
+  const cancelRate = (a) => (sum(a, "orders") ? sum(a, "cancelled") / sum(a, "orders") : 0);
+  const last14 = k.slice(-14);
+  setHTML($("#o-kpis"), `<div class="kpis">
+    ${kpi("Orders · 7 days", int(sum(cur, "orders")), sum(cur, "orders"), sum(prev, "orders"), last14.map((d) => d.orders), { sub: "vs previous 7 days" })}
+    ${kpi("Sales (GMV) · 7 days", moneyShort(sum(cur, "gmv")), sum(cur, "gmv"), sum(prev, "gmv"), last14.map((d) => d.gmv), { sub: "excl. cancelled & returned" })}
+    ${kpi("Average order value", money(Math.round(aov(cur))), aov(cur), aov(prev), last14.map((d) => (d.orders ? d.gmv / d.orders : 0)))}
+    ${kpi("Cancellation rate", `${(cancelRate(cur) * 100).toFixed(1)}%`, cancelRate(cur), cancelRate(prev), last14.map((d) => (d.orders ? d.cancelled / d.orders : 0)), { goodWhen: "down" })}
+    ${kpi("Confirm → delivered", avg(cur, "fulfil_minutes") != null ? mins(avg(cur, "fulfil_minutes") * 60) : "–", avg(cur, "fulfil_minutes"), avg(prev, "fulfil_minutes"), last14.map((d) => d.fulfil_minutes), { goodWhen: "down", sub: "average per parcel" })}
+  </div>`);
 }
-$$(".tabs button").forEach((b) => (b.onclick = () => {
-  tab = b.dataset.tab;
-  $$(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
-  Object.keys(LOADERS).forEach((t) => $(`#tab-${t}`).classList.toggle("hidden", t !== tab));
-  LOADERS[tab]();
-}));
-
-// ---------------- order control
 async function loadOverview() {
+  if (!$("#o-strip")) return;
   const o = await api("/api/admin/overview");
-  const auto = o.settings.auto_approve === "true";
-  $("#auto").checked = auto;
-  $("#auto-text").textContent = auto ? "On - new orders start by themselves after ~3 s" : "Off - every order waits for you to press Start";
-  const speed = +o.settings.sim_speed;
-  $("#speed").value = Math.max(0, SPEEDS.indexOf(SPEEDS.reduce((a, b) => (Math.abs(b - speed) < Math.abs(a - speed) ? b : a))));
-  $("#speed-val").textContent = speed + "×";
-  $("#start-all").textContent = `▶ Start all pending (${o.pending_orders})`;
-  $("#start-all").disabled = !o.pending_orders;
-  const e = o.engine;
-  $("#engine").innerHTML = e.error ? `<span class="stock-out">autopilot error: ${esc(e.error)}</span>`
-    : `🤖 autopilot ${e.last_tick ? "running · " + fmtTime(e.last_tick) : "starting"}${Object.keys(e.last_actions || {}).length ? "<br>last: " + Object.entries(e.last_actions).map(([k, v]) => `${label(k)} ${v}`).join(", ") : ""}`;
+  const auto = o.settings.auto_approve === "true", speed = +o.settings.sim_speed, e = o.engine;
   const by = Object.fromEntries(o.shipments_by_status.map((r) => [r.status, r.n]));
   const riders = Object.fromEntries(o.riders_by_status.map((r) => [r.status, r.n]));
-  const tiles = [["Waiting for you", by.pending || 0, "parcels not started"], ["At stores", (by.confirmed || 0) + (by.packing || 0), `${by.confirmed || 0} new · ${by.packing || 0} packing`],
-    ["Ready for pickup", (by.ready || 0) + (by.assigned || 0), `${by.assigned || 0} rider assigned`], ["On the road", by.picked_up || 0, "with riders"],
-    ["Riders", `${riders.available || 0} free`, `${riders.busy || 0} busy · ${riders.offline || 0} offline`]];
-  $("#pipe-kpis").innerHTML = tiles.map(([l, v, s]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="small muted">${s}</div></div>`).join("");
-}
-$("#auto").onchange = async (e) => { await act("/api/admin/settings", { auto_approve: e.target.checked }, e.target.checked ? "Auto-approve on" : "Auto-approve off - orders wait for you", "PUT"); loadOverview(); };
-$("#speed").oninput = (e) => ($("#speed-val").textContent = SPEEDS[e.target.value] + "×");
-$("#speed").onchange = async (e) => { await act("/api/admin/settings", { sim_speed: SPEEDS[e.target.value] }, `Speed ${SPEEDS[e.target.value]}×`, "PUT"); loadOverview(); };
-$("#start-all").onclick = async () => {
-  const r = await api("/api/admin/orders/start-all", { method: "POST" });
-  toast(`Started ${r.started} orders - they're with the stores now`, "good"); loadOverview(); loadOrders();
-};
-
-function renderChips() {
-  $("#status-chips").innerHTML = ORDER_STATUSES.map((s) => `<span class="chip ${filter.has(s) ? "on" : ""}" data-s="${s}">${s}</span>`).join("");
-  $$("#status-chips .chip").forEach((c) => (c.onclick = () => { filter.has(c.dataset.s) ? filter.delete(c.dataset.s) : filter.add(c.dataset.s); renderChips(); loadOrders(); }));
+  const si = Math.max(0, SPEEDS.indexOf(SPEEDS.reduce((a, b) => (Math.abs(b - speed) < Math.abs(a - speed) ? b : a))));
+  const html = `<div class="item">${sw('id="auto"', auto, "Auto-approve orders")}<div><b>Auto-approve</b><span>${auto ? "New orders start by themselves" : "Orders wait for you to press Start"}</span></div></div>
+    <div class="item"><div><b>Simulation speed <span class="mono" id="speed-val">${speed}×</span></b><input type="range" id="speed" min="0" max="5" step="1" value="${si}" aria-label="Simulation speed"></div></div>
+    <div class="item">${icon("inbox")}<div><b class="num">${int(o.pending_orders)} waiting</b><span>orders to start</span></div></div>
+    <div class="item">${icon("store")}<div><b class="num">${(by.confirmed || 0) + (by.packing || 0)} at stores</b><span>${by.confirmed || 0} new · ${by.packing || 0} packing</span></div></div>
+    <div class="item">${icon("bike")}<div><b class="num">${(by.ready || 0) + (by.assigned || 0) + (by.picked_up || 0)} with riders</b><span>${riders.available || 0} riders free · ${riders.busy || 0} busy</span></div></div>
+    <div class="item" style="margin-left:auto">${icon("bot")}<div><b>Autopilot</b><span>${e.error ? `<span style="color:var(--st-red)">error: ${esc(e.error)}</span>` : e.last_tick ? `running · ${fmtTime(e.last_tick)}` : "starting"}</span></div></div>`;
+  if (document.activeElement?.id === "speed") return;  // don't redraw under the user's slider
+  if (setHTML($("#o-strip"), html)) {
+    $("#auto").onchange = async (ev) => { await act("/api/admin/settings", { auto_approve: ev.target.checked }, ev.target.checked ? "Auto-approve on" : "Auto-approve off - orders wait for you", "PUT"); loadOverview(); };
+    $("#speed").oninput = (ev) => ($("#speed-val").textContent = SPEEDS[ev.target.value] + "×");
+    $("#speed").onchange = async (ev) => { await act("/api/admin/settings", { sim_speed: SPEEDS[ev.target.value] }, `Simulation speed ${SPEEDS[ev.target.value]}×`, "PUT"); $("#speed").blur(); loadOverview(); };
+  }
+  $("#start-all").innerHTML = `${icon("play")}Start all pending${o.pending_orders ? ` (${o.pending_orders})` : ""}`;
+  $("#start-all").disabled = !o.pending_orders;
+  setNavBadge("orders", o.pending_orders);
 }
 async function loadOrders() {
-  const orders = filter.size ? await api("/api/admin/orders?" + new URLSearchParams([...[...filter].map((s) => ["status", s]), ["limit", 150]])) : [];
-  $("#orders").innerHTML = orders.map((o) => `
-    <tr class="clickable ${o.order_id === selected ? "selected" : ""} ${flashIds.has(o.order_id) ? "flash" : ""}" data-id="${o.order_id}">
-      <td><b>${o.order_id}</b></td><td>${ago(o.order_date)}</td><td>${esc(o.customer)}</td><td>${o.awaiting_payment ? `<span class="badge s-pending">💳 awaiting payment</span>` : badge(o.status)}</td>
-      <td class="num">${o.shipment_count}</td><td class="num">${money(o.total_amount)}</td>
-      <td>${o.status === "pending" && !o.awaiting_payment ? `<button class="small primary" data-start="${o.order_id}">Start</button>` : ""}</td></tr>`).join("")
-    || `<tr><td colspan="7" class="muted">No orders with these statuses.</td></tr>`;
-  flashIds.clear();
-  $$("#orders tr[data-id]").forEach((tr) => (tr.onclick = (e) => { if (!e.target.dataset.start) showOrder(+tr.dataset.id); }));
-  $$("[data-start]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/orders/${b.dataset.start}/start`, null, `Order #${b.dataset.start} sent to the stores`)) { loadOrders(); loadOverview(); } }));
+  if (!ordersTable) return;
+  const rows = orderFilter.length ? await api("/api/admin/orders?" + new URLSearchParams([...orderFilter.map((s) => ["status", s]), ["limit", 500]])) : [];
+  ordersTable.setRows(rows);
 }
+const refreshOrders = throttle(() => { if (current === "orders") loadOrders(); if (drawerFor?.startsWith("order:")) showOrder(+drawerFor.split(":")[1], true); }, 1200);
 
-async function showOrder(id) {
-  selected = id;
-  $$("#orders tr").forEach((tr) => tr.classList.toggle("selected", +tr.dataset.id === id));
+// order drawer: items, parcels, timeline, customer, rider, payment, audit log, act-as buttons
+const SHIP_STEPS = [["created_at", "Placed"], ["confirmed_at", "Started"], ["accepted_at", "Accepted"], ["ready_at", "Packed"], ["assigned_at", "Rider assigned"], ["picked_up_at", "Picked up"], ["delivered_at", "Delivered"]];
+async function showOrder(id, quiet = false) {
+  if (!quiet) openDrawer(`<div class="drawer-h"><h2>Order #${id}</h2><button class="ibtn" data-close style="margin-left:auto" aria-label="Close">${icon("x")}</button></div>
+    <div class="drawer-b">${Array.from({ length: 6 }, () => `<div class="sk" style="height:16px; margin-bottom:14px"></div>`).join("")}</div>`, `order:${id}`);
   const [o, riders] = await Promise.all([api(`/api/admin/orders/${id}`), api("/api/admin/riders")]);
+  if (drawerFor !== `order:${id}`) return;
   const free = riders.filter((r) => r.status === "available");
-  const controls = (s) => ({
-    pending: `<button class="small primary" data-order-act="start">▶ Start order</button>`,
-    confirmed: `<button class="small" data-ship="${s.shipment_id}" data-act="accept">✔ Accept for store</button>`,
-    packing: `<button class="small" data-ship="${s.shipment_id}" data-act="ready">📦 Mark packed</button>`,
-    ready: free.length ? `<select id="rider-${s.shipment_id}">${free.map((r) => `<option value="${r.rider_id}">${r.is_bot ? "🤖" : "👤"} ${esc(r.full_name)}</option>`).join("")}</select>
-      <button class="small" data-assign="${s.shipment_id}">Assign rider</button>` : `<span class="muted small">no rider free - waiting</span>`,
-    assigned: `<button class="small" data-ship="${s.shipment_id}" data-act="pickup">🛵 Mark picked up</button>`,
-    picked_up: `<button class="small" data-ship="${s.shipment_id}" data-act="deliver">🏠 Mark delivered</button>`,
-  }[s.status] || "");
-  $("#detail").innerHTML = `
-    <div class="row" style="justify-content:space-between"><h1>Order #${o.order_id}</h1>${badge(o.status)}</div>
-    <p class="muted small">${esc(o.customer)} · ${esc(o.email)}<br>Placed ${fmtDateTime(o.order_date)} · to ${esc(o.shipping_city)}, ${esc(o.shipping_country)}<br>
-      ${esc(label(o.payment_method))} · ${badge(o.payment_status)} · <b>${money(o.total_amount)}</b></p>
-    ${o.shipments.map((s) => `<div class="job" style="padding:10px">
-      <div class="row" style="justify-content:space-between"><b>🏪 ${esc(s.vendor_name)} ${s.vendor_autopilot ? "🤖" : "👤"}</b>${badge(s.status)}</div>
-      ${shipmentStepper(s)}
-      ${s.rider_name ? `<div class="small">🛵 ${esc(s.rider_name)} (${esc(s.vehicle)}) · fee ${money(s.delivery_fee)}</div>` : ""}
-      <div class="small muted">${o.lines.filter((l) => l.shipment_id === s.shipment_id).map((l) => `${esc(l.product_name)} × ${l.quantity}`).join(" · ")}</div>
-      <div class="row" style="margin-top:8px">${controls(s)}</div></div>`).join("")}
-    <div class="row">${o.can_cancel ? `<button class="danger" data-order-act="cancel">Cancel order</button>` : ""}
-      ${o.can_return ? `<button data-order-act="return">Mark returned</button>` : ""}</div>`;
-  const after = () => { showOrder(id); loadOrders(); loadOverview(); };
-  $$("#detail [data-order-act]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/orders/${id}/${b.dataset.orderAct}`, null, `Order #${id}: ${b.dataset.orderAct}`)) after(); }));
-  $$("#detail [data-act]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/shipments/${b.dataset.ship}/${b.dataset.act}`, null, "Done")) after(); }));
-  $$("#detail [data-assign]").forEach((b) => (b.onclick = async () => {
-    if (await act(`/api/admin/shipments/${b.dataset.assign}/assign`, { rider_id: +$(`#rider-${b.dataset.assign}`).value }, "Rider assigned")) after();
+  const vlogin = Object.fromEntries((o.vendor_logins || []).map((x) => [x.shipment_id, x.email]));
+  const actAs = (s) => {
+    const v = `<span class="who">Act as ${esc(s.vendor_name)}:</span>`, r = `<span class="who">Act as ${esc(s.rider_name || "rider")}:</span>`;
+    return { pending: `<span class="who">Waiting for you</span><button class="btn sm primary" data-oact="start">${icon("play")}Start order</button>`,
+      confirmed: `${v}<button class="btn sm" data-ship="${s.shipment_id}" data-sact="accept">${icon("check")}Accept</button>`,
+      packing: `${v}<button class="btn sm" data-ship="${s.shipment_id}" data-sact="ready">${icon("package")}Mark packed</button>`,
+      ready: free.length ? `<span class="who">Dispatch:</span><select class="select" style="height:26px" id="rider-${s.shipment_id}" aria-label="Rider">${free.map((x) => `<option value="${x.rider_id}">${esc(x.full_name)} · ${esc(x.city || "")}${x.is_bot ? " (autopilot)" : ""}</option>`).join("")}</select>
+        <button class="btn sm" data-assign="${s.shipment_id}">${icon("bike")}Assign rider</button>` : `<span class="who">No rider free - it will be assigned as soon as one is</span>`,
+      assigned: `${r}<button class="btn sm" data-ship="${s.shipment_id}" data-sact="pickup">${icon("package-check")}Mark picked up</button>`,
+      picked_up: `${r}<button class="btn sm" data-ship="${s.shipment_id}" data-sact="deliver">${icon("house")}Mark delivered</button>`,
+    }[s.status] || "";
+  };
+  const events = [[o.created_at || o.order_date, "Order placed", ""], ...(o.payment_events || []).map((e) => [e.received_at, `Payment: ${label(e.event_type)}${e.amount ? " · " + money(e.amount) : ""}`, /fail/.test(e.event_type) ? "bad" : "money"])];
+  o.shipments.forEach((s, i) => SHIP_STEPS.slice(1).forEach(([col, lbl]) => s[col] && events.push([s[col], `Parcel ${i + 1} (${s.vendor_name}): ${lbl.toLowerCase()}${col === "assigned_at" && s.rider_name ? " - " + s.rider_name : ""}`, col === "delivered_at" ? "money" : ""])));
+  o.shipments.forEach((s, i) => s.cancelled_at && events.push([s.cancelled_at, `Parcel ${i + 1} cancelled`, "bad"]));
+  if (o.paid_at) events.push([o.paid_at, `Paid ${money(o.paid_amount)}`, "money"]);
+  events.sort((a, b) => new Date(a[0]) - new Date(b[0]));
+  const html = `<div class="drawer-h">${pill(o.awaiting_payment ? "pending" : o.status, o.awaiting_payment ? "awaiting payment" : null)}<h2>Order #${o.order_id}</h2>
+      <span class="muted">${fmtDateTime(o.order_date)}</span><button class="ibtn" data-close style="margin-left:auto" aria-label="Close">${icon("x")}</button></div>
+    <div class="drawer-b">
+      <div class="grid" style="grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px">
+        <div class="sec" style="margin:0"><h3>Customer</h3><div class="cell2" style="display:flex; gap:10px; align-items:center">${avatar(o.customer)}<div><b>${esc(o.customer)}</b>
+          <div class="muted">${esc(o.email)}</div><div class="muted">${esc(o.phone || "")}</div></div></div>
+          <div class="muted" style="margin-top:8px">${int(o.customer_orders)} orders · ${money(o.customer_spend)} lifetime · since ${esc(o.signup_date || "")}</div></div>
+        <div class="sec" style="margin:0"><h3>Payment</h3><dl class="kv" style="grid-template-columns:80px 1fr">
+          <dt>Method</dt><dd>${esc(PAY_LABEL[o.payment_method] || label(o.payment_method))}</dd><dt>Status</dt><dd>${pill(o.payment_status)}</dd>
+          <dt>Total</dt><dd><b>${money(o.total_amount)}</b></dd>${o.refunded_amount > 0 ? `<dt>Refunded</dt><dd>${money(o.refunded_amount)}</dd>` : ""}
+          ${o.payment_failure ? `<dt>Failure</dt><dd style="color:var(--st-red)">${esc(o.payment_failure)}</dd>` : ""}<dt>Ship to</dt><dd>${esc(o.shipping_city)}, ${esc(o.shipping_country)}</dd></dl></div>
+      </div>
+      <div class="sec"><h3>Parcels (${o.shipments.length})</h3>${o.shipments.map((s, i) => {
+        const reached = SHIP_STEPS.map(([c]) => !!s[c]);
+        return `<div class="parcel"><div class="parcel-h">${logoSq(s.vendor_name)}<div><b>Parcel ${i + 1} · ${esc(s.vendor_name)}</b>
+            <div class="muted" style="font-size:11px">${s.vendor_autopilot ? "Autopilot store" : "Store acts by hand"}${vlogin[s.shipment_id] ? ` · ${esc(vlogin[s.shipment_id])}` : ""}</div></div>
+            <span style="margin-left:auto">${pill(s.status)}</span></div>
+          <div class="mini-steps" aria-label="Progress">${reached.map((r) => `<span class="${r ? "done" : ""}"></span>`).join("")}</div>
+          <table class="items" style="margin-top:10px"><tbody>${o.lines.filter((l) => l.shipment_id === s.shipment_id).map((l) => `<tr><td>${esc(l.product_name)}</td>
+            <td class="num muted">× ${l.quantity}</td><td class="num">${money(l.line_total)}</td></tr>`).join("")}</tbody></table>
+          ${s.rider_name ? `<div style="display:flex; gap:8px; align-items:center; margin-top:10px">${avatar(s.rider_name)}<div><b>${esc(s.rider_name)}</b>
+            <div class="muted" style="font-size:11px">${esc(s.vehicle || "")} · ${esc(s.rider_phone || "")} · fee ${money(s.delivery_fee)}</div></div></div>` : ""}
+          ${actAs(s) ? `<div class="acts">${actAs(s)}</div>` : ""}</div>`; }).join("")}</div>
+      <div class="sec"><h3>Timeline &amp; audit log</h3><ul class="tl">${events.map(([t, txt, cls]) => `<li class="${cls}"><i></i>${esc(txt)}<time>${fmtDateTime(t)}</time></li>`).join("")}</ul></div>
+    </div>
+    <div class="drawer-f">${o.can_cancel ? `<button class="btn danger" data-oact="cancel">${icon("x")}Cancel order</button>` : ""}
+      ${o.can_return ? `<button class="btn" data-oact="return">${icon("rotate-ccw")}Mark returned</button>` : ""}
+      <a class="btn ghost" style="margin-left:auto" href="/#/orders/${o.order_id}" target="_blank" rel="noopener">${icon("external-link")}Customer view</a></div>`;
+  const d = $("#drawer"), scroll = d.querySelector(".drawer-b")?.scrollTop || 0;
+  d.innerHTML = html; d.querySelector(".drawer-b").scrollTop = scroll;
+  d.querySelector("[data-close]").onclick = closeDrawer;
+  const after = () => { showOrder(id, true); loadOrders(); loadOverview(); };
+  d.querySelectorAll("[data-oact]").forEach((b) => (b.onclick = async () => {
+    const a = b.dataset.oact;
+    if (a !== "start" && !(await confirmDlg({ title: a === "cancel" ? `Cancel order #${id}?` : `Mark order #${id} returned?`,
+      body: a === "cancel" ? "Stock goes back on sale. Online payments are refunded." : "The customer is refunded and the seller's earnings for it are reversed.", ok: a === "cancel" ? "Cancel order" : "Mark returned", danger: true }))) return;
+    if (await act(`/api/admin/orders/${id}/${a}`, null, `Order #${id}: ${a === "start" ? "sent to the stores" : a === "cancel" ? "cancelled" : "marked returned"}`)) after();
   }));
+  d.querySelectorAll("[data-sact]").forEach((b) => (b.onclick = async () => { b.disabled = true; if (await act(`/api/admin/shipments/${b.dataset.ship}/${b.dataset.sact}`, null, `Parcel ${b.dataset.sact === "ready" ? "packed" : b.dataset.sact === "accept" ? "accepted" : b.dataset.sact === "pickup" ? "picked up" : "delivered"}`)) after(); else b.disabled = false; }));
+  d.querySelectorAll("[data-assign]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/shipments/${b.dataset.assign}/assign`, { rider_id: +$(`#rider-${b.dataset.assign}`).value }, "Rider assigned")) after(); }));
 }
 
-// ---------------- live shipments board
+// ---------------------------------------------------------------- Live shipments (kanban)
+const BOARD = [["pending", "Waiting to start"], ["confirmed", "New at store"], ["packing", "Packing"], ["ready", "Ready for pickup"], ["assigned", "Rider on the way"], ["picked_up", "Out for delivery"], ["delivered", "Delivered (1h)"]];
+const boardFlash = new Set();
+PAGES.shipments = {
+  title: "Live shipments",
+  async render() {
+    view.innerHTML = `<div class="ph"><h1>Live shipments</h1><span class="sub">Every open parcel, left to right as stores and riders work</span>
+      <div class="actions legend"><span><i style="background:var(--st-green)"></i>under 30 min</span><span><i style="background:var(--st-amber)"></i>30 min – 2 h</span><span><i style="background:var(--st-red)"></i>over 2 h</span></div></div>
+      <div class="kanban" id="kanban">${BOARD.map(([, l]) => `<div class="kcol"><div class="kcol-h">${esc(l)}</div><div class="kcol-b">${Array.from({ length: 3 }, () => `<div class="kc"><div class="sk"></div><div class="sk" style="width:60%; margin-top:10px"></div></div>`).join("")}</div></div>`).join("")}</div>`;
+    await loadBoard();
+    every(15000, loadBoard);  // ages tick even without events
+  },
+  live(ev) { if (ev.kind === "order" || ev.kind === "shipment") { boardFlash.add(ev.order_id); refreshBoard(); } },
+};
+const refreshBoard = throttle(() => current === "shipments" && loadBoard(), 1000);
 async function loadBoard() {
   const ships = await api("/api/admin/shipments");
-  $("#kanban").innerHTML = BOARD.map((st) => {
+  const k = $("#kanban"); if (!k) return;
+  const scrolls = [...k.querySelectorAll(".kcol-b")].map((c) => c.scrollTop);
+  k.innerHTML = BOARD.map(([st, l]) => {
     const col = ships.filter((s) => s.status === st);
-    return `<div class="col"><h3>${label(st)}${st === "delivered" ? " (1h)" : ""}<span class="badge s-${st}">${col.length}</span></h3>${col.map((s) => `
-      <div class="kcard ${flashIds.has(s.order_id) ? "flash" : ""}"><b>#${s.order_id}</b> <span class="muted">· ${ago(s.updated_at)}</span>
-        <div>${s.vendor_autopilot ? "🤖" : "👤"} ${esc(s.vendor_name)}</div>
-        ${s.rider_name ? `<div>${s.rider_autopilot ? "🤖" : "👤"} 🛵 ${esc(s.rider_name)}</div>` : ""}<div class="muted">→ ${esc(s.shipping_city)}</div></div>`).join("")}</div>`;
+    return `<section class="kcol" aria-label="${esc(l)}"><div class="kcol-h">${pill(st, l)}<span class="n">${col.length}</span></div><div class="kcol-b">${col.map((s) => {
+      const age = (Date.now() - new Date(s.created_at)) / 1000, sla = st === "delivered" ? "sla-g" : age < 1800 ? "sla-g" : age < 7200 ? "sla-a" : "sla-r";
+      return `<article class="kc ${sla} ${boardFlash.has(s.order_id) ? "flash" : ""}" data-order="${s.order_id}" tabindex="0" aria-label="Order ${s.order_id}, ${esc(s.vendor_name)}, age ${mins(age)}">
+        <div class="r1"><b>#${s.order_id}</b><span class="muted" style="font-size:11px">${int(s.units || 0)} item${s.units == 1 ? "" : "s"}</span><span class="age" title="Since the order was placed">${mins(age)}</span></div>
+        <div class="r2">${logoSq(s.vendor_name)}<span class="t">${esc(s.vendor_name)}</span>${s.vendor_autopilot ? `<span title="Autopilot store">${icon("bot", "xs")}</span>` : ""}</div>
+        <div class="r3">${s.rider_name ? `${avatar(s.rider_name)}<span>${esc(s.rider_name)}</span>` : `<span>${icon("bike", "xs")} no rider yet</span>`}<span style="margin-left:auto">${icon("map-pin", "xs")} ${esc(s.shipping_city)}</span></div></article>`; }).join("")
+      || `<div class="empty" style="padding:24px 8px">${icon("circle-check")}Nothing here</div>`}</div></section>`;
   }).join("");
+  k.querySelectorAll(".kcol-b").forEach((c, i) => (c.scrollTop = scrolls[i] || 0));
+  boardFlash.clear();
+  k.querySelectorAll("[data-order]").forEach((c) => { c.onclick = () => showOrder(+c.dataset.order); c.onkeydown = (e) => e.key === "Enter" && showOrder(+c.dataset.order); });
+  setNavBadge("shipments", ships.filter((s) => s.status !== "delivered").length);
 }
 
-// ---------------- vendors / riders / users
-async function loadVendors() {
-  const v = await api("/api/admin/vendors");
-  $("#vendors").innerHTML = table([
-    ["Store", (r) => `<b>${esc(r.vendor_name)}</b><div class="muted small">${esc(r.city || "")} · ${stars(r.rating)}</div>`],
-    ["Products", (r) => r.products, "num"], ["To handle", (r) => r.to_handle, "num"], ["Delivered 30d", (r) => int(r.delivered_30d), "num"],
-    ["Avg prep (7d)", (r) => duration(r.avg_prep_seconds), "num"], ["Login", (r) => `<code class="small">${esc(r.login_email || "–")}</code>`],
-    ["Autopilot", (r) => sw(`data-v-bot="${r.vendor_id}"`, r.is_bot)], ["Active", (r) => sw(`data-v-active="${r.vendor_id}"`, r.is_active)],
-  ], v);
-  $$("[data-v-bot]").forEach((c) => (c.onchange = () => act(`/api/admin/vendors/${c.dataset.vBot}`, { is_bot: c.checked }, c.checked ? "Autopilot on" : "Autopilot off - the store must act in the seller center", "PATCH")));
-  $$("[data-v-active]").forEach((c) => (c.onchange = () => act(`/api/admin/vendors/${c.dataset.vActive}`, { is_active: c.checked }, c.checked ? "Store visible" : "Store hidden from the storefront", "PATCH")));
-}
-async function loadRiders() {
-  const r = await api("/api/admin/riders");
-  $("#riders").innerHTML = table([
-    ["Rider", (x) => `<b>${esc(x.full_name)}</b><div class="muted small">${esc(x.city || "")} · ${esc(x.vehicle)}</div>`],
-    ["Status", (x) => badge(x.status)], ["Current parcel", (x) => (x.current_shipment ? "#" + x.current_shipment : "–")],
-    ["Delivered today", (x) => x.delivered_today, "num"], ["Login", (x) => `<code class="small">${esc(x.login_email || "–")}</code>`],
-    ["Autopilot", (x) => sw(`data-r-bot="${x.rider_id}"`, x.is_bot)],
-    ["Set", (x) => x.status === "busy" ? "" : `<button class="small" data-r-status="${x.rider_id}" data-to="${x.status === "offline" ? "available" : "offline"}">${x.status === "offline" ? "Set online" : "Set offline"}</button>`],
-  ], r);
-  $$("[data-r-bot]").forEach((c) => (c.onchange = () => act(`/api/admin/riders/${c.dataset.rBot}`, { is_bot: c.checked }, c.checked ? "Autopilot on" : "Autopilot off", "PATCH")));
-  $$("[data-r-status]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/riders/${b.dataset.rStatus}`, { status: b.dataset.to }, "Updated", "PATCH")) loadRiders(); }));
-}
-async function loadUsers() {
-  const u = await api("/api/admin/users");
-  $("#users").innerHTML = table([
-    ["Email", (x) => esc(x.email)], ["Name", (x) => esc(x.display_name)], ["Role", (x) => `<span class="badge">${x.role}</span>`],
-    ["Last sign-in", (x) => (x.last_login_at ? ago(x.last_login_at) : "never")], ["Created", (x) => fmtDateTime(x.created_at)],
-    ["Active", (x) => sw(`data-u="${x.user_id}"`, x.is_active)],
-  ], u);
-  $$("[data-u]").forEach((c) => (c.onchange = async () => { if (!(await act(`/api/admin/users/${c.dataset.u}`, { is_active: c.checked }, c.checked ? "Account enabled" : "Account disabled", "PATCH"))) c.checked = !c.checked; }));
-}
+// ---------------------------------------------------------------- Riders
+const CITY_XY = { Karachi: [190, 400], Hyderabad: [228, 372], Quetta: [150, 230], Multan: [330, 230], Faisalabad: [385, 180], Lahore: [425, 170],
+  Sialkot: [440, 128], Gujranwala: [425, 145], Rawalpindi: [380, 108], Islamabad: [392, 96], Peshawar: [320, 92] };
+const CITY_LBL = { Rawalpindi: -1, Peshawar: -1, Faisalabad: -1, Quetta: -1, Karachi: 1 }, CITY_DY = { Islamabad: -8, Rawalpindi: 8 };
+PAGES.riders = {
+  title: "Riders",
+  async render() {
+    view.innerHTML = `<div class="ph"><h1>Riders</h1><span class="sub">Ready parcels go to free riders: people first, then autopilot riders</span></div>
+      <div id="r-kpis">${skelKpis(4)}</div><div class="grid" style="grid-template-columns:minmax(0,380px) minmax(0,1fr); align-items:start" id="r-grid">
+      <div class="card"><div class="card-h"><h2>Availability by city</h2></div><div class="card-b map" id="r-map"><div class="sk" style="height:300px"></div></div></div>
+      <div id="r-table">${skelTable()}</div></div>`;
+    const t = new DataTable($("#r-table"), {
+      rowId: (r) => r.rider_id, noun: "riders", placeholder: "Search rider, city…", pageSize: 15, search: (r) => `${r.full_name} ${r.city} ${r.vehicle}`,
+      filter: { options: [["available", "Available"], ["busy", "Busy"], ["offline", "Offline"]], test: (r, v) => r.status === v },
+      cols: [
+        { key: "full_name", label: "Rider", render: (r) => `<div class="cell2">${avatar(r.full_name)}<div><div class="t">${esc(r.full_name)}</div><div class="m">${esc(r.city || "")} · ${esc(r.vehicle)}</div></div></div>` },
+        { key: "status", label: "Status", render: (r) => `${pill(r.status)}${r.current_shipment ? ` <span class="mono muted">#${r.current_shipment}</span>` : ""}` },
+        { key: "delivered_today", label: "Today", num: true },
+        { key: "week", label: "7 days", num: true, sort: (r) => r.week_total, render: (r) => `<div style="display:flex; gap:8px; align-items:center; justify-content:flex-end">${sparkline(r.week, { w: 60, h: 20 })}<b>${r.week_total}</b></div>` },
+        { key: "earned", label: "Earned · 7d", num: true, render: (r) => money(r.earned) },
+        { key: "is_bot", label: "Autopilot", render: (r) => sw(`data-r-bot="${r.rider_id}"`, r.is_bot, `Autopilot for ${r.full_name}`) },
+        { key: "", label: "", sort: false, render: (r) => r.status === "busy" ? "" : `<button class="btn sm" data-r-status="${r.rider_id}" data-to="${r.status === "offline" ? "available" : "offline"}">${r.status === "offline" ? "Set online" : "Set offline"}</button>` },
+      ],
+      afterRender: (el) => {
+        el.querySelectorAll("[data-r-bot]").forEach((c) => (c.onchange = () => act(`/api/admin/riders/${c.dataset.rBot}`, { is_bot: c.checked }, c.checked ? "Autopilot on" : "Autopilot off", "PATCH")));
+        el.querySelectorAll("[data-r-status]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/riders/${b.dataset.rStatus}`, { status: b.dataset.to }, b.dataset.to === "offline" ? "Rider set offline" : "Rider is online", "PATCH")) load(); }));
+      },
+    });
+    const load = async () => {
+      const [riders, tr] = await Promise.all([api("/api/admin/riders"), api("/api/admin/trends")]);
+      const days = Array.from({ length: 7 }, (_, i) => new Date(Date.now() - (6 - i) * 864e5).toISOString().slice(0, 10));
+      riders.forEach((r) => { const mine = tr.rider_week.filter((x) => x.rider_id === r.rider_id);
+        r.week = days.map((d) => mine.find((x) => x.day.slice(0, 10) === d)?.delivered || 0); r.week_total = r.week.reduce((a, b) => a + b, 0); r.earned = mine.reduce((a, x) => a + x.earned, 0); });
+      const by = (s) => riders.filter((r) => r.status === s).length, active = riders.filter((r) => r.week_total);
+      setHTML($("#r-kpis"), `<div class="kpis">${kpi("Riders online", `${by("available") + by("busy")} / ${riders.length}`, null, null, [], { sub: `${by("available")} free · ${by("busy")} on a delivery` })}
+        ${kpi("Deliveries today", int(riders.reduce((a, r) => a + r.delivered_today, 0)), null, null, days.map((d, i) => riders.reduce((a, r) => a + r.week[i], 0)))}
+        ${kpi("Per active rider · 7d", active.length ? (active.reduce((a, r) => a + r.week_total, 0) / active.reduce((a, r) => a + r.week.filter(Boolean).length, 0)).toFixed(1) + " / day" : "–", null, null, [], { sub: "deliveries per working day" })}
+        ${kpi("Rider fees · 7d", money(riders.reduce((a, r) => a + r.earned, 0)), null, null, [], { sub: "paid by the platform" })}</div>`);
+      const cities = {};
+      riders.forEach((r) => { const c = (cities[r.city] ||= { available: 0, busy: 0, offline: 0 }); c[r.status] = (c[r.status] || 0) + 1; });
+      setHTML($("#r-map"), `<svg viewBox="80 40 440 400" role="img" aria-label="Riders by city">
+        <path class="land" d="M318 52l52-6 40 22 30 48 4 34-24 24-10 46-40 30-30 52-36 34-46 64-34 48-44 4-34-30 10-36-30-26 4-48 46-34 28-50 40-24 18-50 30-40z"/>
+        ${Object.entries(cities).filter(([c]) => CITY_XY[c]).map(([c, n]) => { const [x, y] = CITY_XY[c], tot = n.available + n.busy + n.offline, rr = 8 + Math.sqrt(tot) * 4;
+          const on = n.available + n.busy; return `<g><title>${c}: ${n.available} free, ${n.busy} busy, ${n.offline} offline</title>
+          <circle cx="${x}" cy="${y}" r="${rr}" fill="var(--st-gray)" opacity=".25"/><circle cx="${x}" cy="${y}" r="${Math.max(6, rr * Math.sqrt(on / tot))}" fill="var(--st-green)"/>
+          <text class="cnt" x="${x}" y="${y + 3.5}" text-anchor="middle">${on}</text><text x="${x + (CITY_LBL[c] || 1) * (rr + 4)}" y="${y + 4 + (CITY_DY[c] || 0)}" text-anchor="${(CITY_LBL[c] || 1) > 0 ? "start" : "end"}">${c}</text></g>`; }).join("")}</svg>
+        <div class="legend" style="margin-top:8px"><span><i style="background:var(--st-green)"></i>online (free + busy)</span><span><i style="background:var(--st-gray); opacity:.4"></i>all riders</span></div>`);
+      t.setRows(riders);
+    };
+    await load(); every(10000, load);
+  },
+};
 
-// ---------------- catalog
-async function loadCatalog() {
-  const q = $("#cat-search").value.trim();
-  const res = await api("/api/products?limit=100&sort=popular" + (q ? "&q=" + encodeURIComponent(q) : ""));
-  $("#catalog").innerHTML = res.items.map((p) => `<tr>
-    <td><div class="row" style="flex-wrap:nowrap"><div style="width:40px">${productArt(p, "sm")}</div><div>${esc(p.product_name)}<div class="muted small">${esc(p.sku)} · ${esc(p.category_name)}</div></div></div></td>
-    <td>${esc(p.vendor_name)}</td><td class="num">${int(p.sold)}</td><td class="num ${p.stock < 20 ? "stock-low" : ""}">${int(p.stock)}</td>
-    <td><div class="row"><input type="number" step="0.01" value="${p.unit_price}" id="pr-${p.product_id}" style="width:90px"><button class="small" data-save="${p.product_id}">Save</button></div></td>
-    <td><input type="number" step="0.01" value="${p.list_price || ""}" placeholder="none" id="lp-${p.product_id}" style="width:90px"></td>
-    <td><div class="row"><input type="number" min="1" value="100" id="rs-${p.product_id}" style="width:70px"><button class="small" data-restock="${p.product_id}">Add</button></div></td></tr>`).join("");
-  $$("[data-save]").forEach((b) => (b.onclick = () => act(`/api/admin/products/${b.dataset.save}`, { unit_price: +$(`#pr-${b.dataset.save}`).value, list_price: +$(`#lp-${b.dataset.save}`).value || 0 }, "Price updated", "PATCH")));
-  $$("[data-restock]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/products/${b.dataset.restock}`, { add_stock: +$(`#rs-${b.dataset.restock}`).value }, "Restocked", "PATCH")) loadCatalog(); }));
-}
-$("#cat-search").oninput = throttle(loadCatalog, 300);
+// ---------------------------------------------------------------- Vendors
+PAGES.vendors = {
+  title: "Vendors",
+  async render() {
+    view.innerHTML = `<div class="ph"><h1>Vendors</h1><span class="sub">Autopilot stores accept and pack by themselves; turn it off to make a store wait for a person</span></div><div id="v-table">${skelTable()}</div>`;
+    const t = new DataTable($("#v-table"), {
+      rowId: (v) => v.vendor_id, noun: "stores", placeholder: "Search store, city…", search: (v) => `${v.vendor_name} ${v.city} ${v.login_email || ""}`,
+      filter: { options: [["active", "Active"], ["hidden", "Hidden"], ["auto", "Autopilot"], ["manual", "Manual"]], test: (v, f) => ({ active: v.is_active, hidden: !v.is_active, auto: v.is_bot, manual: !v.is_bot }[f]) },
+      cols: [
+        { key: "vendor_name", label: "Store", render: (v) => `<div class="cell2">${logoSq(v.vendor_name)}<div><div class="t">${esc(v.vendor_name)}</div><div class="m">${esc(v.city || "")}${v.login_email ? " · " + esc(v.login_email) : ""}</div></div></div>` },
+        { key: "rating", label: "Rating", num: true, render: (v) => `<span style="display:inline-flex; gap:6px; align-items:center">${starRating(v.rating).replace("pc-rating", "")}</span>` },
+        { key: "products", label: "Products", num: true }, { key: "to_handle", label: "To handle", num: true, render: (v) => (v.to_handle ? `<b style="color:var(--st-amber)">${v.to_handle}</b>` : "0") },
+        { key: "delivered_30d", label: "Delivered · 30d", num: true, render: (v) => int(v.delivered_30d) },
+        { key: "prep", label: "Prep time · 14d", num: true, sort: (v) => v.prep_now, render: (v) => `<div style="display:flex; gap:8px; align-items:center; justify-content:flex-end">${sparkline(v.prep, { w: 64, h: 20 })}<b>${v.prep_now != null ? Math.round(v.prep_now) + " min" : "–"}</b></div>` },
+        { key: "is_bot", label: "Autopilot", render: (v) => sw(`data-v-bot="${v.vendor_id}"`, v.is_bot, `Autopilot for ${v.vendor_name}`) },
+        { key: "is_active", label: "Visible", render: (v) => sw(`data-v-active="${v.vendor_id}"`, v.is_active, `${v.vendor_name} visible on storefront`) },
+      ],
+      afterRender: (el) => {
+        el.querySelectorAll("[data-v-bot]").forEach((c) => (c.onchange = () => act(`/api/admin/vendors/${c.dataset.vBot}`, { is_bot: c.checked }, c.checked ? "Autopilot on" : "Autopilot off - the store must act in the seller center", "PATCH")));
+        el.querySelectorAll("[data-v-active]").forEach((c) => (c.onchange = async () => {
+          if (!c.checked && !(await confirmDlg({ title: "Hide this store?", body: "Its products disappear from the storefront until you turn it back on. Open orders still go through.", ok: "Hide store", danger: true }))) { c.checked = true; return; }
+          act(`/api/admin/vendors/${c.dataset.vActive}`, { is_active: c.checked }, c.checked ? "Store visible again" : "Store hidden from the storefront", "PATCH");
+        }));
+      },
+    });
+    const [v, tr] = await Promise.all([api("/api/admin/vendors"), api("/api/admin/trends")]);
+    const days = Array.from({ length: 14 }, (_, i) => new Date(Date.now() - (13 - i) * 864e5).toISOString().slice(0, 10));
+    v.forEach((x) => { const mine = tr.vendor_prep.filter((p) => p.vendor_id === x.vendor_id);
+      x.prep = days.map((d) => mine.find((p) => p.day.slice(0, 10) === d)?.prep_minutes ?? null).filter((n) => n != null);
+      const w = mine.slice(-7); x.prep_now = w.length ? w.reduce((a, p) => a + p.prep_minutes * p.parcels, 0) / w.reduce((a, p) => a + p.parcels, 0) : null; });
+    t.setRows(v);
+  },
+};
 
-// ---------------- simulator + pipeline
-async function loadSim(s) {
-  s = s || await api("/api/admin/simulator");
-  $("#sim-state").textContent = s.running ? `- running every ${s.interval}s 🟢` : "- stopped";
-  $("#sim-start").disabled = s.running; $("#sim-stop").disabled = !s.running;
-  $("#sim-log").textContent = s.log.join("\n") || "(not running)";
-}
-$("#sim-start").onclick = async () => loadSim(await api(`/api/admin/simulator/start?interval=${$("#sim-interval").value}`, { method: "POST" }));
-$("#sim-stop").onclick = async () => loadSim(await api("/api/admin/simulator/stop", { method: "POST" }));
-$$("button[data-step]").forEach((b) => (b.onclick = async () => {
-  $$("button[data-step]").forEach((x) => (x.disabled = true));
-  $("#step-out").textContent = `Running ${b.textContent}…`;
-  try { const r = await api(`/api/admin/pipeline/${b.dataset.step}`, { method: "POST" }); $("#step-out").textContent = `$ ${r.command}\n\n${r.output}\n\n(exit code ${r.exit_code})`; loadLake(); }
-  catch (e) { $("#step-out").textContent = e.message; }
-  finally { $$("button[data-step]").forEach((x) => (x.disabled = false)); }
-}));
-async function loadLake() {
-  const l = await api("/api/admin/lake");
-  $("#lake").innerHTML = l.layers.map((t) => `<tr><td>${t.table}</td><td class="num">${t.bronze_files}</td><td class="num">${int(t.bronze_rows)}</td>
-    <td class="num">${int(t.silver_rows)}</td><td class="num ${t.quarantined ? "stock-out" : ""}">${int(t.quarantined)}</td><td class="muted small">${fmtDateTime(l.watermarks[t.table])}</td></tr>`).join("");
-  const kv = (o) => Object.entries(o).map(([k, v]) => `${k}=${v}`).join(", ");
-  $("#dq").innerHTML = table([["Table", (r) => r.table], ["Silver", (r) => int(r.silver_rows), "num"], ["Quarantined", (r) => int(r.quarantined), "num"],
-    ["Errors", (r) => `<span class="stock-out">${kv(r.errors)}</span>`], ["Warnings", (r) => `<span class="stock-low">${kv(r.warnings)}</span>`]], l.dq_latest);
-  $("#extracts").innerHTML = table([["Batch", (r) => r.batch_id], ["Table", (r) => r.table], ["Mode", (r) => r.mode], ["Rows", (r) => int(r.rows), "num"]], l.recent_extracts);
-}
-$("#lake-refresh").onclick = loadLake;
+// ---------------------------------------------------------------- Catalog
+PAGES.catalog = {
+  title: "Catalog",
+  async render() {
+    view.innerHTML = `<div class="ph"><h1>Catalog</h1><span class="sub">Edit prices and stock. Price changes are kept as history (SCD2 in the gold layer).</span></div><div id="c-table">${skelTable()}</div>`;
+    const t = new DataTable($("#c-table"), {
+      rowId: (p) => p.product_id, noun: "products", placeholder: "Search product, brand, store, SKU…", pageSize: 20,
+      search: (p) => `${p.product_name} ${p.sku} ${p.vendor_name} ${p.category_name} ${p.brand || ""}`,
+      filter: { options: [["low", "Low stock"], ["out", "Out of stock"], ["sale", "On sale"]], test: (p, f) => ({ low: p.stock > 0 && p.stock < 20, out: p.stock <= 0, sale: p.list_price > p.unit_price }[f]) },
+      cols: [
+        { key: "product_name", label: "Product", render: (p) => { const im = productImages(p)[0]; return `<div class="cell2"><span style="width:32px; height:32px; border:1px solid var(--k-border); border-radius:6px; background:#fff; flex:none; overflow:hidden; display:grid; place-items:center">${im ? `<img src="${esc(im.srcset ? im.src.replace("-480.", "-240.") : im.src)}" alt="" width="32" height="32" loading="lazy" style="object-fit:contain; width:100%; height:100%">` : icon(CATEGORY_ICON[p.category_name] || "package", "xs")}</span>
+          <div style="min-width:0"><div class="t" style="max-width:340px; overflow:hidden; text-overflow:ellipsis">${esc(p.product_name)}</div><div class="m">${esc(p.sku)} · ${esc(p.category_name)}</div></div></div>`; } },
+        { key: "vendor_name", label: "Store" }, { key: "sold", label: "Sold", num: true, render: (p) => int(p.sold) },
+        { key: "stock", label: "Stock", num: true, render: (p) => `<b style="color:${p.stock <= 0 ? "var(--st-red)" : p.stock < 20 ? "var(--st-amber)" : "inherit"}">${int(p.stock)}</b>` },
+        { key: "unit_price", label: "Price (Rs)", num: true, render: (p) => `<input class="input sm num" type="number" min="1" step="1" value="${p.unit_price}" id="pr-${p.product_id}" style="width:96px" aria-label="Price">` },
+        { key: "list_price", label: "Was (sale)", num: true, render: (p) => `<input class="input sm num" type="number" min="0" step="1" value="${p.list_price || ""}" placeholder="none" id="lp-${p.product_id}" style="width:96px" aria-label="Was price">` },
+        { key: "", label: "", sort: false, render: (p) => `<button class="btn sm" data-save="${p.product_id}">${icon("save")}Save</button>` },
+        { key: "", label: "Restock", sort: false, render: (p) => `<span style="display:inline-flex; gap:4px"><input class="input sm num" type="number" min="1" value="100" id="rs-${p.product_id}" style="width:64px" aria-label="Units to add"><button class="btn sm" data-restock="${p.product_id}">${icon("plus")}Add</button></span>` },
+      ],
+      afterRender: (el) => {
+        el.querySelectorAll("[data-save]").forEach((b) => (b.onclick = () => act(`/api/admin/products/${b.dataset.save}`, { unit_price: +$(`#pr-${b.dataset.save}`).value, list_price: +$(`#lp-${b.dataset.save}`).value || 0 }, "Price updated", "PATCH")));
+        el.querySelectorAll("[data-restock]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/products/${b.dataset.restock}`, { add_stock: +$(`#rs-${b.dataset.restock}`).value }, "Restocked", "PATCH")) load(); }));
+      },
+    });
+    const load = async () => t.setRows((await api("/api/products?limit=500&sort=popular")).items);
+    await load();
+  },
+};
 
-// ---------------- live
-const refresh = throttle(() => {
-  if (tab === "control") { loadOrders(); loadOverview(); if (selected) showOrder(selected); }
-  if (tab === "board") loadBoard();
-}, 1200);
-(async () => {
-  await renderPortalHeader("admin");
-  renderChips(); loadOverview(); loadOrders();
-  liveEvents((ev) => {
-    if (ev.kind === "order" || ev.kind === "shipment") { flashIds.add(ev.order_id); refresh(); }
+// ---------------------------------------------------------------- Users
+PAGES.users = {
+  title: "Users",
+  async render() {
+    view.innerHTML = `<div class="ph"><h1>Users</h1><span class="sub">Login accounts for every role</span></div><div id="u-table">${skelTable()}</div>`;
+    const t = new DataTable($("#u-table"), {
+      rowId: (u) => u.user_id, noun: "accounts", placeholder: "Search email or name…", search: (u) => `${u.email} ${u.display_name}`,
+      filter: { options: ["admin", "vendor", "rider", "customer"].map((r) => [r, r]), test: (u, r) => u.role === r },
+      cols: [
+        { key: "display_name", label: "Name", render: (u) => `<div class="cell2">${avatar(u.display_name)}<div><div class="t">${esc(u.display_name)}</div><div class="m">${esc(u.email)}</div></div></div>` },
+        { key: "role", label: "Role", render: (u) => pill(u.role === "admin" ? "shipped" : u.role === "vendor" ? "processing" : u.role === "rider" ? "returned" : "pending", u.role) },
+        { key: "last_login_at", label: "Last sign-in", render: (u) => (u.last_login_at ? ago(u.last_login_at) : `<span class="muted">never</span>`) },
+        { key: "created_at", label: "Created", render: (u) => fmtDateTime(u.created_at) },
+        { key: "is_active", label: "Active", render: (u) => sw(`data-u="${u.user_id}"`, u.is_active, `Account ${u.email} active`) },
+      ],
+      afterRender: (el) => el.querySelectorAll("[data-u]").forEach((c) => (c.onchange = async () => {
+        if (!c.checked && !(await confirmDlg({ title: "Disable this account?", body: "They're signed out everywhere and can't sign in until you turn it back on.", ok: "Disable account", danger: true }))) { c.checked = true; return; }
+        if (!(await act(`/api/admin/users/${c.dataset.u}`, { is_active: c.checked }, c.checked ? "Account enabled" : "Account disabled", "PATCH"))) c.checked = !c.checked;
+      })),
+    });
+    t.setRows(await api("/api/admin/users"));
+  },
+};
+
+// ---------------------------------------------------------------- Finance
+function revenueChart(days) {
+  const W = 720, H = 220, P = { l: 56, r: 12, t: 12, b: 26 }, n = days.length;
+  const maxG = Math.max(1, ...days.map((d) => d.gmv)), maxC = Math.max(1, ...days.map((d) => d.commission));
+  const x = (i) => P.l + (i + .5) * ((W - P.l - P.r) / n), bw = ((W - P.l - P.r) / n) * .62;
+  const yG = (v) => H - P.b - (v / maxG) * (H - P.t - P.b), yC = (v) => H - P.b - (v / maxC) * (H - P.t - P.b);
+  const ticks = [0, .5, 1].map((f) => maxG * f);
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Sales and commission, last 30 days">
+    ${ticks.map((t) => `<line class="grid-l" x1="${P.l}" x2="${W - P.r}" y1="${yG(t)}" y2="${yG(t)}"/><text x="${P.l - 6}" y="${yG(t) + 4}" text-anchor="end">${moneyShort(t).replace("Rs ", "")}</text>`).join("")}
+    ${days.map((d, i) => `<rect class="bar" x="${x(i) - bw / 2}" y="${yG(d.gmv)}" width="${bw}" height="${H - P.b - yG(d.gmv)}" rx="2"><title>${d.day}: sales ${money(d.gmv)}, commission ${money(d.commission)}</title></rect>`).join("")}
+    <path class="ln" d="${days.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${yC(d.commission).toFixed(1)}`).join("")}"/>
+    ${days.map((d, i) => (i % 5 === 0 || i === n - 1 ? `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${new Date(d.day).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>` : "")).join("")}
+  </svg><div class="legend"><span><i style="background:color-mix(in srgb, var(--k-brand) 30%, transparent)"></i>Sales (GMV)</span><span><i style="background:var(--k-brand)"></i>Commission (own scale)</span></div>`;
+}
+PAGES.finance = {
+  title: "Finance",
+  async render() {
+    view.innerHTML = `<div class="ph"><h1>Finance</h1><span class="sub">Commission, seller balances and rates · all amounts in PKR</span>
+      <div class="actions"><a class="btn" href="#/payouts">${icon("send")}Payouts</a></div></div><div id="f-kpis">${skelKpis()}</div>
+      <div class="grid g2"><div class="card"><div class="card-h"><h2>Sales and commission · 30 days</h2></div><div class="card-b" id="f-chart"><div class="sk" style="height:220px"></div></div></div>
+        <div class="card"><div class="card-h"><h2>Commission rules</h2><span class="right muted" style="font-size:12px">seller > category > default</span></div><div class="card-b" id="f-rules"><div class="sk" style="height:220px"></div></div></div></div>
+      <div style="margin-top:16px" id="f-bal">${skelTable(6)}</div>`;
+    await loadFinance();
+  },
+};
+async function loadFinance() {
+  // finance first (rules + balances), then the daily series (KPIs + chart): parts appear as soon as they're ready
+  const f = await api("/api/admin/finance");
+  if (!$("#f-rules")) return;  // navigated away while loading
+  const t = f.totals, cmap = Object.fromEntries(f.commission_by_day.map((d) => [d.day.slice(0, 10), d.commission]));
+  api("/api/admin/kpis?days=30").then((k) => {
+  if (!$("#f-kpis")) return;
+  const days = k.days.map((d) => ({ day: d.day.slice(0, 10), gmv: d.gmv, commission: cmap[d.day.slice(0, 10)] || 0 }));
+  const c7 = days.slice(-7).reduce((a, d) => a + d.commission, 0), p7 = days.slice(-14, -7).reduce((a, d) => a + d.commission, 0);
+  setHTML($("#f-kpis"), `<div class="kpis">
+    ${kpi("Commission · 30 days", moneyShort(t.commission_30d), c7, p7, days.map((d) => d.commission), { sub: `${moneyShort(t.commission_all)} all-time · 7d vs prior 7d` })}
+    ${kpi("Sales (GMV) · 30 days", moneyShort(t.gmv_30d), null, null, days.map((d) => d.gmv), { sub: "not cancelled or returned" })}
+    ${kpi("Owed to sellers", moneyShort(t.owed_to_sellers), null, null, [], { sub: `${moneyShort(t.ready_for_payout)} ready to pay out` })}
+    ${kpi("Paid out · all-time", moneyShort(t.paid_out_all), null, null, [])}
+    ${kpi("Refunds · 30 days", moneyShort(t.refunds_30d), null, null, [], { sub: `${t.awaiting_online} online payments awaited · ${moneyShort(t.cod_to_collect)} cash to collect`, goodWhen: "down" })}</div>`);
+  setHTML($("#f-chart"), revenueChart(days) + `<p class="note" style="margin-top:8px">${icon("info")}Gateway: <b>${esc(f.gateway)}</b>${f.gateway === "sandbox" ? " (test mode)" : ""}. Earnings are held ${f.hold_days} days after delivery, payouts start at ${money(f.min_payout)}.</p>`);
+  }).catch((e) => toast(e.message, "error"));
+  const pct = (r) => (r == null ? "" : (r * 100).toFixed(1));
+  $("#f-rules").innerHTML = `<div style="display:flex; gap:8px; align-items:center; margin-bottom:12px"><b style="width:140px">Default rate</b>
+      <input class="input sm num" type="number" min="0" max="50" step="0.5" id="rate-default" value="${pct(f.rules.default)}" style="width:80px" aria-label="Default rate percent"> %
+      <button class="btn sm" data-save-rate="default">${icon("save")}Save</button></div>
+    <table class="dt"><thead><tr><th>Category</th><th class="num">Rate %</th><th></th></tr></thead><tbody>${f.rules.categories.map((c) => `<tr><td>${esc(c.category_name)}</td>
+      <td class="num"><input class="input sm num" type="number" min="0" max="50" step="0.5" value="${pct(c.rate)}" placeholder="${pct(f.rules.default)}" id="rate-c-${c.category_id}" style="width:80px" aria-label="${esc(c.category_name)} rate"></td>
+      <td class="num"><button class="btn sm" data-save-rate="category" data-id="${c.category_id}">Save</button>${c.rate != null ? ` <button class="btn sm ghost" data-clear-rate="category" data-id="${c.category_id}">Use default</button>` : ""}</td></tr>`).join("")}</tbody></table>
+    <h3 style="font-size:12px; margin:16px 0 8px">Seller overrides</h3>
+    ${f.rules.vendors.filter((v) => v.rate != null).map((v) => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px">${logoSq(v.vendor_name)}<span>${esc(v.vendor_name)}</span><b style="margin-left:auto">${pct(v.rate)}%</b>
+      <button class="btn sm ghost danger" data-clear-rate="vendor" data-id="${v.vendor_id}">Remove</button></div>`).join("") || `<p class="muted" style="margin:0 0 8px">None - every seller pays its category rate.</p>`}
+    <div style="display:flex; gap:8px; margin-top:8px"><select class="select" id="ov-vendor" style="flex:1" aria-label="Seller">${f.rules.vendors.map((v) => `<option value="${v.vendor_id}">${esc(v.vendor_name)}</option>`).join("")}</select>
+      <input class="input num" type="number" id="ov-rate" min="0" max="50" step="0.5" placeholder="%" style="width:80px" aria-label="Override rate"><button class="btn" id="ov-save">Add override</button></div>
+    <p class="note" style="margin-top:12px">${icon("info")}A rate is locked into each sale at delivery. Changing it never rewrites past earnings.</p>`;
+  const nameOf = (scope, id) => scope === "default" ? "the default rate" : scope === "category" ? f.rules.categories.find((c) => c.category_id === id)?.category_name : f.rules.vendors.find((v) => v.vendor_id === id)?.vendor_name;
+  const saveRate = async (scope, id, value) => {
+    const rate_percent = value === null || value === "" ? null : +value;
+    const ok = await confirmDlg({ title: rate_percent == null ? "Remove this rate?" : "Change commission rate?",
+      body: rate_percent == null ? `${esc(nameOf(scope, id))} will use the next rate up (category or default) for future deliveries.`
+        : `Set ${esc(nameOf(scope, id))} to <b>${rate_percent}%</b>. Applies to parcels delivered from now on; past earnings don't change.`, ok: rate_percent == null ? "Remove" : "Change rate" });
+    if (ok && await act("/api/admin/commission", { scope, target_id: id ?? null, rate_percent }, rate_percent == null ? "Rate removed" : `Rate set to ${rate_percent}%`, "PUT")) loadFinance();
+  };
+  $$("[data-save-rate]").forEach((b) => (b.onclick = () => saveRate(b.dataset.saveRate, b.dataset.id ? +b.dataset.id : null, b.dataset.saveRate === "default" ? $("#rate-default").value : $(`#rate-c-${b.dataset.id}`).value)));
+  $$("[data-clear-rate]").forEach((b) => (b.onclick = () => saveRate(b.dataset.clearRate, +b.dataset.id, null)));
+  $("#ov-save").onclick = () => $("#ov-rate").value ? saveRate("vendor", +$("#ov-vendor").value, $("#ov-rate").value) : toast("Enter a rate first", "error");
+  const bt = new DataTable($("#f-bal"), {
+    rowId: (b) => b.vendor_id, noun: "sellers", placeholder: "Search seller…", search: (b) => b.vendor_name, pageSize: 15,
+    toolbar: `<button class="btn primary" id="run-payouts">${icon("send")}Run payouts</button>`,
+    cols: [{ key: "vendor_name", label: "Seller balance", render: (b) => `<div class="cell2">${logoSq(b.vendor_name)}<span class="t">${esc(b.vendor_name)}</span></div>` },
+      { key: "available", label: "Available", num: true, render: (b) => `<b>${money(b.available)}</b>` }, { key: "pending", label: "In return window", num: true, render: (b) => money(b.pending) },
+      { key: "scheduled", label: "Scheduled", num: true, render: (b) => money(b.scheduled) }, { key: "paid", label: "Paid", num: true, render: (b) => money(b.paid) },
+      { key: "gross_sales", label: "Sales", num: true, render: (b) => money(b.gross_sales) }, { key: "commission", label: "Commission", num: true, render: (b) => money(b.commission) }],
+    afterRender: (el) => (el.querySelector("#run-payouts").onclick = async () => {
+      if (!(await confirmDlg({ title: "Run payouts now?", body: `Groups every seller's available earnings (at least ${money(f.min_payout)}) into one payout each. You then send the transfers and mark them paid.`, ok: "Run payouts" }))) return;
+      const r = await act("/api/admin/payouts/run"); if (r) { toast(r.created.length ? `${r.created.length} payout(s) created · ${money(r.created.reduce((s, p) => s + p.amount, 0))}` : "Nothing ready to pay out yet", "good", 5000); loadFinance(); }
+    }),
   });
-  setInterval(() => { if (tab === "pipeline") loadSim(); if (tab === "control") loadOverview(); }, 3000);
-  setInterval(() => { if (tab === "pipeline") { loadAuto(); loadLake(); } }, 10000);
+  bt.sortKey = "available"; bt.sortDir = -1; bt.setRows(f.balances);
+}
+
+// ---------------------------------------------------------------- Payouts
+PAGES.payouts = {
+  title: "Payouts",
+  async render() {
+    view.innerHTML = `<div class="ph"><h1>Payouts</h1><span class="sub">Send each transfer, then mark it paid with the bank reference</span></div><div id="p-kpis">${skelKpis(3)}</div><div id="p-table">${skelTable()}</div>`;
+    const t = new DataTable($("#p-table"), {
+      rowId: (p) => p.payout_id, noun: "payouts", placeholder: "Search seller or reference…", search: (p) => `${p.payout_id} ${p.vendor_name} ${p.reference || ""}`,
+      filter: { options: [["scheduled", "To send"], ["paid", "Paid"]], test: (p, s) => p.status === s }, filterDefault: [],
+      select: true, bulk: [["Mark paid", "check", async (rows) => {
+        const todo = rows.filter((p) => p.status === "scheduled");
+        if (!todo.length) { toast("Pick payouts that are still to send", "error"); return false; }
+        const ref = await confirmDlg({ title: `Mark ${todo.length} payout(s) paid`, body: "Enter the bank batch reference for these transfers.", ok: "Mark paid", input: "Bank reference, e.g. HBL-240931" });
+        if (!ref) return false;
+        for (const p of todo) await act(`/api/admin/payouts/${p.payout_id}/paid`, { reference: ref });
+        toast(`${todo.length} payout(s) marked paid`, "good"); load();
+      }]],
+      cols: [{ key: "payout_id", label: "Payout", render: (p) => `<b class="mono">#${p.payout_id}</b>` }, { key: "created_at", label: "Created", render: (p) => fmtDateTime(p.created_at) },
+        { key: "vendor_name", label: "Seller", render: (p) => `<div class="cell2">${logoSq(p.vendor_name)}<span class="t">${esc(p.vendor_name)}</span></div>` },
+        { key: "entry_count", label: "Sales", num: true }, { key: "amount", label: "Amount", num: true, render: (p) => `<b>${money(p.amount)}</b>` },
+        { key: "status", label: "Status", render: (p) => p.status === "paid" ? pill("paid") : pill("scheduled", "to send") },
+        { key: "reference", label: "Reference", render: (p) => (p.reference ? `<span class="mono">${esc(p.reference)}</span>` : `<span class="muted">–</span>`) },
+        { key: "", label: "", sort: false, render: (p) => p.status === "scheduled" ? `<button class="btn sm primary" data-paid="${p.payout_id}">Mark paid</button>` : "" }],
+      afterRender: (el) => el.querySelectorAll("[data-paid]").forEach((b) => (b.onclick = async () => {
+        const ref = await confirmDlg({ title: `Mark payout #${b.dataset.paid} paid`, body: "Enter the bank transfer reference.", ok: "Mark paid", input: "Bank reference" });
+        if (ref && await act(`/api/admin/payouts/${b.dataset.paid}/paid`, { reference: ref }, "Payout marked paid")) load();
+      })),
+    });
+    const load = async () => {
+      const f = await api("/api/admin/finance");
+      const sched = f.payouts.filter((p) => p.status === "scheduled");
+      setHTML($("#p-kpis"), `<div class="kpis">${kpi("To send", money(sched.reduce((a, p) => a + p.amount, 0)), null, null, [], { sub: `${sched.length} payout(s)` })}
+        ${kpi("Ready for the next run", money(f.totals.ready_for_payout), null, null, [], { sub: `minimum ${money(f.min_payout)} per seller` })}
+        ${kpi("Paid out · all-time", moneyShort(f.totals.paid_out_all), null, null, [])}</div>`);
+      t.setRows(f.payouts);
+    };
+    await load();
+  },
+};
+
+// ---------------------------------------------------------------- Pipeline
+PAGES.pipeline = {
+  title: "Pipeline",
+  async render() {
+    view.innerHTML = `<div class="ph"><h1>Pipeline</h1><span class="sub">ShopDB → bronze → silver → dbt gold, run automatically by a Dagster sensor</span>
+      <div class="actions"><a class="btn" href="${DAGSTER}" target="_blank" rel="noopener">${icon("external-link")}Open Dagster</a><a class="btn" href="${adminBase()}/analytics">${icon("chart-column")}Analytics</a></div></div>
+      <div id="pl-kpis">${skelKpis(4)}</div>
+      <div class="card" style="margin-bottom:16px"><div class="card-h"><h2>Run history</h2><span class="right muted" style="font-size:12px">bar = duration</span></div><div class="runs" id="pl-runs"><div class="card-b"><div class="sk" style="height:120px"></div></div></div></div>
+      <div class="card" style="margin-bottom:16px"><div class="card-h"><h2>Tables in the lake</h2><div class="right"><button class="btn sm" id="lake-refresh">${icon("refresh-cw")}Refresh</button></div></div><div id="pl-lake"><div class="card-b"><div class="sk" style="height:200px"></div></div></div></div>
+      <div class="grid g2">
+        <div class="card"><div class="card-h"><h2>Shopper simulator</h2><span class="right" id="sim-state"></span></div><div class="card-b">
+          <p class="note" style="margin:0 0 12px">${icon("info")}Runs <span class="mono">python source_app/generator.py stream</span>: new customers and orders every few seconds.</p>
+          <div style="display:flex; gap:8px; align-items:center"><label>Every <input class="input sm num" id="sim-interval" type="number" min="1" max="60" value="5" style="width:60px"> s</label>
+            <button class="btn primary" id="sim-start">${icon("play")}Start</button><button class="btn" id="sim-stop">${icon("square")}Stop</button></div>
+          <pre class="out" id="sim-log" style="margin-top:12px">(not running)</pre></div></div>
+        <div class="card"><div class="card-h"><h2>Run a step by hand</h2></div><div class="card-b">
+          <div style="display:flex; gap:6px; flex-wrap:wrap">${[["extract", "Extract → bronze"], ["silver", "Build silver"], ["dbt_build", "dbt build"], ["export_gold", "Export gold"]].map(([s, l]) => `<button class="btn" data-step="${s}">${esc(l)}</button>`).join("")}</div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px">${[["check_bronze", "Check bronze"], ["check_db", "Check source DB"], ["inject_bad_data", "Inject messy data"]].map(([s, l]) => `<button class="btn ghost" data-step="${s}">${esc(l)}</button>`).join("")}</div>
+          <pre class="out" id="step-out" style="margin-top:12px">Pick a step…</pre></div></div>
+      </div>`;
+    $("#sim-start").onclick = async () => { const s = await act(`/api/admin/simulator/start?interval=${$("#sim-interval").value}`, null, "Simulator started"); if (s) loadSim(s); };
+    $("#sim-stop").onclick = async () => { const s = await act("/api/admin/simulator/stop", null, "Simulator stopped"); if (s) loadSim(s); };
+    $("#lake-refresh").onclick = () => loadLake(true);
+    $$("[data-step]").forEach((b) => (b.onclick = async () => {
+      if (b.dataset.step === "inject_bad_data" && !(await confirmDlg({ title: "Inject messy data?", body: "Adds a few deliberately broken rows to ShopDB so you can watch silver quarantine them.", ok: "Inject" }))) return;
+      $$("[data-step]").forEach((x) => (x.disabled = true)); $("#step-out").textContent = `Running ${b.textContent}…`;
+      try { const r = await api(`/api/admin/pipeline/${b.dataset.step}`, { method: "POST" }); $("#step-out").textContent = `$ ${r.command}\n\n${r.output}\n\n(exit code ${r.exit_code})`;
+        toast(r.exit_code === 0 ? `${b.textContent} finished` : `${b.textContent} failed (exit ${r.exit_code})`, r.exit_code === 0 ? "good" : "error"); loadLake(); }
+      catch (e) { $("#step-out").textContent = e.message; toast(e.message, "error"); }
+      finally { $$("[data-step]").forEach((x) => (x.disabled = false)); }
+    }));
+    await Promise.all([loadAuto(), loadSim(), loadLake()]);
+    every(3000, () => loadSim()); every(10000, () => { loadAuto(); loadLake(); });
+  },
+};
+async function loadAuto() {
+  const s = await api("/api/admin/pipeline-status"), runs = s.runs, last = runs[0];
+  if (!$("#pl-kpis")) return;
+  const maxS = Math.max(1, ...runs.map((r) => r.seconds || 0)), okRuns = runs.filter((r) => r.status === "success");
+  setHTML($("#pl-kpis"), `<div class="kpis">
+    ${kpi("Automation", s.dagster_up ? pill("success", "running") : pill("failed", "off"), null, null, [], { sub: s.dagster_up ? "sensor checks ShopDB every 30 s" : "start it with python start.py" })}
+    ${kpi("Gold refreshed", s.gold_built_at ? ago(s.gold_built_at) : "never", null, null, [], { sub: s.gold_built_at ? fmtDateTime(s.gold_built_at) : "" })}
+    ${kpi("Waiting to process", s.pending_tables.length ? `${s.pending_tables.length} tables` : "nothing", null, null, [], { sub: s.pending_tables.length ? `oldest change ${ago(s.oldest_pending_change)}` : "the lake is up to date" })}
+    ${kpi("Run time", last ? mins(last.seconds) : "–", null, null, okRuns.slice(0, 20).reverse().map((r) => r.seconds), { sub: `${okRuns.length}/${runs.length} recent runs succeeded` })}</div>`);
+  setHTML($("#pl-runs"), runs.map((r) => `<div class="run"><span>${fmtDateTime(r.finished_at)}<div class="muted">${ago(r.finished_at)}</div></span>
+    <span>${pill(r.status === "success" ? "success" : "failed", r.status === "success" ? "succeeded" : "failed")}</span>
+    <span><div class="dur ${r.status === "success" ? "" : "fail"}" style="width:${Math.max(2, (r.seconds / maxS) * 100)}%"></div><div class="tables" title="${esc(r.changed_tables || "")}">${esc(r.changed_tables || "–")}</div></span>
+    <span class="num">${mins(r.seconds)}</span><a class="btn sm ghost" href="${DAGSTER}/runs/${esc(r.run_id)}" target="_blank" rel="noopener">${icon("external-link")}Dagster</a></div>`).join("")
+    || `<div class="empty">${icon("workflow")}No automatic runs yet</div>`);
+}
+async function loadLake(toastIt) {
+  const l = await api("/api/admin/lake");
+  if (!$("#pl-lake")) return;
+  const dq = Object.fromEntries((l.dq_latest || []).map((r) => [r.table, r]));
+  const maxRows = Math.max(1, ...l.layers.map((t) => t.silver_rows));
+  const kv = (o) => Object.entries(o || {}).map(([k, v]) => `${k}: ${v}`).join(", ");
+  setHTML($("#pl-lake"), `<div class="dt-scroll" style="--dt-max:520px"><table class="dt"><thead><tr><th>Table</th><th class="num">Bronze files</th><th class="num">Bronze rows</th><th>Silver rows</th>
+    <th class="num">Quarantined</th><th>Data-quality warnings</th><th>Watermark</th></tr></thead><tbody>${l.layers.map((t) => `<tr><td class="mono">${esc(t.table)}</td>
+    <td class="num">${t.bronze_files}</td><td class="num">${int(t.bronze_rows)}</td>
+    <td><div class="bar-cell"><span class="num" style="min-width:64px">${int(t.silver_rows)}</span><span class="track"><i style="width:${(t.silver_rows / maxRows) * 100}%"></i></span></div></td>
+    <td class="num">${t.quarantined ? `<span class="pill red plain">${int(t.quarantined)}</span>` : `<span class="muted">0</span>`}</td>
+    <td class="muted" style="max-width:280px; overflow:hidden; text-overflow:ellipsis" title="${esc(kv(dq[t.table]?.warnings))}">${esc(kv(dq[t.table]?.warnings)) || "–"}</td>
+    <td class="muted">${fmtDateTime(l.watermarks[t.table])}</td></tr>`).join("")}</tbody></table></div>`);
+  if (toastIt) toast("Lake stats refreshed", "good");
+}
+async function loadSim(s) {
+  if (!$("#sim-state")) return;
+  s = s || await api("/api/admin/simulator");
+  $("#sim-state").innerHTML = s.running ? pill("success", `running every ${s.interval}s`) : pill("pending", "stopped");
+  $("#sim-start").disabled = s.running; $("#sim-stop").disabled = !s.running;
+  setHTML($("#sim-log"), esc(s.log.join("\n") || "(not running)"));
+}
+
+// ===================================================================== shell: nav, router, palette, notifications
+function renderNav() {
+  $("#sidenav").innerHTML = NAV.map(([g, items], gi) => `${gi ? '<div class="grp-sep"></div>' : ""}<div class="grp">${g}</div>${items.map(([k, l, ic]) => {
+    const ext = k.startsWith("@"), href = k === "@analytics" ? `${adminBase()}/analytics` : k === "@docs" ? "/docs" : `#/${k}`;
+    return `<a class="nav" href="${href}" data-page="${k}" ${k === "@docs" ? 'target="_blank" rel="noopener"' : ""} title="${l}">${icon(ic)}<span class="lbl">${l}</span>${ext ? icon("external-link", "ext") : `<span class="badge-n" id="nb-${k}" hidden></span>`}</a>`;
+  }).join("")}`).join("");
+}
+function setNavBadge(k, n) { const b = $(`#nb-${k}`); if (!b) return; b.hidden = !n; b.textContent = n > 99 ? "99+" : n; }
+async function route() {
+  const k = (location.hash.match(/^#\/(\w+)/) || [])[1];
+  const key = PAGES[k] ? k : "orders";
+  if (key === current && location.hash) return;
+  timers.forEach(clearInterval); timers = []; ordersTable = null; closeDrawer();
+  current = key;
+  $$("#sidenav a.nav").forEach((a) => a.classList.toggle("on", a.dataset.page === key));
+  $("#crumb").textContent = PAGES[key].title; document.title = `${PAGES[key].title} · Kartora admin`;
+  $("#page").scrollTop = 0;
+  try { await PAGES[key].render(); } catch (e) { console.error(e.stack || e); view.innerHTML = `<div class="empty">${icon("triangle-alert")}<b>Couldn't load this page</b><br>${esc(e.message)}<br><br><button class="btn" onclick="current=null; route()">Try again</button></div>`; }
+}
+window.addEventListener("hashchange", route);
+
+// command palette (Ctrl+K)
+const COMMANDS = () => [
+  ...NAV.flatMap(([g, items]) => items.map(([k, l, ic]) => ({ g: "Go to", l, ic, run: () => (k === "@analytics" ? (location.href = `${adminBase()}/analytics`) : k === "@docs" ? open("/docs", "_blank") : (location.hash = `#/${k}`)) }))),
+  { g: "Actions", l: "Start all pending orders", ic: "play", run: async () => { const r = await act("/api/admin/orders/start-all"); if (r) toast(`Started ${r.started} orders`, "good"); } },
+  { g: "Actions", l: "Run seller payouts…", ic: "send", run: () => { location.hash = "#/finance"; setTimeout(() => $("#run-payouts")?.click(), 600); } },
+  { g: "Actions", l: "Toggle dark mode", ic: "moon", run: () => setTheme(effectiveTheme() === "dark" ? "light" : "dark") },
+  { g: "Actions", l: "Toggle compact / comfortable rows", ic: "rows-3", run: () => setDensity(document.documentElement.classList.contains("comfortable") ? "compact" : "comfortable") },
+  { g: "Actions", l: "Open storefront", ic: "external-link", run: () => open("/", "_blank") },
+  { g: "Actions", l: "Sign out", ic: "log-out", run: logout },
+];
+let cmdSel = 0, cmdItems = [];
+function renderCmd() {
+  const q = $("#cmdk-q").value.trim().toLowerCase();
+  const num = q.replace(/^#/, "");
+  cmdItems = [...(/^\d+$/.test(num) ? [{ g: "Orders", l: `Open order #${num}`, ic: "inbox", run: () => { if (current !== "orders") location.hash = "#/orders"; setTimeout(() => showOrder(+num), current === "orders" ? 0 : 400); } }] : []),
+    ...COMMANDS().filter((c) => !q || c.l.toLowerCase().includes(q))];
+  cmdSel = Math.min(cmdSel, Math.max(0, cmdItems.length - 1));
+  let g = null;
+  $("#cmdk-list").innerHTML = cmdItems.map((c, i) => `${c.g !== g ? `<div class="hd">${(g = c.g)}</div>` : ""}<div class="it ${i === cmdSel ? "on" : ""}" data-i="${i}" role="option" aria-selected="${i === cmdSel}">${icon(c.ic)}${esc(c.l)}${i === cmdSel ? `<span class="hint">Enter</span>` : ""}</div>`).join("")
+    || `<div class="empty">No matches</div>`;
+  $$("#cmdk-list .it").forEach((el) => (el.onclick = () => runCmd(+el.dataset.i)));
+}
+function runCmd(i) { const c = cmdItems[i]; if (!c) return; $("#cmdk").close(); c.run(); }
+function openCmd() { $("#cmdk-q").value = ""; cmdSel = 0; renderCmd(); $("#cmdk").showModal(); $("#cmdk-q").focus(); }
+$("#cmdk-open").onclick = openCmd;
+$("#cmdk-q").oninput = () => { cmdSel = 0; renderCmd(); };
+$("#cmdk-q").onkeydown = (e) => {
+  if (e.key === "ArrowDown") { cmdSel = Math.min(cmdItems.length - 1, cmdSel + 1); renderCmd(); e.preventDefault(); }
+  if (e.key === "ArrowUp") { cmdSel = Math.max(0, cmdSel - 1); renderCmd(); e.preventDefault(); }
+  if (e.key === "Enter") { runCmd(cmdSel); e.preventDefault(); }
+};
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); $("#cmdk").open ? $("#cmdk").close() : openCmd(); }
+  if (e.key === "Escape" && $("#drawer").classList.contains("on") && !$("#dlg").open && !$("#cmdk").open) closeDrawer();
+});
+
+// theme + density
+const effectiveTheme = () => document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+function setTheme(t) { try { localStorage.setItem("ka.theme", t); } catch {} if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; renderMe(); }
+function setDensity(d) { try { localStorage.setItem("ka.density", d); } catch {} document.documentElement.classList.toggle("comfortable", d === "comfortable"); renderMe(); }
+function renderMe() {
+  const t = (() => { try { return localStorage.getItem("ka.theme") || "system"; } catch { return "system"; } })();
+  const comfy = document.documentElement.classList.contains("comfortable");
+  $("#me-pop").innerHTML = `<div class="hd">${esc(ME?.display_name || "Admin")}<div style="text-transform:none; font-weight:400; letter-spacing:0">${esc(ME?.email || "")}</div></div><div class="sep"></div>
+    <div style="padding:6px 10px"><div class="muted" style="font-size:11px; margin-bottom:6px">Theme</div><div class="seg">${[["light", "sun", "Light"], ["dark", "moon", "Dark"], ["system", "monitor", "Auto"]].map(([v, ic, l]) => `<button class="${t === v ? "on" : ""}" data-theme-set="${v}">${icon(ic, "xs")}${l}</button>`).join("")}</div></div>
+    <div style="padding:6px 10px"><div class="muted" style="font-size:11px; margin-bottom:6px">Density</div><div class="seg"><button class="${comfy ? "" : "on"}" data-density="compact">${icon("rows-4", "xs")}Compact</button><button class="${comfy ? "on" : ""}" data-density="comfortable">${icon("rows-3", "xs")}Comfortable</button></div></div>
+    <div class="sep"></div><a class="mi" href="/" target="_blank" rel="noopener">${icon("external-link")}Storefront</a><a class="mi" href="/docs" target="_blank" rel="noopener">${icon("file-code")}API docs</a>
+    <button class="mi" id="me-logout">${icon("log-out")}Sign out</button>`;
+  $$("[data-theme-set]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); setTheme(b.dataset.themeSet); }));
+  $$("[data-density]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); setDensity(b.dataset.density); }));
+  $("#me-logout").onclick = logout;
+}
+$("#me-btn").onclick = (e) => { e.stopPropagation(); $("#bell-menu").classList.remove("open"); $("#me-menu").classList.toggle("open"); };
+$("#bell").onclick = (e) => { e.stopPropagation(); $("#me-menu").classList.remove("open"); $("#bell-menu").classList.toggle("open"); unread = 0; $("#bell-n").hidden = true; renderNotif(); };
+document.addEventListener("click", (e) => $$(".menu.open").forEach((m) => !m.contains(e.target) && m.classList.remove("open")));
+$("#collapse").onclick = (e) => { e.preventDefault(); const c = $("#app").classList.toggle("collapsed"); try { localStorage.setItem("ka.side", c ? "c" : ""); } catch {} };
+try { if (localStorage.getItem("ka.side") === "c") $("#app").classList.add("collapsed"); } catch {}
+
+// notifications: new orders, failed payments, deliveries (from the live feed)
+const notes = []; let unread = 0;
+function renderNotif() {
+  $("#notif").innerHTML = `<div class="hd">Notifications</div>${notes.slice(0, 40).map((n) => `<div class="n">${icon(n.ic, "xs")}<span>${n.html}</span><time>${fmtTime(n.t)}</time></div>`).join("") || `<div class="empty">${icon("bell")}Nothing yet - new orders and deliveries show up here</div>`}`;
+}
+function notify(ic, html) { notes.unshift({ ic, html, t: new Date().toISOString() }); if (notes.length > 100) notes.pop(); if (!$("#bell-menu").classList.contains("open")) { unread++; $("#bell-n").hidden = false; $("#bell-n").textContent = unread > 9 ? "9+" : unread; } else renderNotif(); }
+
+(async () => {
+  $("#logo").innerHTML = LOGO_SVG(26);
+  const me = await loadMe();
+  if (!me || me.role !== "admin") { location.href = "/"; return; }
+  $("#me-av").textContent = initials(me.display_name);
+  renderNav(); renderMe(); renderNotif();
+  const es = liveEvents((ev) => {
+    if (ev.kind === "order" && ev.action === "created") notify("inbox", `New order <b>#${ev.order_id}</b> · ${money(ev.amount)}`);
+    if (ev.kind === "shipment" && ev.status === "delivered") notify("house", `Order #${ev.order_id} delivered by ${esc(ev.detail || "rider")}`);
+    if (ev.kind === "shipment" && ev.status === "cancelled") notify("x", `Order #${ev.order_id}: parcel cancelled`);
+    PAGES[current]?.live?.(ev);
+  });
+  const dot = $("#livedot");
+  es.addEventListener("open", () => { dot.classList.add("on"); dot.querySelector("span").textContent = "Live"; });
+  es.addEventListener("error", () => { dot.classList.remove("on"); dot.querySelector("span").textContent = "Reconnecting"; });
+  route();
+  api("/api/admin/overview").then((o) => setNavBadge("orders", o.pending_orders)).catch(() => {});
 })();
 </script>
 </body>

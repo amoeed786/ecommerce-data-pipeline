@@ -60,9 +60,9 @@ const charts = {
     // one axis only: order counts go in the tooltip instead of a second y-scale
     options: { plugins: { tooltip: { callbacks: { label: (c) => `Revenue: ${money(c.raw)}`,
       afterLabel: (c) => `${int(window.__ordersByDay?.[c.dataIndex])} orders` } } }, scales: {
-      y: { beginAtZero: true, ticks: { callback: (v) => "$" + (v >= 1000 ? v / 1000 + "k" : v) } }, x: { grid: { display: false } } } } }),
+      y: { beginAtZero: true, ticks: { callback: (v) => moneyShort(v) } }, x: { grid: { display: false } } } } }),
   category: new Chart($("#c-category"), { type: "bar", data: { labels: [], datasets: [{ data: [], backgroundColor: ACCENT, borderRadius: 3 }] },
-    options: { indexAxis: "y", scales: { x: { ticks: { callback: (v) => "$" + (v >= 1000 ? v / 1000 + "k" : v) } }, y: { grid: { display: false } } } } }),
+    options: { indexAxis: "y", scales: { x: { ticks: { callback: (v) => moneyShort(v) } }, y: { grid: { display: false } } } } }),
 };
 function setData(chart, labels, ...series) {
   chart.data.labels = labels;

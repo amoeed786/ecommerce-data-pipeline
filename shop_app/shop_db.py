@@ -522,11 +522,65 @@ def order_queue(statuses: list[str], limit: int = 100) -> list[dict]:
     """, *statuses)
 
 
+def admin_kpis(days: int = 28) -> dict:
+    """Daily operations series for the console's KPI cards (current period vs the one before)."""
+    n = int(days)
+    return {"days": query(f"""
+        DECLARE @from date = DATEADD(day, -{n - 1}, CAST(GETDATE() AS date));
+        WITH d AS (SELECT DATEADD(day, x.n, @from) AS day
+                   FROM (SELECT TOP ({n}) ROW_NUMBER() OVER (ORDER BY (SELECT 1)) - 1 AS n FROM sys.all_objects) x),
+        o AS (SELECT CAST(order_date AS date) AS day, COUNT(*) AS orders,
+                     SUM(CASE WHEN status NOT IN ('cancelled','returned') THEN total_amount ELSE 0 END) AS gmv,
+                     SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled
+              FROM dbo.orders WHERE order_date >= @from AND order_date <= SYSDATETIME() GROUP BY CAST(order_date AS date)),
+        s AS (SELECT CAST(delivered_at AS date) AS day, COUNT(*) AS delivered,
+                     AVG(DATEDIFF(second, confirmed_at, delivered_at)) / 60.0 AS fulfil_minutes
+              FROM dbo.shipments WHERE delivered_at >= @from GROUP BY CAST(delivered_at AS date))
+        SELECT d.day, COALESCE(o.orders, 0) AS orders, COALESCE(o.gmv, 0) AS gmv, COALESCE(o.cancelled, 0) AS cancelled,
+               COALESCE(s.delivered, 0) AS delivered, s.fulfil_minutes
+        FROM d LEFT JOIN o ON o.day = d.day LEFT JOIN s ON s.day = d.day ORDER BY d.day""")}
+
+
+def admin_order_extra(order_id: int) -> dict:
+    """Customer, payment and audit trail for the console's order drawer."""
+    o = query_one("""
+        SELECT c.customer_id, c.phone, c.city, c.signup_date,
+               (SELECT COUNT(*) FROM dbo.orders x WHERE x.customer_id = c.customer_id) AS customer_orders,
+               (SELECT COALESCE(SUM(total_amount), 0) FROM dbo.orders x WHERE x.customer_id = c.customer_id
+                  AND x.status NOT IN ('cancelled','returned')) AS customer_spend,
+               p.payment_id, p.amount AS paid_amount, p.refunded_amount, p.paid_at, p.provider_ref, o.created_at
+        FROM dbo.orders o JOIN dbo.customers c ON c.customer_id = o.customer_id
+        LEFT JOIN dbo.payments p ON p.order_id = o.order_id WHERE o.order_id = ?""", order_id) or {}
+    o["payment_events"] = query("SELECT event_type, provider, amount, received_at, result FROM dbo.payment_events "
+                                "WHERE order_id = ? ORDER BY received_at", order_id)
+    o["vendor_logins"] = query("SELECT s.shipment_id, u.email FROM dbo.shipments s JOIN dbo.users u ON u.vendor_id = s.vendor_id "
+                               "WHERE s.order_id = ?", order_id)
+    o["rider_logins"] = query("SELECT s.shipment_id, u.email FROM dbo.shipments s JOIN dbo.users u ON u.rider_id = s.rider_id "
+                              "WHERE s.order_id = ?", order_id)
+    return o
+
+
+def vendor_prep_trends(days: int = 14) -> list[dict]:
+    return query(f"""
+        SELECT vendor_id, CAST(ready_at AS date) AS day, AVG(DATEDIFF(second, accepted_at, ready_at)) / 60.0 AS prep_minutes,
+               COUNT(*) AS parcels
+        FROM dbo.shipments WHERE ready_at >= DATEADD(day, -{int(days)}, CAST(GETDATE() AS date)) AND accepted_at IS NOT NULL
+        GROUP BY vendor_id, CAST(ready_at AS date) ORDER BY vendor_id, day""")
+
+
+def rider_week(days: int = 7) -> list[dict]:
+    return query(f"""
+        SELECT rider_id, CAST(delivered_at AS date) AS day, COUNT(*) AS delivered, SUM(delivery_fee) AS earned
+        FROM dbo.shipments WHERE delivered_at >= DATEADD(day, -{int(days) - 1}, CAST(GETDATE() AS date))
+        GROUP BY rider_id, CAST(delivered_at AS date)""")
+
+
 def shipments_board(limit_per_status: int = 25) -> list[dict]:
     return query(f"""
         SELECT * FROM (
-          SELECT s.shipment_id, s.order_id, s.status, s.updated_at, v.vendor_name, v.is_bot AS vendor_autopilot,
-                 r.full_name AS rider_name, r.is_bot AS rider_autopilot, o.shipping_city,
+          SELECT s.shipment_id, s.order_id, s.status, s.updated_at, s.created_at, s.vendor_id, s.rider_id, v.vendor_name,
+                 v.is_bot AS vendor_autopilot, r.full_name AS rider_name, r.vehicle, r.is_bot AS rider_autopilot, o.shipping_city,
+                 (SELECT SUM(quantity) FROM dbo.order_items i WHERE i.shipment_id = s.shipment_id) AS units,
                  ROW_NUMBER() OVER (PARTITION BY s.status ORDER BY s.updated_at DESC) AS rn
           FROM dbo.shipments s JOIN dbo.vendors v ON v.vendor_id = s.vendor_id
           JOIN dbo.orders o ON o.order_id = s.order_id LEFT JOIN dbo.riders r ON r.rider_id = s.rider_id

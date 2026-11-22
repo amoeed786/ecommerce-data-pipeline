@@ -49,8 +49,8 @@ MARKET_CITIES = {
     "Pakistan": ["Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan", "Peshawar", "Quetta", "Sialkot", "Hyderabad"],
     "United Kingdom": ["London", "Manchester", "Birmingham", "Leeds", "Glasgow", "Bristol", "Liverpool", "Edinburgh"],
 }
-MARKET = os.environ.get("MARKET_COUNTRY", "United States")
-LOCATIONS = {MARKET: MARKET_CITIES.get(MARKET, MARKET_CITIES["United States"])}
+MARKET = os.environ.get("MARKET_COUNTRY", "Pakistan")
+LOCATIONS = {MARKET: MARKET_CITIES.get(MARKET, MARKET_CITIES["Pakistan"])}
 COUNTRY_WEIGHTS = [1]
 
 PAYMENT_METHODS = ["credit_card", "debit_card", "paypal", "bank_transfer", "cash_on_delivery"]
@@ -330,8 +330,9 @@ def random_changes(cur, ts: datetime) -> list[str]:
     if random.random() < 0.05:
         cur.execute("SELECT TOP 1 product_id, unit_price FROM dbo.products WHERE is_active = 1 ORDER BY NEWID()")
         pid, price = cur.fetchone()
-        raw = max(1.0, float(price) * random.uniform(0.85, 1.15))
-        new_price = Decimal(f"{int(raw)}.{random.choice(['99', '49']) if raw < 60 else '99'}")  # retail endings
+        raw = max(99.0, float(price) * random.uniform(0.85, 1.15))
+        step = 50 if raw < 1000 else 100 if raw < 10000 else 500 if raw < 100000 else 1000
+        new_price = Decimal(int((raw + step - 1) // step) * step - 1)   # PKR retail price points: 349, 1,499, 24,999
         cur.execute("UPDATE dbo.products SET unit_price = ?, updated_at = ? WHERE product_id = ?", new_price, ts, pid)
         events.append(f"price change p#{pid} {price}->{new_price}")
     if random.random() < 0.05:

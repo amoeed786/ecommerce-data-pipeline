@@ -55,7 +55,7 @@
 <script src="/static/ds.js"></script>
 <script>
 // ===================================================================== state
-const S = { categories: [], products: {}, market: { country: "United States", currency: "USD" },
+const S = { categories: [], products: {}, market: { country: "Pakistan", currency: "PKR" },
   cart: JSON.parse(localStorage.getItem("shoplite.cart") || "[]") };
 const view = $("#view");
 const remember = (list) => list.forEach((p) => p && (S.products[p.product_id] = { ...S.products[p.product_id], ...p }));
@@ -68,9 +68,9 @@ function saveCart() {
 const updateWishCount = () => ($("#wishcount").textContent = wishlist.size || "");
 const PAYMENT = {
   cash_on_delivery: ["banknote", "Cash on delivery", "Pay the rider when your order arrives"],
-  credit_card: ["credit-card", "Credit card", "Visa or Mastercard, on our secure payment page"],
+  credit_card: ["credit-card", "Credit card", "Visa, Mastercard or UnionPay, on our secure payment page"],
   debit_card: ["credit-card", "Debit card", "Pay from your bank card, on our secure payment page"],
-  paypal: ["wallet", "PayPal", "Pay with your PayPal balance"],
+  paypal: ["wallet", "Mobile wallet", "JazzCash or Easypaisa"],
   bank_transfer: ["receipt", "Bank transfer", "Online bank payment"],
 };
 const SHIP_MSG = { confirmed: "was confirmed by the store", packing: "is being packed", ready: "is packed and waiting for a rider",
@@ -142,7 +142,7 @@ async function pageHome() {
       <div>
         <span class="eyebrow">${icon("zap", "sm")}This week's deals</span>
         <h1 id="hero-h">Up to ${maxOff}% off top picks from independent stores</h1>
-        <p>Hundreds of products, one checkout. Free tracked delivery across the ${esc(S.market.country)}, and 7-day returns on every order.</p>
+        <p>Hundreds of products, one checkout. Free tracked delivery across ${esc(S.market.country)}, and 7-day returns on every order.</p>
         <div class="cta"><a class="k-btn primary lg" href="#/search?on_sale=1&sort=discount">Shop deals ${icon("arrow-right", "sm")}</a>
           <a class="k-btn lg" href="#/search?sort=popular">Best sellers</a></div>
       </div>
@@ -162,7 +162,7 @@ async function pageHome() {
 
     <section class="sec props" aria-label="Why shop with Kartora">
       <div class="prop">${icon("truck")}<div><b>Free delivery</b><span>Tracked live, door to door</span></div></div>
-      <div class="prop">${icon("shield-check")}<div><b>Secure payment</b><span>Card, PayPal or cash on delivery</span></div></div>
+      <div class="prop">${icon("shield-check")}<div><b>Secure payment</b><span>Card, mobile wallet or cash on delivery</span></div></div>
       <div class="prop">${icon("rotate-ccw")}<div><b>7-day returns</b><span>Changed your mind? No problem</span></div></div>
       <div class="prop">${icon("badge-check")}<div><b>Verified stores</b><span>Rated by real customers</span></div></div>
     </section>
@@ -327,7 +327,7 @@ async function pageProduct(id) {
             <button class="k-btn lg" id="buy" ${stock <= 0 ? "disabled" : ""}>Buy now</button></div>
           <div class="assure">
             <div>${icon("rotate-ccw")}<span><b>7-day easy returns</b><span>Return it for any reason within 7 days of delivery</span></span></div>
-            <div>${icon("shield-check")}<span><b>Secure payment</b><span>Card, PayPal, bank transfer or cash on delivery</span></span></div>
+            <div>${icon("shield-check")}<span><b>Secure payment</b><span>Card, JazzCash/Easypaisa, bank transfer or cash on delivery</span></span></div>
           </div>
           <div class="seller"><span class="avatar" aria-hidden="true">${esc(initials(p.vendor_name))}</span>
             <div style="flex:1; min-width:0"><div class="meta">Sold and shipped by</div><b>${esc(p.vendor_name)}</b>

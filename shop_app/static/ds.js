@@ -9,8 +9,9 @@ const icon = (name, cls = "") => `<svg class="ic ${cls}" aria-hidden="true"><use
     box.hidden = true; box.setAttribute("aria-hidden", "true"); box.innerHTML = txt;
     (document.body || document.documentElement).prepend(box);
   };
-  try { const c = sessionStorage.getItem("k.icons.v2"); if (c) return put(c); } catch {}
-  fetch("/static/icons.svg").then((r) => r.text()).then((t) => { put(t); try { sessionStorage.setItem("k.icons.v2", t); } catch {} });
+  const KEY = "k.icons.v3";  // bump when the sprite changes
+  try { const c = sessionStorage.getItem(KEY); if (c) return put(c); } catch {}
+  fetch("/static/icons.svg").then((r) => r.text()).then((t) => { put(t); try { sessionStorage.setItem(KEY, t); } catch {} });
 })();
 
 const CATEGORY_ICON = { "Electronics": "headphones", "Fashion": "shirt", "Home & Kitchen": "sofa", "Books": "book-open",
