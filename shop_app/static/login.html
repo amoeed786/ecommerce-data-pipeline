@@ -116,7 +116,7 @@ const NEXT_ROLE = { "/vendor": "vendor", "/rider": "rider" };
 let role = null, tab = "signin";
 
 function go(user) {
-  const safe = next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/admin") ? next : null;
+  const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : null;  // okFor() only allows shop/seller/rider pages
   const okFor = (r) => !safe || NEXT_ROLE[safe.split("?")[0]] === r || (!NEXT_ROLE[safe.split("?")[0]] && r === "customer");
   location.href = safe && okFor(user.role) ? safe : ROLE_HOME[user.role];
 }

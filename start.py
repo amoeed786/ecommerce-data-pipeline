@@ -25,6 +25,8 @@ import sys
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).resolve().parent
 BIN = Path(sys.executable).parent
 LOGS = ROOT / "data_lake" / "_state" / "logs"
@@ -79,6 +81,8 @@ def main() -> None:
     if args.simulate:
         launch("simulator", [sys.executable, "-u", "source_app/generator.py", "stream", "--interval", str(args.interval)])
 
+    load_dotenv(ROOT / ".env")
+    admin = "/" + os.getenv("ADMIN_PATH", "/admin").strip().strip("/")
     print("Starting… (logs in data_lake/_state/logs/)")
     deadline = time.time() + 90
     waiting = {args.port: "ShopLite"} | ({} if args.no_pipeline else {args.dagster_port: "Dagster"})
@@ -97,10 +101,10 @@ def main() -> None:
   Storefront   http://localhost:{args.port}
   Sign in      http://localhost:{args.port}/login   (shoppers, sellers, riders - demo buttons included)
 
-  Admin (separate, not linked from the store):
-  Admin login  http://localhost:{args.port}/admin/login   (see TEST_ACCOUNTS.md)
-  Control room http://localhost:{args.port}/admin   (press Start on orders, or turn on auto-approve)
-  BI           http://localhost:{args.port}/admin/analytics   (refreshes itself after each pipeline run)""")
+  Admin (separate, not linked from the store - path set by ADMIN_PATH in .env):
+  Admin login  http://localhost:{args.port}{admin}/login   (see TEST_ACCOUNTS.md)
+  Control room http://localhost:{args.port}{admin}   (press Start on orders, or turn on auto-approve)
+  BI           http://localhost:{args.port}{admin}/analytics   (refreshes itself after each pipeline run)""")
     if not args.no_pipeline:
         print(f"  Dagster      http://localhost:{args.dagster_port}   (Runs = every automatic pipeline run)")
     print(f"\n  Automatic pipeline: {'OFF (--no-pipeline)' if args.no_pipeline else 'ON - new entries reach gold within ~1-2 minutes'}")

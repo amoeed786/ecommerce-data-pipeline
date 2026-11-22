@@ -38,6 +38,13 @@ Colors are in `style.css` (violet `--accent`, coral `--deal`).
   - Admin accounts are refused on the public `/login`, and the admin page refuses non-admins. Both answer "wrong
     email or password", so neither page reveals the other kind of account.
   - Opening an admin page while signed out redirects to `/admin/login`.
+  - **The path is configurable:** set `ADMIN_PATH` in `.env` (e.g. `ADMIN_PATH=/kartora-control-7f3a91`) and
+    restart. The sign-in page becomes `<ADMIN_PATH>/login`, and `/admin` (plus the old `/dashboard` and
+    `/analytics` shortcuts) returns a plain 404.
+    - Public pages and scripts never contain the path. Only a signed-in admin's `/api/auth/me` includes it.
+    - Invalid values (`/`, spaces, `/login`, `/api/…` and so on) stop the app at startup with a clear message.
+    - A hidden path only reduces casual probing. The real protection is the admin-only sign-in, role checks on
+      every admin API (`/api/admin/*` needs an admin session) and the failed-login lockout.
 - **Product photos:** 37 openly licensed photos from Openverse, **reviewed by hand** (off-topic and unsuitable
   images were removed), with credits shown on each product page. Products without an approved photo show
   generated art.

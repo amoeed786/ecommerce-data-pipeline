@@ -36,8 +36,10 @@
 </div>
 <script src="/static/common.js"></script>
 <script>
+// This page is served at <ADMIN_PATH>/login, so the admin area's base is our own address minus "/login".
+const base = location.pathname.replace(/\/login\/?$/, "");
 const next = new URLSearchParams(location.search).get("next");
-const target = next && next.startsWith("/admin") && !next.startsWith("//") ? next : "/admin";
+const target = next && next.startsWith(base) && !next.startsWith("//") ? next : base;
 $("#form").onsubmit = async (e) => {
   e.preventDefault();
   const btn = $("button", e.target);

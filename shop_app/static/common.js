@@ -129,27 +129,36 @@ async function loadMe() {
   try { ME = await api("/api/auth/me"); } catch { ME = null; }
   return ME;
 }
+// The admin area's location (ADMIN_PATH in .env) is never written into public pages: the server tells
+// a signed-in admin where it is (ME.admin_path).
+const adminBase = () => ME?.admin_path || "";
 async function logout() {
-  const wasAdmin = ME?.role === "admin";
+  const adminLogin = ME?.role === "admin" ? adminBase() + "/login" : null;
   await api("/api/auth/logout", { method: "POST" }).catch(() => {});
-  location.href = wasAdmin ? "/admin/login" : "/login";  // admins go back to their own sign-in page
+  location.href = adminLogin || "/login";  // admins go back to their own sign-in page
 }
-const ROLE_HOME = { customer: "/", vendor: "/vendor", rider: "/rider", admin: "/admin" };
+const ROLE_HOME = { customer: "/", vendor: "/vendor", rider: "/rider" };
+const roleHome = (me) => (me?.role === "admin" ? me.admin_path : ROLE_HOME[me?.role]) || "/";
 const ROLE_LINKS = {
-  admin: [["/admin", "Control room"], ["/admin/dashboard", "Live ops"], ["/admin/analytics", "Business intelligence"], ["/", "Storefront"], ["/docs", "API docs"]],
+  admin: [["", "Control room"], ["/dashboard", "Live ops"], ["/analytics", "Business intelligence"]],  // relative to admin_path
   vendor: [["/vendor", "Seller center"], ["/", "Storefront"]],
   rider: [["/rider", "Rider app"]],
   customer: [["/", "Shop"], ["/#/orders", "My orders"], ["/#/account", "My account"]],
 };
+const roleLinks = (me) => me?.role === "admin"
+  ? [...ROLE_LINKS.admin.map(([p, t]) => [me.admin_path + p, t]), ["/", "Storefront"], ["/docs", "API docs"]]
+  : ROLE_LINKS[me?.role] || [];
 function initials(name) { return (name || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
 
 // Portal header: brand + role links + user chip with sign out
 async function renderPortalHeader(subtitle) {
   const me = await loadMe();
-  const links = (ROLE_LINKS[me?.role] || []).map(([href, text]) =>
+  const links = roleLinks(me).map(([href, text]) =>
     `<a href="${href}" class="${location.pathname === href ? "active" : ""}">${text}</a>`).join("");
+  // in-page admin links are written as data-admin-href="/analytics" and resolved here
+  $$("[data-admin-href]").forEach((a) => (a.href = adminBase() + a.dataset.adminHref));
   $("header").innerHTML = `
-    <a href="${ROLE_HOME[me?.role] || "/"}" style="color:inherit">${brandMark(esc(subtitle), 28)}</a>
+    <a href="${roleHome(me)}" style="color:inherit">${brandMark(esc(subtitle), 28)}</a>
     <nav>${links}</nav><div class="spacer"></div>
     <span id="live" class="live">connecting…</span>
     ${me ? `<span class="user-chip"><span class="avatar">${initials(me.display_name)}</span>

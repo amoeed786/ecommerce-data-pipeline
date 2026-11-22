@@ -69,7 +69,7 @@ async function renderAccount() {
   if (!me) { box.innerHTML = `<a class="headlink" href="/login?as=customer&next=${encodeURIComponent("/" + location.hash)}">👤 Sign in / Join</a>`; return; }
   const items = me.role === "customer"
     ? `<a href="#/orders">📦 My orders</a><a href="#/account">👤 My account</a>`
-    : `<a href="${ROLE_HOME[me.role]}">➡️ Go to ${me.role === "admin" ? "admin" : me.role === "vendor" ? "seller center" : "rider app"}</a>`;
+    : `<a href="${roleHome(me)}">➡️ Go to ${me.role === "admin" ? "admin" : me.role === "vendor" ? "seller center" : "rider app"}</a>`;
   box.innerHTML = `<div class="menu"><button class="headlink" onclick="this.parentElement.classList.toggle('open')">👤 ${esc(me.display_name.split(" ")[0])} ▾</button>
     <div class="drop"><div class="muted small" style="padding:6px 10px">${esc(me.email)}</div>${items}<button onclick="logout()">↪ Sign out</button></div></div>`;
 }

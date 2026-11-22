@@ -23,6 +23,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from contextlib import asynccontextmanager
@@ -63,6 +64,20 @@ PIPELINE_STEPS = {  # step -> (command shown to the user, argv)
     "check_db": ("python source_app/check_db.py", [sys.executable, "source_app/check_db.py"]),
 }
 simulator: dict = {"proc": None, "interval": None}
+
+
+def _admin_path() -> str:
+    """ADMIN_PATH from .env (default /admin): where the admin area lives, e.g. /kartora-control-7f3a.
+    Changing it moves the admin sign-in and pages; the public site never links to it."""
+    path = "/" + os.getenv("ADMIN_PATH", "/admin").strip().strip("/")
+    reserved = ("/login", "/vendor", "/rider", "/api", "/static", "/docs", "/redoc", "/openapi.json")
+    if path == "/" or not re.fullmatch(r"(/[A-Za-z0-9_-]+)+", path) or path.lower().startswith(reserved):
+        raise RuntimeError(f"ADMIN_PATH={path!r} is not allowed: use letters, digits, - or _ (e.g. /kartora-control) "
+                           f"and don't reuse {', '.join(reserved)}")
+    return path
+
+
+ADMIN_PATH = _admin_path()
 engine_state: dict = {"last_tick": None, "last_actions": {}, "error": None}
 
 
@@ -112,7 +127,7 @@ def page(file: str, *roles: str):
     (admin pages -> the separate /admin/login, everything else -> the public /login)."""
     def handler(request: Request, user: dict | None = Depends(auth.current_user)):
         if roles and (user is None or user["role"] not in roles):
-            login = "/admin/login" if "admin" in roles else "/login"
+            login = f"{ADMIN_PATH}/login" if "admin" in roles else "/login"
             return RedirectResponse(f"{login}?next={request.url.path}", status_code=303)
         return FileResponse(STATIC / file)
     return handler
@@ -122,16 +137,17 @@ for path, file, roles in [
     # public site
     ("/", "store.html", ()), ("/login", "login.html", ()),
     ("/vendor", "vendor.html", ("vendor",)), ("/rider", "rider.html", ("rider",)),
-    # admin area - its own URL space and sign-in page, never linked from the public site
-    ("/admin/login", "admin_login.html", ()),
-    ("/admin", "admin.html", ("admin",)), ("/admin/dashboard", "dashboard.html", ("admin",)),
-    ("/admin/analytics", "analytics.html", ("admin",)),
+    # admin area - lives under ADMIN_PATH (.env), with its own sign-in page, never linked from the public site
+    (f"{ADMIN_PATH}/login", "admin_login.html", ()),
+    (ADMIN_PATH, "admin.html", ("admin",)), (f"{ADMIN_PATH}/dashboard", "dashboard.html", ("admin",)),
+    (f"{ADMIN_PATH}/analytics", "analytics.html", ("admin",)),
 ]:
     app.add_api_route(path, page(file, *roles), methods=["GET"], include_in_schema=False)
 
-for old, new in [("/dashboard", "/admin/dashboard"), ("/analytics", "/admin/analytics")]:  # old bookmarks
-    app.add_api_route(old, (lambda n: lambda: RedirectResponse(n, status_code=308))(new), methods=["GET"],
-                      include_in_schema=False)
+if ADMIN_PATH == "/admin":  # old bookmarks - only with the default path, so a custom path is never revealed
+    for old, new in [("/dashboard", "/admin/dashboard"), ("/analytics", "/admin/analytics")]:
+        app.add_api_route(old, (lambda n: lambda: RedirectResponse(n, status_code=308))(new), methods=["GET"],
+                          include_in_schema=False)
 
 
 # ================================================================== auth
@@ -201,6 +217,8 @@ def logout(request: Request, response: Response):
 
 @app.get("/api/auth/me", tags=["auth"])
 def me(user: dict | None = Depends(auth.current_user)):
+    if user and user["role"] == "admin":
+        user = {**user, "admin_path": ADMIN_PATH}  # only signed-in admins learn where the admin area is
     return user  # null when signed out
 
 

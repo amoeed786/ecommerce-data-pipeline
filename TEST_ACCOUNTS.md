@@ -7,7 +7,8 @@ Demo logins for local testing. These are **not real credentials** - they exist o
 email and password, or click **⚡ Use the demo account** for that type.
 
 **Admin:** has its own sign-in page, **http://localhost:8000/admin/login**. It isn't linked anywhere on the public
-site, and admin accounts are refused on the public `/login`.
+site, and admin accounts are refused on the public `/login`. If you set `ADMIN_PATH` in `.env`
+(e.g. `/kartora-control-7f3a91`), the sign-in page is `<ADMIN_PATH>/login` instead, and `/admin` returns 404.
 
 | Account type | Email | Password | Opens |
 |---|---|---|---|
