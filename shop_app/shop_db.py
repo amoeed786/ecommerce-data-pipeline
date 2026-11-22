@@ -3,6 +3,8 @@ this module is the SQL behind each screen (storefront, customer, vendor, rider, 
 from __future__ import annotations
 
 import sys
+import threading
+import time
 from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
@@ -14,6 +16,65 @@ from source_app import marketplace as mp  # noqa: E402
 from source_app.db import get_connection  # noqa: E402
 
 ShopError = mp.MarketplaceError
+
+# ---- short-lived cache for the public catalog -------------------------------------------------
+# Catalog pages are read far more than they change, and "sold" counts aggregate every order line.
+# Results are reused for CATALOG_TTL seconds and dropped immediately when a seller/admin changes a
+# product. Checkout never uses the cache: it re-reads price and stock under a lock.
+CATALOG_TTL, STALE_OK, _CACHE_MAX = 15, 300, 500
+_cache: dict[tuple, tuple[float, object]] = {}
+_refreshing: set[tuple] = set()
+
+
+def catalog_cached(fn):
+    """Fresh for CATALOG_TTL s. After that, for up to STALE_OK s, visitors still get the cached copy instantly
+    while ONE background thread rebuilds it ("stale-while-revalidate") - nobody waits for the database.
+    Seller/admin edits call clear_catalog_cache(), so those always show immediately."""
+    def compute(key, args, kwargs):
+        try:
+            value = fn(*args, **kwargs)
+            if len(_cache) >= _CACHE_MAX:  # many different searches: start over rather than grow forever
+                _cache.clear()
+            _cache[key] = (time.monotonic(), value)
+            return value
+        finally:
+            _refreshing.discard(key)
+
+    def wrapper(*args, **kwargs):
+        key = (fn.__name__, args, tuple(sorted(kwargs.items())))
+        hit = _cache.get(key)
+        age = time.monotonic() - hit[0] if hit else None
+        if hit and age < CATALOG_TTL:
+            return hit[1]
+        if hit and age < STALE_OK:
+            if key not in _refreshing:
+                _refreshing.add(key)
+                threading.Thread(target=compute, args=(key, args, kwargs), daemon=True).start()
+            return hit[1]
+        return compute(key, args, kwargs)
+    wrapper.__name__ = fn.__name__
+    return wrapper
+
+
+def clear_catalog_cache() -> None:
+    _cache.clear()
+
+
+def warm_catalog() -> None:
+    """Fill the cache for the pages most visitors open first (called at app startup).
+    The calls must match how the API calls search_products (same positional arguments) to share cache keys."""
+    def listing(category_id=None):
+        return search_products(category_id, None, None, None, None, None, False, False, "popular", 40, 0)
+    pages = [home, categories, listing]
+    try:
+        pages += [(lambda cid: lambda: listing(cid))(c["category_id"]) for c in categories()]
+    except Exception:  # noqa: BLE001
+        pass
+    for page in pages:
+        try:
+            page()
+        except Exception:  # noqa: BLE001 - warming is best-effort; the page will just build on first visit
+            pass
 
 
 def _jsonable(value):
@@ -91,6 +152,7 @@ SORTS = {
 }
 
 
+@catalog_cached
 def categories() -> list[dict]:
     return query("""
         SELECT c.category_id, c.category_name, COUNT(p.product_id) AS products
@@ -99,6 +161,7 @@ def categories() -> list[dict]:
     """)
 
 
+@catalog_cached
 def search_products(category_id=None, q=None, vendor_id=None, min_price=None, max_price=None,
                     min_rating=None, on_sale=False, in_stock=False, sort="popular", limit=40, offset=0) -> dict:
     where, params = [], []
@@ -126,6 +189,7 @@ def search_products(category_id=None, q=None, vendor_id=None, min_price=None, ma
     return {"total": total, "items": rows}
 
 
+@catalog_cached
 def home() -> dict:
     def top(order: str, extra: str = "", n: int = 12):
         return query(f"SELECT TOP {n} * FROM ({PRODUCT_SQL} {extra}) x ORDER BY {order}")
@@ -142,6 +206,7 @@ def home() -> dict:
     }
 
 
+@catalog_cached
 def product_detail(product_id: int) -> dict | None:
     p = query_one(f"SELECT * FROM ({PRODUCT_SQL}) x WHERE product_id = ?", product_id)
     if p:
@@ -150,6 +215,7 @@ def product_detail(product_id: int) -> dict | None:
     return p
 
 
+@catalog_cached
 def vendor_public(vendor_id: int) -> dict | None:
     return query_one("""
         SELECT v.vendor_id, v.vendor_name, v.tagline, v.city, v.country, v.rating, v.created_at,
@@ -283,6 +349,7 @@ def vendor_owns_product(vendor_id: int, product_id: int) -> bool:
 def update_product(product_id: int, unit_price: float | None = None, list_price: float | None = None,
                    add_stock: int | None = None, is_active: bool | None = None) -> None:
     ts = mp.now()
+    clear_catalog_cache()
     with tx() as cur:
         if unit_price is not None:
             if unit_price <= 0:
@@ -303,6 +370,7 @@ def update_product(product_id: int, unit_price: float | None = None, list_price:
 
 
 def set_product_image(product_id: int, image_url: str) -> None:
+    clear_catalog_cache()
     if not execute("UPDATE dbo.products SET image_url = ?, updated_at = ? WHERE product_id = ?",
                    image_url, mp.now(), product_id):
         raise ShopError("Product not found")
@@ -352,6 +420,7 @@ def add_product(vendor_id: int, name: str, category_id: int, unit_price: float, 
             vendor_id, description.strip() or None, ts, ts,
         ).fetchval()
         cur.execute("INSERT INTO dbo.inventory (product_id, quantity_on_hand, updated_at) VALUES (?,?,?)", pid, stock, ts)
+    clear_catalog_cache()
     return pid
 
 
@@ -471,6 +540,7 @@ def set_flag(table: str, key_col: str, key: int, column: str, value) -> None:
     allowed = {("vendors", "is_bot"), ("vendors", "is_active"), ("riders", "is_bot"), ("users", "is_active")}
     if (table, column) not in allowed:
         raise ShopError("That setting can't be changed")
+    clear_catalog_cache()  # store visibility / autopilot changes show up on the storefront right away
     if not execute(f"UPDATE dbo.{table} SET {column} = ?, updated_at = ? WHERE {key_col} = ?", value, mp.now(), key):
         raise ShopError("Not found")
 

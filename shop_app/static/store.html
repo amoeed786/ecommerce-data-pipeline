@@ -78,7 +78,7 @@ $("#search").onsubmit = (e) => { e.preventDefault(); location.hash = `#/search?q
 // ===================================================================== pages
 let heroTimer;
 async function pageHome() {
-  const h = await api("/api/home");
+  const h = await apiCached("/api/home");
   const all = [...h.flash_deals, ...h.best_sellers, ...h.top_rated];
   const pick = (fn, n = 3) => [...new Map(all.filter((p) => p.image_url && fn(p)).map((p) => [p.product_id, p])).values()].slice(0, n);
   const elec = h.categories.find((c) => c.category_name === "Electronics") || {};
@@ -102,9 +102,9 @@ async function pageHome() {
       <div class="cat-tiles">${h.categories.map((c) => `<a class="cat-tile" href="#/c/${c.category_id}">${categoryArt(c.category_name)}<b>${esc(c.category_name)}</b><span class="muted small">${c.products} items</span></a>`).join("")}</div></div>
     <div class="section"><div class="section-head"><h2>⚡ Flash deals</h2><span class="countdown">Ends in <b id="cd-h">00</b>:<b id="cd-m">00</b>:<b id="cd-s">00</b></span>
       <a href="#/search?on_sale=1&sort=discount">See all →</a></div><div class="hscroll">${h.flash_deals.map(card).join("")}</div></div>
-    <div class="section"><div class="section-head"><h2>🔥 Best sellers</h2><a href="#/search?sort=popular">See all →</a></div><div class="pgrid">${h.best_sellers.map(card).join("")}</div></div>
-    <div class="section"><div class="section-head"><h2>⭐ Top rated</h2><a href="#/search?sort=rating">See all →</a></div><div class="hscroll">${h.top_rated.map(card).join("")}</div></div>
-    <div class="section"><div class="section-head"><h2>🏪 Official stores</h2></div>
+    <div class="section lazy-paint"><div class="section-head"><h2>🔥 Best sellers</h2><a href="#/search?sort=popular">See all →</a></div><div class="pgrid">${h.best_sellers.map(card).join("")}</div></div>
+    <div class="section lazy-paint"><div class="section-head"><h2>⭐ Top rated</h2><a href="#/search?sort=rating">See all →</a></div><div class="hscroll">${h.top_rated.map(card).join("")}</div></div>
+    <div class="section lazy-paint"><div class="section-head"><h2>🏪 Official stores</h2></div>
       <div class="cat-tiles" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr))">${h.vendors.map((v) => `
         <a class="cat-tile" style="align-items:flex-start; text-align:left; padding:14px" href="#/store/${v.vendor_id}">
           <b style="font-size:15px">${esc(v.vendor_name)}</b><span class="muted small">${esc(v.tagline || "")}</span>
@@ -128,7 +128,7 @@ async function pageListing(base = {}) {
   const q = hashQuery();
   const f = { ...base, q: q.get("q") || base.q || "", sort: q.get("sort") || "popular", min_price: q.get("min_price") || "",
     max_price: q.get("max_price") || "", min_rating: q.get("min_rating") || "", on_sale: q.get("on_sale") === "1", in_stock: q.get("in_stock") === "1" };
-  const vendor = base.vendor_id ? await api(`/api/vendors/${base.vendor_id}`) : null;
+  const vendor = base.vendor_id ? await apiCached(`/api/vendors/${base.vendor_id}`) : null;
   const cat = base.category_id ? S.categories.find((c) => c.category_id === +base.category_id) : null;
   const title = vendor ? vendor.vendor_name : cat ? cat.category_name : f.q ? `Results for “${f.q}”` : f.on_sale ? "Flash deals" : "All products";
   $("#q").value = f.q;
@@ -137,7 +137,7 @@ async function pageListing(base = {}) {
   if (f.on_sale) params.set("on_sale", "true");
   if (f.in_stock) params.set("in_stock", "true");
   let offset = 0;
-  const res = await api("/api/products?" + params);
+  const res = await apiCached("/api/products?" + params);
   const setQ = (changes) => {
     const n = hashQuery();
     Object.entries(changes).forEach(([k, v]) => (v === "" || v === false || v == null ? n.delete(k) : n.set(k, v === true ? "1" : v)));
@@ -177,14 +177,14 @@ async function pageListing(base = {}) {
   $("#instock").onchange = (e) => setQ({ in_stock: e.target.checked });
   $("#more")?.addEventListener("click", async () => {
     offset += 40; params.set("offset", offset);
-    const more = await api("/api/products?" + params);
+    const more = await apiCached("/api/products?" + params);
     $("#grid").insertAdjacentHTML("beforeend", more.items.map(card).join(""));
     if (offset + 40 >= res.total) $("#more").remove();
   });
 }
 
 async function pageProduct(id) {
-  const p = await api(`/api/products/${id}`);
+  const p = await apiCached(`/api/products/${id}`);
   remember([p, ...p.related]);
   let qty = 1;
   view.innerHTML = `
@@ -226,7 +226,7 @@ async function pageProduct(id) {
 
 async function cartProducts() {
   const missing = S.cart.filter((l) => !S.products[l.product_id]);
-  await Promise.all(missing.map((l) => api(`/api/products/${l.product_id}`).then((p) => remember([p])).catch(() => {})));
+  await Promise.all(missing.map((l) => apiCached(`/api/products/${l.product_id}`).then((p) => remember([p])).catch(() => {})));
   S.cart = S.cart.filter((l) => S.products[l.product_id]);  // drop products that no longer exist
   saveCart();
   return S.cart.map((l) => ({ ...l, p: S.products[l.product_id] }));
@@ -318,6 +318,7 @@ async function pageCheckout() {
         items: S.cart, payment_method: $("input[name=pay]:checked").value, coupon: $("#coupon").value,
         ship_city: $("#city").value, ship_country: $("#country").value } });
       S.cart = []; saveCart();
+      _apiCache.clear();  // stock just changed - don't show cached numbers
       if ($("#phone").value !== (prof.phone || "")) api("/api/me/profile", { method: "PUT", body: { phone: $("#phone").value, city: prof.city || "", country: prof.country || "" } });
       toast(`Order #${res.order_id} placed!`, "good", 5000);
       location.hash = `#/orders/${res.order_id}?placed=1`;
@@ -402,18 +403,55 @@ const ROUTES = [
   [/^#\/orders\/(\d+)/, (m) => pageOrder(+m[1])], [/^#\/orders/, pageOrders], [/^#\/account/, pageAccount],
   [/.*/, pageHome],
 ];
-async function render() {
+const scrollPos = new Map();           // where you were on each listing page, restored when you come back
+const RESTORE = /^#\/?$|^#\/c\/|^#\/search|^#\/store\//;
+const routeBase = (h) => (h || "#/").split("?")[0];
+function skeletonFor(h) {
+  if (/^#\/p\//.test(h)) return `<div class="section pdp">${skeletonBlock(420)}<div>${skeletonBlock(40)}${skeletonBlock(160)}</div>${skeletonBlock(260)}</div>`;
+  if (/^#\/(c|search|store)/.test(h)) return `<div class="listing"><div>${skeletonBlock(420)}</div><section>${skeletonBlock(36)}${skeletonCards(10)}</section></div>`;
+  if (/^#\/?$/.test(h)) return `${skeletonBlock(260)}<div class="section">${skeletonCards(6)}</div>`;
+  return skeletonBlock(320);
+}
+let rendering = null, renderAgain = null, lastBase = null;
+// Renders run one at a time: a quick second click waits, then the latest address wins - an older page
+// can never finish late and overwrite a newer one.
+async function render(opts = {}) {
+  if (rendering) { renderAgain = opts; return rendering; }
+  rendering = doRender(opts);
+  try { await rendering; } finally { rendering = null; }
+  if (renderAgain) { const o = renderAgain; renderAgain = null; render(o); }
+}
+async function doRender({ quiet = false } = {}) {
   const h = location.hash || "#/";
   const [re, fn] = ROUTES.find(([r]) => r.test(h));
   const catMatch = h.match(/^#\/c\/(\d+)/);
   $$("#catbar a").forEach((a) => a.classList.toggle("on", catMatch && a.dataset.id === catMatch[1]));
+  const sameRoute = routeBase(h) === lastBase;          // e.g. only a filter changed
+  const skel = quiet || sameRoute ? null : setTimeout(() => (view.innerHTML = skeletonFor(h)), 120);  // only if slow
   try { await fn(h.match(re)); } catch (e) { view.innerHTML = `<div class="section"><h1>Something went wrong</h1><p class="muted">${esc(e.message)}</p></div>`; }
-  if (!h.includes("?")) window.scrollTo(0, 0);
+  clearTimeout(skel);
+  if (quiet) return;                                     // live refresh: no animation, no scrolling
+  if (!sameRoute) {
+    view.classList.remove("view-in"); void view.offsetWidth; view.classList.add("view-in");
+    const y = RESTORE.test(h) ? scrollPos.get(h) || 0 : 0;
+    window.scrollTo({ top: y, behavior: "instant" });
+  }
+  lastBase = routeBase(h);
 }
-window.addEventListener("hashchange", render);
+window.addEventListener("hashchange", (e) => {
+  const old = new URL(e.oldURL).hash || "#/";
+  if (RESTORE.test(old)) scrollPos.set(old, window.scrollY);
+  render();
+});
+// Start loading a product's details as soon as the pointer rests on its card
+document.addEventListener("pointerover", (e) => {
+  const a = e.target.closest && e.target.closest("a.pcard, a.hp");
+  const m = a && a.getAttribute("href").match(/#\/p\/(\d+)/);
+  if (m) prefetch(`/api/products/${m[1]}`);
+}, { passive: true });
 
 // ===================================================================== live updates
-const rerender = throttle(render, 1500);
+const rerender = throttle(() => render({ quiet: true }), 1500);
 liveEvents((ev) => {
   if (ev.kind === "shipment" && SHIP_MSG[ev.status] && ev.action === "updated") toast(`Order #${ev.order_id}: your parcel from ${ev.name} ${SHIP_MSG[ev.status]}`, "good", 5000);
   if ((ev.kind === "order" || ev.kind === "shipment") && /^#\/orders/.test(location.hash)) rerender();
@@ -421,7 +459,9 @@ liveEvents((ev) => {
 
 (async () => {
   saveCart();
-  S.categories = await api("/api/categories");
+  if (/^#?\/?$/.test(location.hash)) prefetch("/api/home");      // start the home page data right away…
+  const [cats] = await Promise.all([apiCached("/api/categories", 300000), loadMe()]);  // …alongside these two
+  S.categories = cats;
   $("#catbar").innerHTML = `<a href="#/search">All categories</a>` +
     S.categories.map((c) => `<a href="#/c/${c.category_id}" data-id="${c.category_id}">${esc(c.category_name)}</a>`).join("") +
     `<a href="#/search?on_sale=1&sort=discount">⚡ Flash deals</a>`;

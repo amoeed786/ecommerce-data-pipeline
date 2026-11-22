@@ -36,6 +36,7 @@ import secrets
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 
 from . import auth
@@ -104,6 +105,7 @@ async def run_engine() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     tasks = [asyncio.create_task(feed.run()), asyncio.create_task(run_engine())]
+    asyncio.get_running_loop().run_in_executor(None, db.warm_catalog)  # first visitor gets a ready catalog
     yield
     for t in tasks:
         t.cancel()
@@ -114,6 +116,21 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="ShopLite", description="Marketplace on ShopDB: customers, vendors, riders, admins",
               lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+# Compress HTML/JS/CSS/JSON (product lists shrink ~5x). Starlette leaves text/event-stream (live feed) alone.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+@app.middleware("http")
+async def cache_headers(request: Request, call_next):
+    """Photos never change under the same name (seller uploads get a new random name each time), so browsers
+    may keep them for a week. Pages, scripts and API responses keep revalidating so updates show at once."""
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith(("/static/img/", "/static/uploads/")):
+        response.headers["Cache-Control"] = "public, max-age=604800"
+    elif path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"  # use the copy only after checking it's still current (ETag)
+    return response
 
 
 @app.exception_handler(mp.MarketplaceError)

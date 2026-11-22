@@ -75,7 +75,8 @@ def main() -> None:
         log = (LOGS / f"{name}.log").open("w")
         procs.append((name, subprocess.Popen(argv, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)))
 
-    launch("shoplite", [str(BIN / "uvicorn"), "shop_app.main:app", "--port", str(args.port)])
+    # serve.py listens on localhost over IPv4 and IPv6, so http://localhost is instant on Windows
+    launch("shoplite", [sys.executable, "-m", "shop_app.serve", "--port", str(args.port)])
     if not args.no_pipeline:
         launch("dagster", [str(BIN / "dagster"), "dev", "-m", "orchestration.definitions", "-p", str(args.dagster_port)])
     if args.simulate:
@@ -106,7 +107,7 @@ def main() -> None:
   Control room http://localhost:{args.port}{admin}   (press Start on orders, or turn on auto-approve)
   BI           http://localhost:{args.port}{admin}/analytics   (refreshes itself after each pipeline run)""")
     if not args.no_pipeline:
-        print(f"  Dagster      http://localhost:{args.dagster_port}   (Runs = every automatic pipeline run)")
+        print(f"  Dagster      http://127.0.0.1:{args.dagster_port}   (Runs = every automatic pipeline run)")
     print(f"\n  Automatic pipeline: {'OFF (--no-pipeline)' if args.no_pipeline else 'ON - new entries reach gold within ~1-2 minutes'}")
     print(f"  Simulator:          {'ON' if args.simulate else 'off (add --simulate for fake shoppers)'}")
     print("\nPress Ctrl+C to stop everything.")

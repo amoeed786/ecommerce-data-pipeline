@@ -94,10 +94,16 @@ async function loadSummary() {
   const tiles = [["Sales today", money(s.sales_today), `${s.orders_today} orders`], ["Sales · 30 days", money(s.sales_30d), "excluding cancelled & returned"],
     ["To handle now", (s.to_accept || 0) + (s.to_pack || 0), `${s.to_accept} to accept · ${s.to_pack} to pack`],
     ["Catalog", s.products, `${s.low_stock} low on stock`]];
-  $("#kpis").innerHTML = tiles.map(([l, v, sub]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="small muted">${sub}</div></div>`).join("");
+  setHTML($("#kpis"), tiles.map(([l, v, sub]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="small muted">${sub}</div></div>`).join(""));
   const counts = { new: s.to_accept, packing: s.to_pack, pickup: s.awaiting_pickup, transit: s.on_the_way, done: null, waiting: s.awaiting_admin };
-  $("#stages").innerHTML = STAGES.map(([k, t]) => `<button class="${stage === k ? "on" : ""}" data-stage="${k}"><span class="small">${t}</span><b>${counts[k] ?? "·"}</b></button>`).join("");
-  $$("#stages button").forEach((b) => (b.onclick = () => { stage = b.dataset.stage; selected.clear(); loadSummary(); loadQueue(); }));
+  if (setHTML($("#stages"), STAGES.map(([k, t]) => `<button class="${stage === k ? "on" : ""}" data-stage="${k}"><span class="small">${t}</span><b>${counts[k] ?? "·"}</b></button>`).join(""))) {
+    $$("#stages button").forEach((b) => (b.onclick = () => {
+      stage = b.dataset.stage; selected.clear();
+      $$("#stages button").forEach((x) => x.classList.toggle("on", x === b));   // respond instantly…
+      setHTML($("#queue"), Array.from({ length: 3 }, () => skeletonBlock(110)).join(""));  // …while the list loads
+      loadSummary(); loadQueue();
+    }));
+  }
 }
 $("#autopilot").onchange = async (e) => {
   await api("/api/vendor/autopilot", { method: "POST", body: { on: e.target.checked } });
@@ -118,7 +124,7 @@ async function loadQueue() {
   $("#tab-hint").textContent = STAGES.find(([k]) => k === stage)[3];
   const actionable = ["new", "packing"].includes(stage);
   $("#select-all").parentElement.classList.toggle("hidden", !actionable);
-  $("#queue").innerHTML = ships.map((s) => `
+  const changed = setHTML($("#queue"), ships.map((s) => `
     <div class="job ocard ${selected.has(s.shipment_id) ? "selected" : ""} ${fresh.has(s.shipment_id) ? "new flash" : ""}" data-id="${s.shipment_id}">
       ${actionable ? `<input type="checkbox" data-sel="${s.shipment_id}" ${selected.has(s.shipment_id) ? "checked" : ""}>` : "<span></span>"}
       <div>
@@ -134,10 +140,12 @@ async function loadQueue() {
           ${s.status === "packing" ? `<button class="primary small" data-one="ready" data-id="${s.shipment_id}">📦 Mark packed</button>` : ""}
         </div>
       </div>
-    </div>`).join("") || `<div class="card muted" style="text-align:center; padding:30px">🎉 Nothing here - you're all caught up.</div>`;
+    </div>`).join("") || `<div class="card muted" style="text-align:center; padding:30px">🎉 Nothing here - you're all caught up.</div>`);
   fresh.clear();
-  $$("[data-sel]").forEach((c) => (c.onchange = () => { c.checked ? selected.add(+c.dataset.sel) : selected.delete(+c.dataset.sel); c.closest(".ocard").classList.toggle("selected", c.checked); updateBar(); }));
-  $$("[data-one]").forEach((b) => (b.onclick = () => runBulk(b.dataset.one, [+b.dataset.id])));
+  if (changed) {  // only re-wire controls when the list was actually redrawn
+    $$("[data-sel]").forEach((c) => (c.onchange = () => { c.checked ? selected.add(+c.dataset.sel) : selected.delete(+c.dataset.sel); c.closest(".ocard").classList.toggle("selected", c.checked); updateBar(); }));
+    $$("[data-one]").forEach((b) => (b.onclick = () => runBulk(b.dataset.one, [+b.dataset.id])));
+  }
   $("#select-all").checked = actionable && ships.length > 0 && ships.every((s) => selected.has(s.shipment_id));
   updateBar();
 }
@@ -156,14 +164,20 @@ $("#clear").onclick = () => { selected.clear(); loadQueue(); };
 $$("[data-bulk]").forEach((b) => (b.onclick = () => runBulk(b.dataset.bulk, [...selected])));
 
 async function runBulk(action, ids) {
+  // Instant feedback: the cards dim right away, then slide out when the server confirms.
+  const cards = ids.map((id) => $(`.ocard[data-id="${id}"]`)).filter(Boolean);
+  cards.forEach((c) => c.classList.add("working"));
   $$("[data-bulk], [data-one]").forEach((b) => (b.disabled = true));
   try {
     const r = await api("/api/vendor/shipments/bulk", { method: "POST", body: { shipment_ids: ids, action } });
     const verb = { accept: "accepted", ready: "packed - riders are being assigned", accept_ready: "accepted, packed and handed to riders" }[action];
     if (r.done.length) toast(`${r.done.length} order${r.done.length > 1 ? "s" : ""} ${verb}`, "good", 4500);
     if (r.failed.length) toast(`${r.failed.length} couldn't be updated: ${r.failed[0].reason}`, "error", 6000);
-    r.done.forEach((id) => selected.delete(id));
+    r.done.forEach((id) => { selected.delete(id); $(`.ocard[data-id="${id}"]`)?.classList.add("leaving"); });
+    await new Promise((ok) => setTimeout(ok, 260));  // let them slide out before the list redraws
   } catch (e) { toast(e.message, "error"); }
+  cards.forEach((c) => c.classList.remove("working"));
+  $$("[data-bulk], [data-one]").forEach((b) => (b.disabled = false));
   refresh();
 }
 
@@ -223,7 +237,9 @@ const refresh = throttle(() => { loadSummary(); loadQueue(); }, 1000);
 (async () => {
   await renderPortalHeader("seller center");
   $("#cats").innerHTML = (await api("/api/categories")).map((c) => `<option value="${c.category_id}">${esc(c.category_name)}</option>`).join("");
-  await loadSummary(); await loadQueue();
+  setHTML($("#kpis"), Array.from({ length: 4 }, () => skeletonBlock(96)).join(""));      // placeholders until data arrives
+  setHTML($("#queue"), Array.from({ length: 3 }, () => skeletonBlock(110)).join(""));
+  await Promise.all([loadSummary(), loadQueue()]);                                      // both at once, not one after the other
   liveEvents((ev) => {
     if (ev.kind !== "shipment") return;
     if (ev.status === "confirmed") { fresh.add(ev.id); toast(`🔔 New order #${ev.order_id} - accept it to start packing`, "good", 5000); }

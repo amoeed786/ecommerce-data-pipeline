@@ -43,6 +43,33 @@ async function api(path, { method = "GET", body } = {}) {
   return data;
 }
 
+// Read-through cache for public catalog data: back/forward and repeat visits render instantly, and two
+// parts of a page asking for the same thing share one request. Never used for carts, orders or anything private.
+const _apiCache = new Map();
+function apiCached(path, ttlMs = 30000) {
+  const hit = _apiCache.get(path);
+  if (hit && Date.now() - hit.t < ttlMs) return hit.p;
+  const p = api(path).catch((e) => { _apiCache.delete(path); throw e; });
+  _apiCache.set(path, { t: Date.now(), p });
+  if (_apiCache.size > 300) _apiCache.delete(_apiCache.keys().next().value);
+  return p;
+}
+const prefetch = (path) => { apiCached(path).catch(() => {}); };
+
+// Loading placeholders that match the real layout, so the page doesn't jump when data arrives
+const skeletonCards = (n = 8) => `<div class="pgrid">${Array.from({ length: n }, () =>
+  `<div class="pcard sk-card"><div class="sk sk-img"></div><div class="sk sk-line"></div><div class="sk sk-line short"></div><div class="sk sk-line price"></div></div>`).join("")}</div>`;
+const skeletonBlock = (h = 120) => `<div class="sk" style="height:${h}px; border-radius:12px; margin-bottom:14px"></div>`;
+
+// Replace an element's content only if it actually changed. Live pages refresh often; skipping identical
+// redraws means no flicker, and hover/scroll/focus stay where they were. Returns true if it redrew.
+function setHTML(el, html) {
+  if (!el || el._html === html) return false;
+  el.innerHTML = html;
+  el._html = html;
+  return true;
+}
+
 function toast(msg, kind = "info", ms = 3500) {
   let box = $("#toasts");
   if (!box) { box = document.createElement("div"); box.id = "toasts"; document.body.append(box); }
@@ -100,7 +127,8 @@ function productArt(p, size = "") {
   const angle = 120 + ((p.product_id || 0) * 37) % 120;
   return `<div class="art ${size} ${p.image_url ? "photo" : ""}" style="background: linear-gradient(${angle}deg, ${a}33, ${b}55)">
     ${p.discount_pct ? `<span class="off">-${p.discount_pct}%</span>` : ""}
-    ${p.image_url ? `<img src="${esc(p.image_url)}" alt="${esc(p.product_name)}" loading="lazy" onerror="this.parentElement.classList.remove('photo'); this.remove()">` : ""}
+    ${p.image_url ? `<img src="${esc(p.image_url)}" alt="${esc(p.product_name)}" loading="lazy" decoding="async"
+      onload="this.classList.add('in')" onerror="this.parentElement.classList.remove('photo'); this.remove()">` : ""}
     <span class="emoji">${productEmoji(p.product_name, p.category_name)}</span></div>`;
 }
 // Photo credits for the openly licensed stock photos (CC licenses require attribution)
