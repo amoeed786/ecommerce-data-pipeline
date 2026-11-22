@@ -156,7 +156,9 @@ main.page { overflow: auto; min-width: 0; }
 .bulk.on { display: flex; }
 .dt-scroll { overflow: auto; max-height: var(--dt-max, 640px); }
 table.dt { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
-table.dt th { position: sticky; top: 0; z-index: 2; background: var(--k-surface); text-align: left; font-weight: 600; font-size: 12px; color: var(--k-text-3);
+table.dt th { text-align: left; }
+table.dt th.num, table.dt td.num { text-align: right; }
+table.dt th { position: sticky; top: 0; z-index: 2; background: var(--k-surface); font-weight: 600; font-size: 12px; color: var(--k-text-3);
   height: 34px; padding: 0 12px; border-bottom: 1px solid var(--k-border); white-space: nowrap; user-select: none; }
 table.dt th.sortable { cursor: pointer; } table.dt th.sortable:hover { color: var(--k-text); }
 table.dt th .ic { width: 12px; height: 12px; vertical-align: -1px; margin-left: 2px; }

@@ -352,7 +352,7 @@ async function pageProduct(id) {
         ${(p.reviews || []).map((r) => `<article class="rv">
           <div class="rv-head"><span class="avatar" aria-hidden="true">${esc(initials(r.author || "K"))}</span><span class="who">${esc(r.author || "Kartora customer")}</span>
             <span class="when">${esc(r.city ? r.city + " · " : "")}${new Date(r.created_at).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}</span></div>
-          <h2 class="sf-h">${starRating(r.rating)}${esc(r.title)}</h2>
+          <h3 class="rv-t">${starRating(r.rating)}${esc(r.title)}</h3>
           ${r.verified ? `<span class="verified">${icon("badge-check")}Verified purchase</span>` : ""}
           <p>${esc(r.body)}</p>
           ${r.helpful ? `<div class="helpful">${icon("thumbs-up", "sm")}${int(r.helpful)} people found this helpful</div>` : ""}

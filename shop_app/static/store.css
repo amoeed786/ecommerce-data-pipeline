@@ -207,7 +207,7 @@ main { min-height: 100vh; }   /* footer starts below the fold: no jump when the 
 .rv-head .avatar { width: 32px; height: 32px; font-size: var(--k-fs-12); }
 .rv-head .who { font-weight: 600; font-size: var(--k-fs-14); }
 .rv-head .when { font-size: var(--k-fs-12); color: var(--k-text-3); }
-.rv h4 { margin: 8px 0 4px; font-size: var(--k-fs-14); display: flex; align-items: center; gap: 8px; }
+.rv h4, .rv .rv-t { margin: 8px 0 4px; font-weight: 600; font-size: var(--k-fs-14); display: flex; align-items: center; gap: 8px; }
 .rv p { margin: 0; color: var(--k-text-2); font-size: var(--k-fs-14); }
 .rv .verified { display: inline-flex; align-items: center; gap: 4px; font-size: var(--k-fs-12); color: var(--k-success); font-weight: 600; }
 .rv .verified .ic { width: 14px; height: 14px; }
@@ -310,14 +310,15 @@ main { min-height: 100vh; }   /* footer starts below the fold: no jump when the 
 
 /* ---------------------------------------------------------------- footer */
 .sf { margin-top: var(--k-s-8); background: var(--k-surface); border-top: 1px solid var(--k-border); }
-.sf .cols { display: grid; gap: var(--k-s-3); grid-template-columns: 1fr 1fr; padding: var(--k-s-5) 0; }
+.sf .cols { display: grid; gap: var(--k-s-3); grid-template-columns: 1fr 1fr; padding-top: var(--k-s-5); padding-bottom: var(--k-s-5); }
 @media (min-width: 900px) { .sf .cols { grid-template-columns: 2fr 1fr 1fr 1fr; } }
 .sf .about { grid-column: 1 / -1; } @media (min-width: 900px) { .sf .about { grid-column: auto; } }
 .sf h4, .sf .sf-h { margin: 0 0 12px; font-size: var(--k-fs-14); font-weight: 600; }
 .sf a { display: block; padding: 4px 0; color: var(--k-text-2) !important; font-size: var(--k-fs-14); }
+.sf a.logo { display: inline-flex; align-items: center; gap: 8px; color: var(--k-text) !important; font-size: var(--k-fs-20); margin-bottom: 8px; }
 .sf a:hover { color: var(--k-brand) !important; }
 .sf p { color: var(--k-text-3); font-size: var(--k-fs-14); max-width: 340px; }
-.sf .legal { border-top: 1px solid var(--k-border); padding: var(--k-s-2) 0; font-size: var(--k-fs-12); color: var(--k-text-3); }
+.sf .legal { border-top: 1px solid var(--k-border); padding-top: var(--k-s-2); padding-bottom: var(--k-s-2); font-size: var(--k-fs-12); color: var(--k-text-3); }
 
 /* ---------------------------------------------------------------- toasts */
 #toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 200; display: grid; gap: 8px; width: min(420px, calc(100% - 32px)); }

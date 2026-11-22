@@ -147,7 +147,7 @@
 .pc-stock { font-size: var(--k-fs-12); line-height: 18px; min-height: 18px; font-weight: 600; color: var(--k-warning); }  /* space always reserved: buttons align across a row */
 .pc-stock.out { color: var(--k-danger); }
 .pc-add { margin-top: auto; }
-.pc-foot { margin-top: var(--k-s-1); display: flex; }
+.pc-foot { margin-top: auto; padding-top: var(--k-s-1); display: flex; }
 .pc-foot .k-btn { width: 100%; }
 .pc-add.added { background: var(--k-success); border-color: var(--k-success); color: #fff; }
 .pc.sk-card .pc-media { background: var(--k-skeleton); }
