@@ -1,4 +1,14 @@
-// Shared helpers for every ShopLite page.
+// Shared helpers for every Kartora page.
+// ---- Brand: change the name here and every page follows. ----
+const BRAND = { name: "Kartora", tagline: "Everything you love, delivered." };
+const LOGO_SVG = (size = 30) => `<svg width="${size}" height="${size}" viewBox="0 0 40 40" aria-hidden="true">
+  <defs><linearGradient id="kg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6d4bff"/><stop offset="1" stop-color="#ff6a3d"/></linearGradient></defs>
+  <rect width="40" height="40" rx="11" fill="url(#kg)"/>
+  <path d="M13 15h14l-1.4 15.2a2 2 0 0 1-2 1.8h-7.2a2 2 0 0 1-2-1.8z" fill="#fff"/>
+  <path d="M16 15v-2a4 4 0 0 1 8 0v2" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M18 19.5v8M18 23.5l4-4M19.3 22.2l3 5.3" stroke="#5b3df5" stroke-width="2" stroke-linecap="round" fill="none"/></svg>`;
+const brandMark = (sub = "", size = 30) =>
+  `<span class="brandmark">${LOGO_SVG(size)}<span class="bm-name">${BRAND.name}</span>${sub ? `<span class="bm-sub">${sub}</span>` : ""}</span>`;
 const $ = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 
@@ -83,12 +93,25 @@ function productEmoji(name, category) {
   const hit = Object.keys(PRODUCT_EMOJI).sort((a, b) => b.length - a.length).find((k) => (name || "").includes(k));
   return hit ? PRODUCT_EMOJI[hit] : (CATEGORY_STYLE[category] || [, , "🛍️"])[2];
 }
+// Product picture: the real photo when there is one, with generated art underneath as a fallback
+// (if the photo can't load, it removes itself and the art shows).
 function productArt(p, size = "") {
   const [a, b] = CATEGORY_STYLE[p.category_name] || ["#94a3b8", "#cbd5e1"];
-  const angle = 120 + ((p.product_id || 0) * 37) % 120;  // a little variety between products
-  return `<div class="art ${size}" style="background: linear-gradient(${angle}deg, ${a}33, ${b}55)">
+  const angle = 120 + ((p.product_id || 0) * 37) % 120;
+  return `<div class="art ${size} ${p.image_url ? "photo" : ""}" style="background: linear-gradient(${angle}deg, ${a}33, ${b}55)">
     ${p.discount_pct ? `<span class="off">-${p.discount_pct}%</span>` : ""}
+    ${p.image_url ? `<img src="${esc(p.image_url)}" alt="${esc(p.product_name)}" loading="lazy" onerror="this.parentElement.classList.remove('photo'); this.remove()">` : ""}
     <span class="emoji">${productEmoji(p.product_name, p.category_name)}</span></div>`;
+}
+// Photo credits for the openly licensed stock photos (CC licenses require attribution)
+let CREDITS;
+async function photoCredit(p) {
+  if (!p.image_url || !p.image_url.startsWith("/static/img/products/")) return "";
+  CREDITS ||= await fetch("/static/img/products/credits.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+  const c = CREDITS[p.image_url.split("/").pop()];
+  if (!c) return "";
+  return `<div class="credit">Photo: <a href="${esc(c.source)}" target="_blank" rel="noopener">${esc(c.title || "untitled")}</a>
+    by ${esc(c.creator || "unknown")} · <a href="${esc(c.license_url)}" target="_blank" rel="noopener">CC ${esc((c.license || "").toUpperCase())} ${esc(c.license_version || "")}</a></div>`;
 }
 function categoryArt(name) {
   const [a, b, e] = CATEGORY_STYLE[name] || ["#94a3b8", "#cbd5e1", "🛍️"];
@@ -112,7 +135,7 @@ async function logout() {
 }
 const ROLE_HOME = { customer: "/", vendor: "/vendor", rider: "/rider", admin: "/admin" };
 const ROLE_LINKS = {
-  admin: [["/admin", "Admin"], ["/dashboard", "Live dashboard"], ["/analytics", "Analytics"], ["/", "Storefront"], ["/docs", "API docs"]],
+  admin: [["/admin", "Admin"], ["/dashboard", "Live ops"], ["/analytics", "Business intelligence"], ["/", "Storefront"], ["/docs", "API docs"]],
   vendor: [["/vendor", "Seller center"], ["/", "Storefront"]],
   rider: [["/rider", "Rider app"]],
   customer: [["/", "Shop"], ["/#/orders", "My orders"], ["/#/account", "My account"]],
@@ -125,7 +148,7 @@ async function renderPortalHeader(subtitle) {
   const links = (ROLE_LINKS[me?.role] || []).map(([href, text]) =>
     `<a href="${href}" class="${location.pathname === href ? "active" : ""}">${text}</a>`).join("");
   $("header").innerHTML = `
-    <a class="brand" href="${ROLE_HOME[me?.role] || "/"}" style="color:inherit">Shop<span>Lite</span> <span class="muted small">${esc(subtitle)}</span></a>
+    <a href="${ROLE_HOME[me?.role] || "/"}" style="color:inherit">${brandMark(esc(subtitle), 28)}</a>
     <nav>${links}</nav><div class="spacer"></div>
     <span id="live" class="live">connecting…</span>
     ${me ? `<span class="user-chip"><span class="avatar">${initials(me.display_name)}</span>
@@ -165,6 +188,11 @@ function shipmentStepper(s) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  // favicon on every page
+  const icon = document.createElement("link");
+  icon.rel = "icon"; icon.href = "data:image/svg+xml," + encodeURIComponent(LOGO_SVG(40).replace('aria-hidden="true"', 'xmlns="http://www.w3.org/2000/svg"'));
+  document.head.append(icon);
+  $$("[data-brandmark]").forEach((el) => (el.innerHTML = brandMark(el.dataset.brandmark, +el.dataset.size || 30)));
   $$("nav a").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === location.pathname));
   document.addEventListener("click", (e) => {  // close dropdown menus when clicking elsewhere
     $$(".menu.open").forEach((m) => { if (!m.contains(e.target)) m.classList.remove("open"); });

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ShopLite Dashboard</title>
+  <title>Kartora Dashboard</title>
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -56,11 +56,11 @@ const charts = {
   status: new Chart($("#c-status"), { type: "doughnut", data: { labels: [], datasets: [{ data: [], borderWidth: 0 }] },
     options: { cutout: "62%", plugins: { legend: { display: true, position: "right" } } } }),
   revenue: new Chart($("#c-revenue"), { type: "bar", data: { labels: [], datasets: [
-      { type: "bar", label: "Revenue", data: [], backgroundColor: ACCENT, borderRadius: 3, yAxisID: "y" },
-      { type: "line", label: "Orders", data: [], borderColor: css("--warn"), pointRadius: 0, tension: .3, yAxisID: "y2" }] },
-    options: { plugins: { legend: { display: true } }, scales: {
-      y: { beginAtZero: true, ticks: { callback: (v) => "$" + (v >= 1000 ? v / 1000 + "k" : v) } },
-      y2: { beginAtZero: true, position: "right", grid: { display: false } }, x: { grid: { display: false } } } } }),
+      { type: "bar", label: "Revenue", data: [], backgroundColor: ACCENT, borderRadius: 4 }] },
+    // one axis only: order counts go in the tooltip instead of a second y-scale
+    options: { plugins: { tooltip: { callbacks: { label: (c) => `Revenue: ${money(c.raw)}`,
+      afterLabel: (c) => `${int(window.__ordersByDay?.[c.dataIndex])} orders` } } }, scales: {
+      y: { beginAtZero: true, ticks: { callback: (v) => "$" + (v >= 1000 ? v / 1000 + "k" : v) } }, x: { grid: { display: false } } } } }),
   category: new Chart($("#c-category"), { type: "bar", data: { labels: [], datasets: [{ data: [], backgroundColor: ACCENT, borderRadius: 3 }] },
     options: { indexAxis: "y", scales: { x: { ticks: { callback: (v) => "$" + (v >= 1000 ? v / 1000 + "k" : v) } }, y: { grid: { display: false } } } } }),
 };
@@ -94,7 +94,8 @@ async function loadStats() {
   charts.status.data.datasets[0].backgroundColor = s.status_counts.map((r) => STATUS_COLORS[r.status]);
   setData(charts.status, s.status_counts.map((r) => r.status), s.status_counts.map((r) => r.orders));
   setData(charts.revenue, s.revenue_by_day.map((r) => new Date(r.day + "T00:00").toLocaleDateString([], { month: "short", day: "numeric" })),
-          s.revenue_by_day.map((r) => r.revenue), s.revenue_by_day.map((r) => r.orders));
+          s.revenue_by_day.map((r) => r.revenue));
+  window.__ordersByDay = s.revenue_by_day.map((r) => r.orders);
   setData(charts.category, s.category_revenue.map((r) => r.category_name), s.category_revenue.map((r) => r.revenue));
 
   $("#recent").innerHTML = s.recent_orders.map((o) => `<tr class="${flashOrders.has(o.order_id) ? "flash" : ""}">

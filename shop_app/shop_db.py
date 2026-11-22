@@ -75,7 +75,7 @@ def tx():
 PRODUCT_SQL = """
     SELECT p.product_id, p.product_name, p.sku, p.unit_price, p.list_price,
            CASE WHEN p.list_price > p.unit_price THEN CAST(ROUND(100 * (1 - p.unit_price / p.list_price), 0) AS INT) END AS discount_pct,
-           coalesce(p.rating, 0) AS rating, p.review_count, p.description, p.created_at, p.is_active,
+           coalesce(p.rating, 0) AS rating, p.review_count, p.description, p.created_at, p.is_active, p.image_url,
            c.category_id, c.category_name, v.vendor_id, v.vendor_name, v.rating AS vendor_rating,
            coalesce(i.quantity_on_hand, 0) AS stock, coalesce(s.sold, 0) AS sold
     FROM dbo.products p
@@ -189,7 +189,7 @@ def customer_orders(customer_id: int, limit: int = 30) -> list[dict]:
         ids = [o["order_id"] for o in orders]
         marks = ",".join("?" * len(ids))
         thumbs = query(f"""
-            SELECT i.order_id, p.product_id, p.product_name, c.category_name, i.quantity
+            SELECT i.order_id, p.product_id, p.product_name, p.image_url, c.category_name, i.quantity
             FROM dbo.order_items i JOIN dbo.products p ON p.product_id = i.product_id
             JOIN dbo.categories c ON c.category_id = p.category_id WHERE i.order_id IN ({marks})
         """, *ids)
@@ -203,7 +203,7 @@ def order_detail(order_id: int) -> dict | None:
     if o is None:
         return None
     o["lines"] = query("""
-        SELECT i.order_item_id, i.product_id, p.product_name, c.category_name, i.quantity, i.unit_price, i.discount,
+        SELECT i.order_item_id, i.product_id, p.product_name, p.image_url, c.category_name, i.quantity, i.unit_price, i.discount,
                i.line_total, i.shipment_id
         FROM dbo.order_items i JOIN dbo.products p ON p.product_id = i.product_id
         JOIN dbo.categories c ON c.category_id = p.category_id WHERE i.order_id = ? ORDER BY i.order_item_id
@@ -261,8 +261,10 @@ def vendor_shipments(vendor_id: int, statuses: list[str], limit: int = 60) -> li
     if ships:
         ids = [s["shipment_id"] for s in ships]
         lines = query(f"""
-            SELECT i.shipment_id, p.product_name, p.sku, i.quantity FROM dbo.order_items i
-            JOIN dbo.products p ON p.product_id = i.product_id WHERE i.shipment_id IN ({','.join('?' * len(ids))})
+            SELECT i.shipment_id, p.product_id, p.product_name, p.sku, p.image_url, c.category_name, i.quantity, i.unit_price,
+                   i.line_total FROM dbo.order_items i
+            JOIN dbo.products p ON p.product_id = i.product_id
+            JOIN dbo.categories c ON c.category_id = p.category_id WHERE i.shipment_id IN ({','.join('?' * len(ids))})
         """, *ids)
         for s in ships:
             s["lines"] = [l for l in lines if l["shipment_id"] == s["shipment_id"]]
@@ -298,6 +300,37 @@ def update_product(product_id: int, unit_price: float | None = None, list_price:
                 raise ShopError("Restock quantity must be positive")
             cur.execute("UPDATE dbo.inventory SET quantity_on_hand = quantity_on_hand + ?, updated_at = ? "
                         "WHERE product_id = ?", add_stock, ts, product_id)
+
+
+def set_product_image(product_id: int, image_url: str) -> None:
+    if not execute("UPDATE dbo.products SET image_url = ?, updated_at = ? WHERE product_id = ?",
+                   image_url, mp.now(), product_id):
+        raise ShopError("Product not found")
+
+
+def bulk_vendor_action(vendor_id: int, shipment_ids: list[int], action: str) -> dict:
+    """Seller handles many parcels at once. 'accept', 'ready', or 'accept_ready' (accept + pack in one go,
+    which hands the parcel straight to the rider dispatcher). Each parcel succeeds or fails on its own."""
+    steps = {"accept": [mp.vendor_accept], "ready": [mp.vendor_ready],
+             "accept_ready": [mp.vendor_accept, mp.vendor_ready]}.get(action)
+    if steps is None:
+        raise ShopError("Unknown bulk action")
+    done, failed = [], []
+    for sid in shipment_ids[:200]:
+        try:
+            with tx() as cur:
+                status = cur.execute("SELECT status FROM dbo.shipments WHERE shipment_id = ? AND vendor_id = ?",
+                                     sid, vendor_id).fetchval()
+                if status is None:
+                    raise ShopError("not your parcel")
+                for step in steps:
+                    if step is mp.vendor_accept and status != "confirmed":
+                        continue  # already accepted - just pack it
+                    step(cur, sid, vendor_id=vendor_id)
+            done.append(sid)
+        except ShopError as e:
+            failed.append({"shipment_id": sid, "reason": str(e)})
+    return {"done": done, "failed": failed}
 
 
 def add_product(vendor_id: int, name: str, category_id: int, unit_price: float, unit_cost: float,

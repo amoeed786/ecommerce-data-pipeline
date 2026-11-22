@@ -103,6 +103,8 @@ IF COL_LENGTH('dbo.products', 'review_count') IS NULL
     ALTER TABLE dbo.products ADD review_count INT NOT NULL CONSTRAINT DF_products_review_count DEFAULT 0;
 IF COL_LENGTH('dbo.products', 'description') IS NULL
     ALTER TABLE dbo.products ADD description NVARCHAR(400) NULL;
+IF COL_LENGTH('dbo.products', 'image_url') IS NULL
+    ALTER TABLE dbo.products ADD image_url NVARCHAR(300) NULL;       -- product photo (seller upload or stock photo)
 IF COL_LENGTH('dbo.order_items', 'shipment_id') IS NULL
     ALTER TABLE dbo.order_items ADD shipment_id INT NULL CONSTRAINT FK_order_items_shipment REFERENCES dbo.shipments(shipment_id);
 GO

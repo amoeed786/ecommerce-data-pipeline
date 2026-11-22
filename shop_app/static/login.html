@@ -3,85 +3,162 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign in · ShopLite</title>
+  <title>Welcome · Kartora</title>
   <link rel="stylesheet" href="/static/style.css">
+  <style>
+    body { background: var(--bg); }
+    .welcome { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+    .hero-side { background: var(--brand-grad); color: #fff; padding: 48px 44px; display: flex; flex-direction: column; justify-content: space-between; }
+    .hero-side h1 { font-size: 38px; line-height: 1.1; margin: 40px 0 12px; }
+    .hero-side p { opacity: .9; font-size: 16px; max-width: 420px; }
+    .hero-side ul { list-style: none; padding: 0; margin: 26px 0 0; display: grid; gap: 12px; }
+    .hero-side li { display: flex; gap: 10px; align-items: center; font-size: 15px; }
+    .hero-side li span { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: rgba(255,255,255,.16); }
+    .hero-side .brandmark { color: #fff; font-size: 24px; }
+    .pick-side { padding: 48px 44px; display: flex; flex-direction: column; justify-content: center; max-width: 920px; }
+    .pick-side h2 { font-size: 26px; margin: 0 0 6px; }
+    .panel { max-width: 460px; }
+    .panel .field input, .panel .field select { width: 100%; padding: 11px 12px; }
+    .role-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .role-head .big { font-size: 34px; width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; background: var(--accent-soft); }
+    .demo-btn { width: 100%; text-align: left; margin-top: 12px; padding: 11px 12px; border-style: dashed; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 900px) { .welcome { grid-template-columns: 1fr; } .hero-side { padding: 28px 20px; } .hero-side h1 { margin-top: 16px; font-size: 28px; } .pick-side { padding: 28px 20px; } }
+  </style>
 </head>
 <body>
-<div class="auth-wrap">
-  <div class="auth-card">
-    <a href="/" style="font-weight:800; font-size:26px; color:var(--accent)">Shop<span style="color:var(--text)">Lite</span></a>
-    <div class="tabs" style="margin-top:14px">
-      <button data-tab="signin" class="on">Sign in</button>
-      <button data-tab="register">Create account</button>
+<div class="welcome">
+  <aside class="hero-side">
+    <div>
+      <a href="/" data-brandmark="" data-size="38"></a>
+      <h1>Everything you love,<br>delivered.</h1>
+      <p>One marketplace for shoppers, sellers and riders - every order tracked live from checkout to doorstep.</p>
+      <ul>
+        <li><span>🛍️</span> 300+ products from 11 trusted stores</li>
+        <li><span>🛵</span> Live tracking, cash on delivery, 7-day returns</li>
+        <li><span>🏪</span> Sellers pack orders in one click</li>
+        <li><span>📊</span> Every sale flows into live business intelligence</li>
+      </ul>
     </div>
+    <div class="small" style="opacity:.75">Demo marketplace · no real payments</div>
+  </aside>
 
-    <form id="signin">
-      <div class="field">Email<input name="email" type="email" autocomplete="username" required></div>
-      <div class="field">Password<input name="password" type="password" autocomplete="current-password" required></div>
-      <button class="primary" style="width:100%; padding:11px; font-weight:700">Sign in</button>
-      <div style="margin-top:18px">
-        <div class="muted small" style="margin-bottom:8px">Demo accounts - click to fill in:</div>
-        <div class="demo-grid">
-          <button type="button" data-email="customer@shoplite.test" data-pw="Demo@123">🛍️ <b>Customer</b><div class="muted small">shop &amp; track orders</div></button>
-          <button type="button" data-email="vendor@shoplite.test" data-pw="Demo@123">🏪 <b>Vendor</b><div class="muted small">accept &amp; pack orders</div></button>
-          <button type="button" data-email="rider@shoplite.test" data-pw="Demo@123">🛵 <b>Rider</b><div class="muted small">pick up &amp; deliver</div></button>
-          <button type="button" data-email="admin@shoplite.test" data-pw="Admin@123">🛠️ <b>Admin</b><div class="muted small">run the marketplace</div></button>
-        </div>
-        <p class="muted small" style="margin:10px 0 0">Every store also has its own login, e.g. <code>techhub@shoplite.test</code> / <code>Demo@123</code>.</p>
+  <main class="pick-side">
+    <!-- step 1: choose how you use Kartora -->
+    <section id="step-pick">
+      <h2>How do you want to use Kartora?</h2>
+      <p class="muted" style="margin:0 0 20px">Choose your account type to sign in or create an account.</p>
+      <div class="portal-pick">
+        <button data-role="customer"><span class="big">🛍️</span><b>Shopper</b><span class="muted small">Browse stores, check out, track every parcel live</span></button>
+        <button data-role="vendor"><span class="big">🏪</span><b>Seller</b><span class="muted small">Open a store, accept orders, pack and hand over in one click</span></button>
+        <button data-role="rider"><span class="big">🛵</span><b>Rider</b><span class="muted small">Go online, pick up parcels, deliver and earn</span></button>
+        <button data-role="admin"><span class="big">🛠️</span><b>Admin</b><span class="muted small">Run the marketplace, control orders, see the BI</span></button>
       </div>
-    </form>
+      <p class="muted small" style="margin-top:22px">Just looking? <a href="/">Browse the store without an account →</a></p>
+    </section>
 
-    <form id="register" class="hidden">
-      <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px">
-        <div class="field">First name<input name="first_name" required autocomplete="given-name"></div>
-        <div class="field">Last name<input name="last_name" required autocomplete="family-name"></div>
-      </div>
-      <div class="field">Email<input name="email" type="email" required autocomplete="email"></div>
-      <div class="field">Password<input name="password" type="password" required minlength="8" autocomplete="new-password">
-        <span class="muted small">At least 8 characters, mixing letters with numbers or symbols.</span></div>
-      <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px">
-        <div class="field">City<input name="city" autocomplete="address-level2"></div>
-        <div class="field">Country<input name="country" value="Pakistan" autocomplete="country-name"></div>
-      </div>
-      <div class="field">Phone<input name="phone" autocomplete="tel"></div>
-      <button class="primary" style="width:100%; padding:11px; font-weight:700">Create account</button>
-      <p class="muted small">Want to sell or deliver? Store and rider accounts are created by the admin.</p>
-    </form>
-  </div>
+    <!-- step 2: sign in / sign up for that role -->
+    <section id="step-auth" class="panel hidden">
+      <a href="#" id="back" class="small">← Choose a different account type</a>
+      <div class="role-head" style="margin-top:14px"><span class="big" id="r-icon"></span><div><h2 id="r-title" style="margin:0"></h2><div class="muted small" id="r-sub"></div></div></div>
+      <div class="tabs" id="auth-tabs"><button data-tab="signin" class="on">Sign in</button><button data-tab="signup">Create account</button></div>
+
+      <form id="signin">
+        <div class="field">Email<input name="email" type="email" autocomplete="username" required></div>
+        <div class="field">Password<input name="password" type="password" autocomplete="current-password" required></div>
+        <button class="primary" style="width:100%; padding:12px; font-weight:700">Sign in</button>
+        <button type="button" class="demo-btn" id="demo"></button>
+      </form>
+
+      <form id="signup-customer" class="hidden">
+        <div class="two"><div class="field">First name<input name="first_name" required autocomplete="given-name"></div>
+          <div class="field">Last name<input name="last_name" required autocomplete="family-name"></div></div>
+        <div class="field">Email<input name="email" type="email" required autocomplete="email"></div>
+        <div class="field">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"><span class="muted small">8+ characters, letters with numbers or symbols</span></div>
+        <div class="two"><div class="field">City<input name="city"></div><div class="field">Country<input name="country" value="Pakistan"></div></div>
+        <div class="field">Phone<input name="phone" autocomplete="tel"></div>
+        <button class="primary" style="width:100%; padding:12px; font-weight:700">Create shopper account</button>
+      </form>
+
+      <form id="signup-vendor" class="hidden">
+        <div class="field">Store name<input name="store_name" required minlength="3" placeholder="e.g. Lahore Leather Co."></div>
+        <div class="field">Tagline<input name="tagline" placeholder="One line about what you sell"></div>
+        <div class="two"><div class="field">Your name<input name="owner_name" required></div><div class="field">City<input name="city"></div></div>
+        <div class="field">Country<input name="country" value="Pakistan"></div>
+        <div class="field">Email<input name="email" type="email" required autocomplete="email"></div>
+        <div class="field">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></div>
+        <button class="primary" style="width:100%; padding:12px; font-weight:700">Open my store</button>
+        <p class="muted small">Your store starts with autopilot off - you accept and pack orders in the seller center.</p>
+      </form>
+
+      <form id="signup-rider" class="hidden">
+        <div class="field">Full name<input name="full_name" required autocomplete="name"></div>
+        <div class="two"><div class="field">Phone<input name="phone" autocomplete="tel"></div><div class="field">City<input name="city"></div></div>
+        <div class="field">Vehicle<select name="vehicle"><option value="bike">🛵 Bike</option><option value="car">🚗 Car</option><option value="van">🚐 Van</option></select></div>
+        <div class="field">Email<input name="email" type="email" required autocomplete="email"></div>
+        <div class="field">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></div>
+        <button class="primary" style="width:100%; padding:12px; font-weight:700">Join as a rider</button>
+        <p class="muted small">You start offline - go online in the rider app when you're ready for deliveries.</p>
+      </form>
+    </section>
+  </main>
 </div>
 
 <script src="/static/common.js"></script>
 <script>
-const next = new URLSearchParams(location.search).get("next");
-const go = (user) => {
-  // only follow same-site paths, and only to pages this role can open
-  const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
-  const allowed = { admin: true, vendor: safe === "/vendor", rider: safe === "/rider",
-                    customer: safe && !["/admin", "/dashboard", "/analytics", "/vendor", "/rider"].includes(safe) };
-  location.href = safe && allowed[user.role] ? safe : ROLE_HOME[user.role];
+const ROLES = {
+  customer: { icon: "🛍️", title: "Shopper", sub: "Shop from every store on Kartora", demo: ["customer@kartora.test", "Demo@123"], signup: "/api/auth/register" },
+  vendor: { icon: "🏪", title: "Seller", sub: "Manage your store and pack orders", demo: ["vendor@kartora.test", "Demo@123"], signup: "/api/auth/register/vendor" },
+  rider: { icon: "🛵", title: "Rider", sub: "Deliver parcels and track earnings", demo: ["rider@kartora.test", "Demo@123"], signup: "/api/auth/register/rider" },
+  admin: { icon: "🛠️", title: "Admin", sub: "Marketplace control room - sign in only", demo: ["admin@kartora.test", "Admin@123"], signup: null },
 };
+const params = new URLSearchParams(location.search);
+const next = params.get("next");
+const NEXT_ROLE = { "/admin": "admin", "/dashboard": "admin", "/analytics": "admin", "/vendor": "vendor", "/rider": "rider" };
+let role = null, tab = "signin";
 
-$$(".tabs button").forEach((b) => (b.onclick = () => {
-  $$(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
-  $("#signin").classList.toggle("hidden", b.dataset.tab !== "signin");
-  $("#register").classList.toggle("hidden", b.dataset.tab !== "register");
-}));
-$$("[data-email]").forEach((b) => (b.onclick = () => {
-  $("#signin [name=email]").value = b.dataset.email;
-  $("#signin [name=password]").value = b.dataset.pw;
-  $("#signin").requestSubmit();
-}));
+function go(user) {
+  const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+  const okFor = (r) => !safe || NEXT_ROLE[safe.split("?")[0]] === r || (!NEXT_ROLE[safe.split("?")[0]] && r === "customer");
+  location.href = safe && okFor(user.role) ? safe : ROLE_HOME[user.role];
+}
 
-async function submit(form, path) {
+function choose(r) {
+  role = r;
+  const R = ROLES[r];
+  $("#step-pick").classList.add("hidden");
+  $("#step-auth").classList.remove("hidden");
+  $("#r-icon").textContent = R.icon; $("#r-title").textContent = R.title; $("#r-sub").textContent = R.sub;
+  $("#auth-tabs").classList.toggle("hidden", !R.signup);
+  $("#demo").innerHTML = `⚡ Use the demo ${R.title.toLowerCase()} account <span class="muted small">(${R.demo[0]})</span>`;
+  history.replaceState(null, "", `/login?as=${r}${next ? "&next=" + encodeURIComponent(next) : ""}`);
+  setTab("signin");
+}
+function setTab(t) {
+  tab = t;
+  $$("#auth-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+  $("#signin").classList.toggle("hidden", t !== "signin");
+  ["customer", "vendor", "rider"].forEach((r) => $(`#signup-${r}`).classList.toggle("hidden", !(t === "signup" && role === r)));
+  $(t === "signin" ? "#signin [name=email]" : `#signup-${role} input`)?.focus();
+}
+$$("[data-role]").forEach((b) => (b.onclick = () => choose(b.dataset.role)));
+$$("#auth-tabs button").forEach((b) => (b.onclick = () => setTab(b.dataset.tab)));
+$("#back").onclick = (e) => { e.preventDefault(); $("#step-auth").classList.add("hidden"); $("#step-pick").classList.remove("hidden"); history.replaceState(null, "", "/login"); };
+$("#demo").onclick = () => { $("#signin [name=email]").value = ROLES[role].demo[0]; $("#signin [name=password]").value = ROLES[role].demo[1]; $("#signin").requestSubmit(); };
+
+async function submit(form, path, extra = {}) {
   const btn = $("button.primary", form);
   btn.disabled = true;
-  try { go(await api(path, { method: "POST", body: Object.fromEntries(new FormData(form)) })); }
-  catch (e) { toast(e.message, "error", 5000); }
+  try { go(await api(path, { method: "POST", body: { ...Object.fromEntries(new FormData(form)), ...extra } })); }
+  catch (e) { toast(e.message, "error", 6000); }
   finally { btn.disabled = false; }
 }
-$("#signin").onsubmit = (e) => { e.preventDefault(); submit(e.target, "/api/auth/login"); };
-$("#register").onsubmit = (e) => { e.preventDefault(); submit(e.target, "/api/auth/register"); };
-loadMe().then((me) => { if (me && !next) go(me); });  // already signed in
+$("#signin").onsubmit = (e) => { e.preventDefault(); submit(e.target, "/api/auth/login", { role }); };
+["customer", "vendor", "rider"].forEach((r) => ($(`#signup-${r}`).onsubmit = (e) => { e.preventDefault(); submit(e.target, ROLES[r].signup); }));
+
+const pre = params.get("as") || NEXT_ROLE[(next || "").split("?")[0]];
+if (ROLES[pre]) choose(pre);
+loadMe().then((me) => { if (me && !next && !params.get("as")) go(me); });  // already signed in → straight to your area
 </script>
 </body>
 </html>

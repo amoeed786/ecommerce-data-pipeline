@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Seller center · ShopLite</title>
+  <title>Seller center · Kartora</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header></header>
 <main>
-  <div class="row" style="justify-content:space-between; margin-bottom:12px">
+  <div class="row" style="justify-content:space-between; margin-bottom:14px">
     <div><h1 id="store-name">Seller center</h1><div class="muted small" id="store-sub"></div></div>
     <div class="card row" style="padding:10px 14px">
       <label class="switch"><input type="checkbox" id="autopilot"><span></span></label>
@@ -20,20 +20,34 @@
 
   <div class="tabs">
     <button data-tab="orders" class="on">📦 Orders</button>
-    <button data-tab="products">🏷️ Products</button>
+    <button data-tab="products">🏷️ Products &amp; photos</button>
   </div>
 
   <section id="tab-orders">
-    <div id="filters" class="chips"></div>
+    <div class="stage-tabs" id="stages"></div>
+    <div class="bulkbar hidden" id="bulkbar">
+      <span class="count" id="sel-count"></span><span class="spacer"></span>
+      <button class="primary" data-bulk="accept_ready">⚡ Accept + pack &amp; hand to rider</button>
+      <button data-bulk="accept">✔ Accept</button>
+      <button data-bulk="ready">📦 Mark packed</button>
+      <button id="slips">🖨 Packing slips</button>
+      <button id="clear">Clear</button>
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <label class="row small"><input type="checkbox" id="select-all"> Select all on this tab</label>
+      <span class="spacer"></span><span class="muted small" id="tab-hint"></span>
+    </div>
     <div id="queue"></div>
   </section>
 
   <section id="tab-products" class="hidden grid">
     <div class="card">
       <div class="row" style="justify-content:space-between"><h2>Your products</h2><input id="psearch" type="search" placeholder="Filter…"></div>
+      <p class="muted small">Click a photo to upload your own (JPG/PNG/WebP, up to 3 MB) - shoppers see it right away.</p>
       <div class="table-wrap"><table>
-        <thead><tr><th>Product</th><th class="num">Sold</th><th>Price</th><th>Was (sale)</th><th class="num">Stock</th><th>Restock</th><th>Listed</th></tr></thead>
+        <thead><tr><th>Photo</th><th>Product</th><th class="num">Sold</th><th>Price</th><th>Was (sale)</th><th class="num">Stock</th><th>Restock</th><th>Listed</th></tr></thead>
         <tbody id="products"></tbody></table></div>
+      <input type="file" id="photo-input" accept="image/jpeg,image/png,image/webp" class="hidden">
     </div>
     <div class="card">
       <h2>Add a product</h2>
@@ -52,10 +66,17 @@
 
 <script src="/static/common.js"></script>
 <script>
-const FILTERS = [["new", "New", ["confirmed"]], ["packing", "Packing", ["packing"]], ["pickup", "Awaiting pickup", ["ready", "assigned"]],
-                 ["transit", "On the way", ["picked_up"]], ["done", "Delivered", ["delivered"]], ["waiting", "Awaiting admin", ["pending"]]];
-let filter = "new";
-let products = [];
+const STAGES = [
+  ["new", "🔔 New", ["confirmed"], "Accept to start packing - or accept + pack in one go"],
+  ["packing", "📦 Packing", ["packing"], "Mark packed when the parcel is sealed - a rider is assigned automatically"],
+  ["pickup", "🛵 Awaiting pickup", ["ready", "assigned"], "Packed. A rider is on the way to collect"],
+  ["transit", "🚚 On the way", ["picked_up"], "With the rider, heading to the customer"],
+  ["done", "✅ Delivered", ["delivered"], "Recently delivered parcels"],
+  ["waiting", "⏳ Awaiting approval", ["pending"], "Placed by customers, waiting for the marketplace to confirm"],
+];
+let stage = "new", ships = [], products = [], store = null, uploadFor = null;
+const selected = new Set();
+const fresh = new Set();
 
 $$(".tabs button").forEach((b) => (b.onclick = () => {
   $$(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
@@ -65,58 +86,107 @@ $$(".tabs button").forEach((b) => (b.onclick = () => {
 }));
 
 async function loadSummary() {
-  const s = await api("/api/vendor/summary");
+  const s = store = await api("/api/vendor/summary");
   $("#store-name").textContent = "🏪 " + s.vendor_name;
-  $("#store-sub").innerHTML = `${esc(s.tagline || "")} · ${stars(s.rating)} ${s.rating} · <a href="/#/store/${s.vendor_id}" target="_blank">View your store →</a>`;
+  $("#store-sub").innerHTML = `${esc(s.tagline || "")} · ${stars(s.rating)} ${s.rating} · <a href="/#/store/${s.vendor_id}" target="_blank">View your storefront →</a>`;
   $("#autopilot").checked = !!s.is_bot;
   $("#ap-text").textContent = s.is_bot ? `On - orders are accepted and packed for you (~${s.prep_seconds}s)` : "Off - you accept and pack orders yourself";
-  const tiles = [["New orders", s.to_accept, "to accept"], ["Packing", s.to_pack, "mark packed when ready"], ["Awaiting pickup", s.awaiting_pickup, "rider coming"],
-    ["On the way", s.on_the_way, "with riders"], ["Sales today", money(s.sales_today), `${s.orders_today} orders`], ["Sales · 30 days", money(s.sales_30d), `${s.products} products · ${s.low_stock} low stock`]];
+  const tiles = [["Sales today", money(s.sales_today), `${s.orders_today} orders`], ["Sales · 30 days", money(s.sales_30d), "excluding cancelled & returned"],
+    ["To handle now", (s.to_accept || 0) + (s.to_pack || 0), `${s.to_accept} to accept · ${s.to_pack} to pack`],
+    ["Catalog", s.products, `${s.low_stock} low on stock`]];
   $("#kpis").innerHTML = tiles.map(([l, v, sub]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="small muted">${sub}</div></div>`).join("");
-  const counts = { new: s.to_accept, packing: s.to_pack, pickup: s.awaiting_pickup, transit: s.on_the_way, waiting: s.awaiting_admin };
-  $("#filters").innerHTML = FILTERS.map(([k, t]) => `<span class="chip ${filter === k ? "on" : ""}" data-f="${k}">${t}${counts[k] != null ? ` (${counts[k]})` : ""}</span>`).join("");
-  $$("#filters .chip").forEach((c) => (c.onclick = () => { filter = c.dataset.f; loadSummary(); loadQueue(); }));
+  const counts = { new: s.to_accept, packing: s.to_pack, pickup: s.awaiting_pickup, transit: s.on_the_way, done: null, waiting: s.awaiting_admin };
+  $("#stages").innerHTML = STAGES.map(([k, t]) => `<button class="${stage === k ? "on" : ""}" data-stage="${k}"><span class="small">${t}</span><b>${counts[k] ?? "·"}</b></button>`).join("");
+  $$("#stages button").forEach((b) => (b.onclick = () => { stage = b.dataset.stage; selected.clear(); loadSummary(); loadQueue(); }));
 }
 $("#autopilot").onchange = async (e) => {
   await api("/api/vendor/autopilot", { method: "POST", body: { on: e.target.checked } });
-  toast(e.target.checked ? "Autopilot on - new orders will be handled for you" : "Autopilot off - you're in control", "good");
+  toast(e.target.checked ? "Autopilot on - new orders are handled for you" : "Autopilot off - you're in control", "good");
   loadSummary();
 };
 
-const fresh = new Set();
-async function loadQueue() {
-  const statuses = FILTERS.find(([k]) => k === filter)[2];
-  const ships = await api("/api/vendor/shipments?" + new URLSearchParams(statuses.map((s) => ["status", s])));
-  $("#queue").innerHTML = ships.map((s) => `
-    <div class="job ${fresh.has(s.shipment_id) ? "new flash" : ""}">
-      <div class="row" style="justify-content:space-between">
-        <div><b>Order #${s.order_id}</b> <span class="muted small">· parcel ${s.shipment_id} · ${ago(s.confirmed_at || s.created_at)}</span></div>
-        <div>${badge(s.status)} <b>${money(s.amount)}</b></div></div>
-      <div class="muted small" style="margin:4px 0 8px">For ${esc(s.customer_first_name)} · ${esc(s.shipping_city)}, ${esc(s.shipping_country)}${s.rider_name ? ` · rider ${esc(s.rider_name)}` : ""}</div>
-      <table><tbody>${s.lines.map((l) => `<tr><td>${esc(l.product_name)}</td><td class="muted">${esc(l.sku)}</td><td class="num"><b>× ${l.quantity}</b></td></tr>`).join("")}</tbody></table>
-      <div class="row" style="margin-top:10px">
-        ${s.status === "confirmed" ? `<button class="primary" data-act="accept" data-id="${s.shipment_id}">✔ Accept order</button>` : ""}
-        ${s.status === "packing" ? `<button class="primary" data-act="ready" data-id="${s.shipment_id}">📦 Mark packed - ready for pickup</button>` : ""}
-        ${s.status === "pending" ? `<span class="muted small">Waiting for the marketplace to confirm this order.</span>` : ""}
-        ${["ready", "assigned"].includes(s.status) ? `<span class="muted small">Packed ${ago(s.ready_at)} - a rider will collect it.</span>` : ""}
-      </div></div>`).join("") || `<div class="card muted">Nothing here right now.</div>`;
-  fresh.clear();
-  $$("[data-act]").forEach((b) => (b.onclick = async () => {
-    b.disabled = true;
-    try { await api(`/api/vendor/shipments/${b.dataset.id}/${b.dataset.act}`, { method: "POST" }); toast(b.dataset.act === "accept" ? "Order accepted - start packing" : "Packed - a rider is being assigned", "good"); }
-    catch (e) { toast(e.message, "error"); }
-    refresh();
-  }));
+function ageBadge(s) {
+  const since = s.confirmed_at || s.created_at;
+  const min = (Date.now() - new Date(since)) / 60000;
+  const late = ["confirmed", "packing"].includes(s.status) && min > 15;
+  return `<span class="age ${late ? "late" : "muted"}">${late ? "⚠ " : ""}waiting ${ago(since).replace(" ago", "")}</span>`;
 }
 
-async function loadProducts() {
-  products = await api("/api/vendor/products");
-  renderProducts();
+async function loadQueue() {
+  const statuses = STAGES.find(([k]) => k === stage)[2];
+  ships = await api("/api/vendor/shipments?" + new URLSearchParams(statuses.map((s) => ["status", s])));
+  $("#tab-hint").textContent = STAGES.find(([k]) => k === stage)[3];
+  const actionable = ["new", "packing"].includes(stage);
+  $("#select-all").parentElement.classList.toggle("hidden", !actionable);
+  $("#queue").innerHTML = ships.map((s) => `
+    <div class="job ocard ${selected.has(s.shipment_id) ? "selected" : ""} ${fresh.has(s.shipment_id) ? "new flash" : ""}" data-id="${s.shipment_id}">
+      ${actionable ? `<input type="checkbox" data-sel="${s.shipment_id}" ${selected.has(s.shipment_id) ? "checked" : ""}>` : "<span></span>"}
+      <div>
+        <div class="row"><b>Order #${s.order_id}</b> <span class="muted small">parcel ${s.shipment_id}</span> ${badge(s.status)} ${ageBadge(s)}</div>
+        <div class="muted small" style="margin-top:2px">Ship to ${esc(s.customer_first_name)} · ${esc(s.shipping_city)}, ${esc(s.shipping_country)}${s.rider_name ? ` · 🛵 ${esc(s.rider_name)}` : ""}</div>
+        <div class="thumbs">${s.lines.map((l) => `<div class="thumb">${productArt(l, "sm")}<div><b>× ${l.quantity}</b> ${esc(l.product_name)}<div class="muted">${esc(l.sku)}</div></div></div>`).join("")}</div>
+      </div>
+      <div style="text-align:right; min-width:170px">
+        <div style="font-size:18px; font-weight:800">${money(s.amount)}</div>
+        <div class="grid" style="gap:6px; margin-top:8px">
+          ${s.status === "confirmed" ? `<button class="primary small" data-one="accept_ready" data-id="${s.shipment_id}">⚡ Accept + pack</button>
+            <button class="small" data-one="accept" data-id="${s.shipment_id}">✔ Accept only</button>` : ""}
+          ${s.status === "packing" ? `<button class="primary small" data-one="ready" data-id="${s.shipment_id}">📦 Mark packed</button>` : ""}
+        </div>
+      </div>
+    </div>`).join("") || `<div class="card muted" style="text-align:center; padding:30px">🎉 Nothing here - you're all caught up.</div>`;
+  fresh.clear();
+  $$("[data-sel]").forEach((c) => (c.onchange = () => { c.checked ? selected.add(+c.dataset.sel) : selected.delete(+c.dataset.sel); c.closest(".ocard").classList.toggle("selected", c.checked); updateBar(); }));
+  $$("[data-one]").forEach((b) => (b.onclick = () => runBulk(b.dataset.one, [+b.dataset.id])));
+  $("#select-all").checked = actionable && ships.length > 0 && ships.every((s) => selected.has(s.shipment_id));
+  updateBar();
 }
+function updateBar() {
+  for (const id of [...selected]) if (!ships.some((s) => s.shipment_id === id)) selected.delete(id);
+  const picked = ships.filter((s) => selected.has(s.shipment_id));
+  $("#bulkbar").classList.toggle("hidden", !picked.length);
+  $("#sel-count").textContent = `${picked.length} order${picked.length > 1 ? "s" : ""} selected · ${money(picked.reduce((a, s) => a + s.amount, 0))}`;
+  const anyNew = picked.some((s) => s.status === "confirmed"), anyPacking = picked.some((s) => s.status === "packing");
+  $("[data-bulk=accept]").disabled = !anyNew;
+  $("[data-bulk=ready]").disabled = !anyPacking;
+  $("[data-bulk=accept_ready]").disabled = !(anyNew || anyPacking);
+}
+$("#select-all").onchange = (e) => { ships.forEach((s) => (e.target.checked ? selected.add(s.shipment_id) : selected.delete(s.shipment_id))); loadQueue(); };
+$("#clear").onclick = () => { selected.clear(); loadQueue(); };
+$$("[data-bulk]").forEach((b) => (b.onclick = () => runBulk(b.dataset.bulk, [...selected])));
+
+async function runBulk(action, ids) {
+  $$("[data-bulk], [data-one]").forEach((b) => (b.disabled = true));
+  try {
+    const r = await api("/api/vendor/shipments/bulk", { method: "POST", body: { shipment_ids: ids, action } });
+    const verb = { accept: "accepted", ready: "packed - riders are being assigned", accept_ready: "accepted, packed and handed to riders" }[action];
+    if (r.done.length) toast(`${r.done.length} order${r.done.length > 1 ? "s" : ""} ${verb}`, "good", 4500);
+    if (r.failed.length) toast(`${r.failed.length} couldn't be updated: ${r.failed[0].reason}`, "error", 6000);
+    r.done.forEach((id) => selected.delete(id));
+  } catch (e) { toast(e.message, "error"); }
+  refresh();
+}
+
+$("#slips").onclick = () => {
+  const picked = ships.filter((s) => selected.has(s.shipment_id));
+  const w = window.open("", "_blank");
+  w.document.write(`<!doctype html><title>Packing slips</title><style>
+    body{font:13px system-ui,sans-serif;margin:24px;color:#111} .slip{border:2px dashed #999;border-radius:10px;padding:16px;margin-bottom:16px;page-break-inside:avoid}
+    h2{margin:0 0 4px} table{width:100%;border-collapse:collapse;margin-top:10px} td,th{border-bottom:1px solid #ddd;padding:6px;text-align:left} .r{text-align:right}</style>
+    ${picked.map((s) => `<div class="slip"><h2>${BRAND.name} · Order #${s.order_id}</h2><div>Parcel ${s.shipment_id} · from <b>${esc(store.vendor_name)}</b></div>
+      <div>Ship to: <b>${esc(s.customer_first_name)}</b>, ${esc(s.shipping_city)}, ${esc(s.shipping_country)}</div>
+      <table><tr><th>SKU</th><th>Item</th><th class="r">Qty</th><th>Packed ☐</th></tr>${s.lines.map((l) => `<tr><td>${esc(l.sku)}</td><td>${esc(l.product_name)}</td><td class="r"><b>${l.quantity}</b></td><td>☐</td></tr>`).join("")}</table></div>`).join("")}
+    <script>print()<\/script>`);
+  w.document.close();
+};
+
+// ---------------- products
+async function loadProducts() { products = await api("/api/vendor/products"); renderProducts(); }
 function renderProducts() {
   const q = $("#psearch").value.toLowerCase();
   $("#products").innerHTML = products.filter((p) => p.product_name.toLowerCase().includes(q)).map((p) => `<tr>
-    <td><div class="row" style="flex-wrap:nowrap"><div style="width:40px">${productArt(p, "sm")}</div><div>${esc(p.product_name)}<div class="muted small">${esc(p.sku)} · ${esc(p.category_name)}</div></div></div></td>
+    <td><button class="small" data-photo="${p.product_id}" title="Upload a photo" style="padding:0; width:56px; border:0; background:none">${productArt(p, "sm")}</button></td>
+    <td>${esc(p.product_name)}<div class="muted small">${esc(p.sku)} · ${esc(p.category_name)} · ${stars(p.rating)}</div></td>
     <td class="num">${int(p.sold)}</td>
     <td><div class="row"><input type="number" step="0.01" value="${p.unit_price}" id="pr-${p.product_id}" style="width:90px"><button class="small" data-save="${p.product_id}">Save</button></div></td>
     <td><input type="number" step="0.01" value="${p.list_price || ""}" placeholder="none" id="lp-${p.product_id}" style="width:90px"></td>
@@ -129,13 +199,23 @@ function renderProducts() {
   $$("[data-save]").forEach((b) => (b.onclick = () => patch(b.dataset.save, { unit_price: +$(`#pr-${b.dataset.save}`).value, list_price: +$(`#lp-${b.dataset.save}`).value || 0 }, "Price updated")));
   $$("[data-restock]").forEach((b) => (b.onclick = () => patch(b.dataset.restock, { add_stock: +$(`#rs-${b.dataset.restock}`).value }, "Stock added")));
   $$("[data-active]").forEach((c) => (c.onchange = () => patch(c.dataset.active, { is_active: c.checked }, c.checked ? "Listed" : "Hidden from the store")));
+  $$("[data-photo]").forEach((b) => (b.onclick = () => { uploadFor = b.dataset.photo; $("#photo-input").click(); }));
 }
+$("#photo-input").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file || !uploadFor) return;
+  const fd = new FormData(); fd.append("file", file);
+  const res = await fetch(`/api/vendor/products/${uploadFor}/image`, { method: "POST", body: fd, credentials: "same-origin" });
+  const data = await res.json().catch(() => ({}));
+  res.ok ? toast("Photo updated - shoppers see it now", "good") : toast(data.detail || "Upload failed", "error");
+  e.target.value = ""; loadProducts();
+};
 $("#psearch").oninput = renderProducts;
 $("#newp").onsubmit = async (e) => {
   e.preventDefault();
   const body = Object.fromEntries(new FormData(e.target));
   ["category_id", "unit_price", "unit_cost", "stock"].forEach((k) => (body[k] = +body[k]));
-  try { const r = await api("/api/vendor/products", { method: "POST", body }); toast(`Product #${r.product_id} is live`, "good"); e.target.reset(); loadProducts(); }
+  try { const r = await api("/api/vendor/products", { method: "POST", body }); toast(`Product #${r.product_id} is live - click its photo to add one`, "good"); e.target.reset(); loadProducts(); }
   catch (err) { toast(err.message, "error"); }
 };
 

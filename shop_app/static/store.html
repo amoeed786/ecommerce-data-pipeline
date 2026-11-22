@@ -3,23 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ShopLite · Online shopping</title>
+  <title>Kartora · Everything you love, delivered</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <div class="topstrip"><div class="inner">
   <span>🚚 Free delivery on every order</span><span>💵 Cash on delivery</span><span>↩️ 7-day easy returns</span>
   <span class="spacer"></span><span id="live" class="live">connecting…</span>
-  <a href="/vendor">Sell on ShopLite</a><a href="/rider">Deliver with us</a>
+  <a href="/login?as=vendor">🏪 Sell on Kartora</a><a href="/login?as=rider">🛵 Deliver with us</a><a href="/admin">🛠️ Admin</a>
 </div></div>
 <div class="storehead"><div class="inner">
-  <a class="logo" href="#/">Shop<span>Lite</span></a>
-  <form class="searchbar" id="search"><input id="q" type="search" placeholder="Search products, brands and stores" autocomplete="off"><button>Search</button></form>
+  <a href="#/" data-brandmark="" data-size="36"></a>
+  <form class="searchbar" id="search"><input id="q" type="search" placeholder="Search Kartora - products, brands and stores" autocomplete="off"><button>Search</button></form>
   <div id="account"></div>
   <a class="headlink" href="#/cart">🛒 Cart <span class="cart-badge" id="cartcount">0</span></a>
 </div></div>
 <nav class="catbar"><div class="inner" id="catbar"></div></nav>
 <main class="page" id="view"></main>
+<footer class="site">
+  <div class="inner">
+    <div><span data-brandmark="" data-size="30" style="color:#fff"></span>
+      <p class="small" style="max-width:320px; margin-top:12px">Everything you love, delivered. A marketplace of independent stores with live order tracking, cash on delivery and easy returns.</p></div>
+    <div><h4>Shop</h4><a href="#/search?on_sale=1&sort=discount">Flash deals</a><a href="#/search?sort=popular">Best sellers</a><a href="#/search?sort=newest">New arrivals</a><a href="#/orders">Track my order</a></div>
+    <div><h4>Earn with us</h4><a href="/login?as=vendor">Open a store</a><a href="/login?as=rider">Become a rider</a><a href="/vendor">Seller center</a><a href="/rider">Rider app</a></div>
+    <div><h4>Help</h4><a href="#/account">My account</a><a href="/login">Sign in / Join</a><a href="/admin">Admin</a><a href="/docs" target="_blank">API docs</a></div>
+  </div>
+  <div class="legal">© Kartora demo marketplace · no real payments · product photos are openly licensed, credited on each product page</div>
+</footer>
 
 <script src="/static/common.js"></script>
 <script>
@@ -56,7 +66,7 @@ function hashQuery() { return new URLSearchParams(location.hash.split("?")[1] ||
 async function renderAccount() {
   const me = await loadMe();
   const box = $("#account");
-  if (!me) { box.innerHTML = `<a class="headlink" href="/login?next=${encodeURIComponent("/" + location.hash)}">👤 Sign in / Register</a>`; return; }
+  if (!me) { box.innerHTML = `<a class="headlink" href="/login?as=customer&next=${encodeURIComponent("/" + location.hash)}">👤 Sign in / Join</a>`; return; }
   const items = me.role === "customer"
     ? `<a href="#/orders">📦 My orders</a><a href="#/account">👤 My account</a>`
     : `<a href="${ROLE_HOME[me.role]}">➡️ Go to ${me.role === "admin" ? "admin" : me.role === "vendor" ? "seller center" : "rider app"}</a>`;
@@ -69,15 +79,25 @@ $("#search").onsubmit = (e) => { e.preventDefault(); location.hash = `#/search?q
 let heroTimer;
 async function pageHome() {
   const h = await api("/api/home");
+  const all = [...h.flash_deals, ...h.best_sellers, ...h.top_rated];
+  const pick = (fn, n = 3) => [...new Map(all.filter((p) => p.image_url && fn(p)).map((p) => [p.product_id, p])).values()].slice(0, n);
+  const elec = h.categories.find((c) => c.category_name === "Electronics") || {};
   const slides = [
-    ["linear-gradient(120deg,#ef5a24,#f59e0b)", "Mega Sale - up to 40% off", "Flash deals across every category, today only.", "🛍️", "#/search?on_sale=1&sort=discount"],
-    ["linear-gradient(120deg,#4f46e5,#06b6d4)", "New in Electronics", "Phones, laptops and audio from trusted stores.", "🎧", `#/c/${(h.categories.find((c) => c.category_name === "Electronics") || {}).category_id}`],
-    ["linear-gradient(120deg,#16a34a,#84cc16)", "Free delivery, every order", "Pay cash on delivery - track your rider live.", "🛵", "#/search?sort=popular"],
+    ["linear-gradient(120deg,#2e1a9e,#6d4bff 60%,#ff6a3d)", "⚡ Flash sale", "Up to 40% off today", "Deals from every store - ending at midnight.", pick((p) => p.discount_pct >= 25), "#/search?on_sale=1&sort=discount"],
+    ["linear-gradient(120deg,#0f172a,#1e3a8a 60%,#0891b2)", "New in", "Tech that just works", "Phones, laptops and audio from trusted electronics stores.", pick((p) => p.category_name === "Electronics"), `#/c/${elec.category_id}`],
+    ["linear-gradient(120deg,#14532d,#16a34a 60%,#facc15)", "Free delivery", "Every order, tracked live", "Pay cash on delivery and watch your rider on the way.", pick((p) => p.sold > 300), "#/search?sort=popular"],
   ];
   view.innerHTML = `
-    <div class="hero">${slides.map(([bg, t, d, e, href], i) => `<div class="slide ${i ? "" : "on"}" style="background:${bg}">
-      <div><h2>${t}</h2><p>${d}</p><button onclick="location.hash='${href}'">Shop now</button></div><div class="big">${e}</div></div>`).join("")}
+    <div class="hero">${slides.map(([bg, pill, t, d, prods, href], i) => `<div class="slide ${i ? "" : "on"}" style="background:${bg}">
+      <div><span class="pill">${pill}</span><h2>${t}</h2><p>${d}</p><button onclick="location.hash='${href}'">Shop now →</button></div>
+      <div class="hero-pics">${prods.map((p) => `<a class="hp" href="#/p/${p.product_id}">${productArt(p, "md")}<span>${money(p.unit_price)}</span></a>`).join("")}</div></div>`).join("")}
       <div class="dots">${slides.map((_, i) => `<span class="${i ? "" : "on"}" data-i="${i}"></span>`).join("")}</div></div>
+    <div class="trust">
+      <div><span class="ic">🚚</span><span><b>Free delivery</b><span class="muted small">on every order</span></span></div>
+      <div><span class="ic">💵</span><span><b>Cash on delivery</b><span class="muted small">pay when it arrives</span></span></div>
+      <div><span class="ic">📍</span><span><b>Live tracking</b><span class="muted small">see your rider move</span></span></div>
+      <div><span class="ic">↩️</span><span><b>7-day returns</b><span class="muted small">change of mind is OK</span></span></div>
+    </div>
     <div class="section"><div class="section-head"><h2>Shop by category</h2></div>
       <div class="cat-tiles">${h.categories.map((c) => `<a class="cat-tile" href="#/c/${c.category_id}">${categoryArt(c.category_name)}<b>${esc(c.category_name)}</b><span class="muted small">${c.products} items</span></a>`).join("")}</div></div>
     <div class="section"><div class="section-head"><h2>⚡ Flash deals</h2><span class="countdown">Ends in <b id="cd-h">00</b>:<b id="cd-m">00</b>:<b id="cd-s">00</b></span>
@@ -170,7 +190,7 @@ async function pageProduct(id) {
   view.innerHTML = `
     <div class="meta" style="margin-bottom:10px"><a href="#/">Home</a> › <a href="#/c/${p.category_id}">${esc(p.category_name)}</a> › ${esc(p.product_name)}</div>
     <div class="pdp section">
-      <div>${productArt(p, "xl")}</div>
+      <div>${productArt(p, "xl")}<div id="credit"></div></div>
       <div>
         <h1>${esc(p.product_name)}</h1>
         <div class="meta" style="margin:6px 0 12px">${stars(p.rating)} ${p.rating || "No ratings yet"} · ${int(p.review_count)} ratings · ${int(p.sold)} sold · SKU ${esc(p.sku)}</div>
@@ -196,6 +216,7 @@ async function pageProduct(id) {
       </aside>
     </div>
     ${p.related.length ? `<div class="section"><div class="section-head"><h2>More from ${esc(p.category_name)}</h2></div><div class="hscroll">${p.related.map(card).join("")}</div></div>` : ""}`;
+  photoCredit(p).then((html) => { if ($("#credit")) $("#credit").innerHTML = html; });
   const setQty = (d) => { qty = Math.max(1, Math.min(20, Math.min(p.stock, qty + d))); $("#qty").textContent = qty; };
   $("#minus").onclick = () => setQty(-1);
   $("#plus").onclick = () => setQty(1);

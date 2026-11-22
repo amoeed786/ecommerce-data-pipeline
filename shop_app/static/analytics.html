@@ -3,158 +3,269 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ShopLite Analytics</title>
+  <title>Business intelligence · Kartora</title>
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
-    .delta { font-size: 12px; font-weight: 600; }
+    .bi-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .fresh { display: inline-flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 12px; }
+    .fresh::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
+    .bi-nav { position: sticky; top: 57px; z-index: 12; background: var(--bg); padding: 8px 0; margin-bottom: 8px; display: flex; gap: 6px; overflow-x: auto; }
+    .bi-nav a { padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--text); white-space: nowrap; font-size: 13px; }
+    .bi-nav a.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .bi-section { scroll-margin-top: 110px; margin-bottom: 28px; }
+    .bi-section > h2 { font-size: 20px; margin: 4px 0 4px; }
+    .insight { background: var(--accent-soft); border-left: 4px solid var(--accent); border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 8px 0 14px; font-size: 14px; }
+    .insight b { color: var(--accent-strong); }
+    .chart-card h3 { font-size: 15px; margin: 0; }
+    .chart-card .how { font-size: 12px; color: var(--muted); margin: 2px 0 10px; }
+    .chart-box.tall { height: 300px; }
+    .kpi .delta { font-size: 12px; font-weight: 600; }
     .delta.up { color: var(--good); } .delta.down { color: var(--bad); }
-    .heat td.cell { text-align: center; font-variant-numeric: tabular-nums; font-size: 12px; }
-    .source { font-size: 12px; color: var(--muted); }
+    .kpi .help { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .heat td.cell { text-align: center; font-variant-numeric: tabular-nums; font-size: 12px; min-width: 52px; }
+    .bar-cell { position: relative; min-width: 140px; }
+    .bar-cell i { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 8px; border-radius: 4px; background: var(--accent); opacity: .25; }
+    .bar-cell span { position: relative; }
+    .seg-list { display: grid; gap: 8px; }
+    .seg { display: grid; grid-template-columns: 150px 1fr 90px; gap: 10px; align-items: center; font-size: 13px; }
+    .seg .track { height: 10px; background: var(--bg); border-radius: 5px; overflow: hidden; }
+    .seg .fill { height: 100%; background: var(--accent); border-radius: 5px; }
+    .seg .act { grid-column: 1 / -1; font-size: 12px; color: var(--muted); margin: -4px 0 4px; }
+    .source { font-size: 11px; color: var(--muted); margin-top: 8px; }
   </style>
 </head>
 <body>
 <header></header>
-
 <main>
-  <div class="row" style="justify-content:space-between; margin-bottom:6px"><h1>Business analytics</h1>
-    <span class="row"><span class="muted small" id="built"></span><button id="reload" class="small">Reload</button></span></div>
-  <p class="muted small" style="margin-top:0">Built from the <b>gold layer</b> (<code>data_lake/gold/*.parquet</code>, made by dbt). It's as fresh as the
-    last pipeline run - refresh it from Admin → Simulator &amp; pipeline (Extract → Build silver → dbt build → Export gold) or let Dagster's schedule do it.
-    For second-by-second numbers, see <a href="/dashboard">Dashboard</a>.</p>
+  <div class="bi-head">
+    <div><h1>Business intelligence</h1><div class="muted small">From the gold layer (dbt star schema), rebuilt automatically after new orders arrive.</div></div>
+    <span class="fresh" id="fresh">loading…</span>
+  </div>
+  <nav class="bi-nav" id="bi-nav">
+    <a href="#overview" class="on">Overview</a><a href="#sales">Sales</a><a href="#customers">Customers</a>
+    <a href="#products">Products &amp; categories</a><a href="#sellers">Sellers</a><a href="#delivery">Delivery</a>
+  </nav>
   <div id="error" class="card hidden" style="border-color: var(--bad)"></div>
 
-  <div class="kpis" id="kpis"></div>
+  <section class="bi-section" id="overview">
+    <h2>Overview · last 30 days</h2>
+    <div class="insight" id="ins-overview"></div>
+    <div class="kpis" id="kpis"></div>
+  </section>
 
-  <div class="grid cols-2" style="margin-bottom:16px">
-    <div class="card"><h2>Revenue: last 90 days + 30-day forecast</h2><div class="chart-box" style="height:280px"><canvas id="c-forecast"></canvas></div>
-      <p class="source">mart_revenue_forecast · linear trend × weekday seasonality</p></div>
-    <div class="card"><h2>Customer segments (RFM)</h2><div class="chart-box" style="height:280px"><canvas id="c-rfm"></canvas></div>
-      <p class="source">mart_customer_rfm · recency, frequency, monetary scored 1–5</p></div>
-  </div>
+  <section class="bi-section" id="sales">
+    <h2>Sales</h2>
+    <div class="insight" id="ins-sales"></div>
+    <div class="card chart-card" style="margin-bottom:16px"><h3>Revenue per day, with the 7-day trend and a 30-day forecast</h3>
+      <p class="how">Bars are each day's revenue. The solid line smooths out weekdays; the dashed line is the forecast (trend × typical weekday).</p>
+      <div class="chart-box tall"><canvas id="c-revenue"></canvas></div><p class="source">mart_daily_sales · mart_revenue_forecast</p></div>
+    <div class="grid cols-even">
+      <div class="card chart-card"><h3>Orders per day</h3><p class="how">Orders that count as revenue (not cancelled or returned).</p>
+        <div class="chart-box"><canvas id="c-orders"></canvas></div></div>
+      <div class="card chart-card"><h3>Average order value per day</h3><p class="how">Revenue ÷ orders. Spikes usually mean one big basket.</p>
+        <div class="chart-box"><canvas id="c-aov"></canvas></div></div>
+    </div>
+  </section>
 
-  <div class="grid cols-2" style="margin-bottom:16px">
-    <div class="card"><h2>Revenue by category per month</h2><div class="chart-box" style="height:280px"><canvas id="c-category"></canvas></div>
-      <p class="source">mart_category_monthly</p></div>
-    <div class="card"><h2>Cohort retention</h2>
-      <p class="muted small" style="margin:0 0 8px">Of the customers whose first order was in a month, the share who ordered again N months later.</p>
-      <div class="table-wrap"><table class="heat" id="cohorts"></table></div>
-      <p class="source">mart_cohort_retention</p></div>
-  </div>
+  <section class="bi-section" id="customers">
+    <h2>Customers</h2>
+    <div class="insight" id="ins-customers"></div>
+    <div class="grid cols-even" style="margin-bottom:16px">
+      <div class="card chart-card"><h3>Who brings the revenue (RFM segments)</h3>
+        <p class="how">Customers scored on how recently, how often and how much they buy. Bar = share of all revenue. Under each: what to do.</p>
+        <div class="seg-list" id="segments"></div><p class="source">mart_customer_rfm</p></div>
+      <div class="card chart-card"><h3>Do new customers come back? (cohort retention)</h3>
+        <p class="how">Each row is the month customers first ordered. Columns show the share who ordered again 1, 2, 3… months later. Darker = more loyal.</p>
+        <div class="table-wrap"><table class="heat" id="cohorts"></table></div><p class="source">mart_cohort_retention</p></div>
+    </div>
+    <div class="card chart-card"><h3>Most valuable customers</h3><p class="how">Lifetime spend so far, and a simple projection for the next 12 months.</p>
+      <div class="table-wrap" id="customers-table"></div><p class="source">mart_customer_ltv</p></div>
+  </section>
 
-  <div class="grid cols-2" style="margin-bottom:16px">
-    <div class="card"><h2>Where delivery time goes · last 30 days</h2><div class="chart-box" style="height:280px"><canvas id="c-delivery"></canvas></div>
-      <p class="source">mart_delivery_daily · average minutes per stage, per day</p></div>
-    <div class="card"><h2>Vendor leaderboard · last 30 days</h2><div class="table-wrap" id="vendors"></div><p class="source">mart_vendor_performance</p></div>
-  </div>
+  <section class="bi-section" id="products">
+    <h2>Products &amp; categories</h2>
+    <div class="insight" id="ins-products"></div>
+    <div class="grid cols-even" style="margin-bottom:16px">
+      <div class="card chart-card"><h3>Revenue by category · last 30 days</h3><p class="how">Each category keeps the same color everywhere on this page.</p>
+        <div class="chart-box tall"><canvas id="c-cat30"></canvas></div></div>
+      <div class="card chart-card"><h3>Category revenue per month</h3><p class="how">Stacked: the full bar is the month's revenue, segments are categories.</p>
+        <div class="chart-box tall"><canvas id="c-catmonth"></canvas></div><p class="source">mart_category_monthly</p></div>
+    </div>
+    <div class="card chart-card"><h3>Top 10 products</h3><p class="how">Ranked by revenue. Margin = profit after product cost; returns = share of orders sent back.</p>
+      <div class="table-wrap" id="products-table"></div><p class="source">mart_product_performance</p></div>
+  </section>
 
-  <div class="grid cols-even">
-    <div class="card"><h2>Top products</h2><div class="table-wrap" id="products"></div><p class="source">mart_product_performance</p></div>
-    <div class="card"><h2>Most valuable customers</h2><div class="table-wrap" id="customers"></div><p class="source">mart_customer_ltv + mart_customer_rfm</p></div>
-  </div>
+  <section class="bi-section" id="sellers">
+    <h2>Sellers</h2>
+    <div class="insight" id="ins-sellers"></div>
+    <div class="card chart-card"><h3>Seller leaderboard · last 30 days</h3><p class="how">Prep = time from confirmation to packed. To door = confirmation to delivered.</p>
+      <div class="table-wrap" id="sellers-table"></div><p class="source">mart_vendor_performance</p></div>
+  </section>
+
+  <section class="bi-section" id="delivery">
+    <h2>Delivery</h2>
+    <div class="insight" id="ins-delivery"></div>
+    <div class="grid cols-even">
+      <div class="card chart-card"><h3>Where the time goes · typical parcel, last 30 days</h3><p class="how">Median minutes for each step - the longest bar is the one to fix first.</p>
+        <div class="chart-box tall"><canvas id="c-stages"></canvas></div><p class="source">fct_shipments</p></div>
+      <div class="card chart-card"><h3>Parcels delivered per day</h3><p class="how">How much the rider fleet delivers each day.</p>
+        <div class="chart-box tall"><canvas id="c-deliveries"></canvas></div><p class="source">mart_delivery_daily</p></div>
+    </div>
+  </section>
 </main>
 
 <script src="/static/common.js"></script>
 <script>
+// ---- chart theme: reference palette (colorblind-validated), selected per light/dark mode ----
+const dark = matchMedia("(prefers-color-scheme: dark)").matches;
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-Chart.defaults.color = css("--muted"); Chart.defaults.borderColor = css("--line");
+const SERIES = dark ? ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#0ca30c", "#9085e9", "#e66767"]
+                    : ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+const BLUE_RAMP = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95"];
+const BRAND_C = css("--accent"), DEAL_C = css("--deal"), MUTED = dark ? "#898781" : "#898781";
+Chart.defaults.color = MUTED; Chart.defaults.borderColor = dark ? "#2c2c2a" : "#e1e0d9";
 Chart.defaults.font.family = getComputedStyle(document.body).fontFamily; Chart.defaults.maintainAspectRatio = false;
-const ACCENT = css("--accent");
-const PALETTE = ["#2f6fed", "#1f9d55", "#e0a526", "#7c5ce0", "#d64545", "#13a3b5", "#e0679b", "#8a93a6"];
-const SEGMENT_COLORS = { "Champions": "#1f9d55", "Loyal": "#2f6fed", "Potential loyalist": "#13a3b5", "New customer": "#7c5ce0",
-  "Needs attention": "#e0a526", "At risk": "#e07b39", "Cannot lose them": "#d64545", "Hibernating": "#8a93a6" };
-const pct = (v) => (v == null ? "–" : (v * 100).toFixed(1) + "%");
-const kMoney = (v) => "$" + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(v >= 100000 ? 0 : 1) + "k" : Math.round(v));
+Chart.defaults.plugins.legend.display = false;
+Chart.defaults.plugins.tooltip.padding = 10; Chart.defaults.interaction = { mode: "index", intersect: false };
+const CATEGORIES = ["Beauty", "Books", "Electronics", "Fashion", "Grocery", "Home & Kitchen", "Sports", "Toys"];  // fixed order = fixed color
+const catColor = (c) => SERIES[CATEGORIES.indexOf(c) % SERIES.length] || MUTED;
+const pct = (v, d = 1) => (v == null || isNaN(v) ? "–" : (v * 100).toFixed(d) + "%");
+const kMoney = (v) => "$" + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(Math.abs(v) >= 100000 ? 0 : 1) + "k" : Math.round(v));
+const day = (d) => new Date(d + "T00:00").toLocaleDateString([], { month: "short", day: "numeric" });
+const mins = (m) => (m == null ? "–" : m < 1 ? `${Math.round(m * 60)} s` : m < 90 ? `${m.toFixed(m < 10 ? 1 : 0)} min` : m < 2880 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} days`);
 const charts = {};
-
-function delta(cur, prev) {
-  if (!prev) return "";
-  const d = cur / prev - 1;
-  return `<span class="delta ${d >= 0 ? "up" : "down"}">${d >= 0 ? "▲" : "▼"} ${(Math.abs(d) * 100).toFixed(1)}% vs prev 30d</span>`;
-}
-
 function chart(id, config) { charts[id]?.destroy(); charts[id] = new Chart($(id), config); }
+const barStyle = { borderRadius: 4, borderSkipped: "start", borderWidth: 0, maxBarThickness: 28 };
+const SEG_ACTION = {
+  "Champions": "Reward them - early access, loyalty perks.", "Loyal": "Upsell - bundles and recommendations.",
+  "Potential loyalist": "Nudge to a second category with a coupon.", "New customer": "Welcome series - make the 2nd order easy.",
+  "Needs attention": "Personal offer before they drift away.", "At risk": "Win-back email with a time-limited discount.",
+  "Cannot lose them": "Big spenders going quiet - reach out directly.", "Hibernating": "Low-cost reminders only.",
+};
 
 async function load() {
   let a;
   try { a = await api("/api/analytics"); $("#error").classList.add("hidden"); }
   catch (e) { $("#error").classList.remove("hidden"); $("#error").textContent = e.message; return; }
-  $("#built").textContent = `gold built ${fmtDateTime(a.built_at)} (${ago(a.built_at)}) · auto-refreshes`;
+  $("#fresh").textContent = `gold refreshed ${ago(a.built_at)} · auto-updates`;
+  const k = a.kpis, revDelta = k.revenue_prev_30d ? k.revenue_30d / k.revenue_prev_30d - 1 : null;
+  const ordDelta = k.orders_prev_30d ? k.orders_30d / k.orders_prev_30d - 1 : null;
+  const cat = a.category_30d, catTotal = cat.reduce((s, c) => s + c.revenue, 0);
+  const champs = a.rfm_value.find((r) => r.segment === "Champions"), rfmTotal = a.rfm_value.reduce((s, r) => s + r.revenue, 0);
+  const topSeller = a.vendors[0];
+  const recentDeliv = a.delivery.slice(-7).filter((d) => d.avg_total_minutes != null);
+  const medDoor = recentDeliv.length ? recentDeliv.reduce((s, d) => s + d.avg_total_minutes, 0) / recentDeliv.length : null;
+  const arrow = (d) => (d == null ? "" : `<span class="delta ${d >= 0 ? "up" : "down"}">${d >= 0 ? "▲" : "▼"} ${pct(Math.abs(d))} vs previous 30 days</span>`);
 
-  const k = a.kpis;
+  // ---- overview
+  $("#ins-overview").innerHTML = `Revenue was <b>${money(k.revenue_30d)}</b> in the last 30 days${revDelta != null ? `, <b>${revDelta >= 0 ? "up" : "down"} ${pct(Math.abs(revDelta))}</b> on the month before` : ""}.
+    ${cat[0] ? `<b>${esc(cat[0].category_name)}</b> led with ${pct(cat[0].revenue / catTotal, 0)} of sales` : ""}${topSeller ? ` and <b>${esc(topSeller.vendor_name)}</b> was the top seller` : ""}.
+    ${champs ? `Your <b>${int(champs.customers)} Champions</b> bring ${pct(champs.revenue / rfmTotal, 0)} of all revenue.` : ""}`;
   const tiles = [
-    ["Revenue · last 30 days", money(k.revenue_30d), delta(k.revenue_30d, k.revenue_prev_30d)],
-    ["Orders · last 30 days", int(k.orders_30d), delta(k.orders_30d, k.orders_prev_30d)],
-    ["Avg order value", money(k.revenue_30d / k.orders_30d), ""],
-    ["Gross margin", pct(k.margin_30d / k.revenue_30d), money(k.margin_30d) + " profit"],
-    ["Cancelled + returned", pct(k.lost_orders_30d / k.all_orders_30d), int(k.lost_orders_30d) + " orders"],
+    ["Revenue", money(k.revenue_30d), arrow(revDelta), "excludes cancelled & returned orders"],
+    ["Orders", int(k.orders_30d), arrow(ordDelta), "orders that count as revenue"],
+    ["Average order value", money(k.revenue_30d / k.orders_30d), "", "revenue ÷ orders"],
+    ["Gross margin", pct(k.margin_30d / k.revenue_30d), `<span class="muted small">${money(k.margin_30d)} profit</span>`, "after product cost"],
+    ["Cancelled + returned", pct(k.lost_orders_30d / k.all_orders_30d), `<span class="muted small">${int(k.lost_orders_30d)} orders</span>`, "lower is better"],
+    ["Time to door", mins(medDoor), "", "avg confirmation → delivered, last 7 days"],
   ];
-  $("#kpis").innerHTML = tiles.map(([l, v, s]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="small muted">${s}</div></div>`).join("");
+  $("#kpis").innerHTML = tiles.map(([l, v, d, h]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div>${d}</div><div class="help">${h}</div></div>`).join("");
 
-  const days = a.forecast.map((r) => new Date(r.date_day + "T00:00").toLocaleDateString([], { month: "short", day: "numeric" }));
-  chart("#c-forecast", { type: "line", data: { labels: days, datasets: [
-      { label: "Actual", data: a.forecast.map((r) => r.revenue), borderColor: ACCENT, backgroundColor: ACCENT + "22", fill: true, pointRadius: 0, tension: .25 },
-      { label: "Forecast", data: a.forecast.map((r) => r.forecast), borderColor: css("--warn"), borderDash: [6, 4], pointRadius: 0, tension: .25 }] },
-    options: { plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true, ticks: { callback: kMoney } }, x: { ticks: { maxTicksLimit: 10 }, grid: { display: false } } } } });
+  // ---- sales
+  const daily = a.daily, fc = a.forecast.filter((r) => r.kind === "forecast");
+  const labels = [...daily.map((d) => d.date_day), ...fc.map((f) => f.date_day)];
+  const bestDay = daily.reduce((b, d) => (d.revenue > (b?.revenue || 0) ? d : b), null);
+  const fcTotal = fc.reduce((s, f) => s + (f.forecast || 0), 0);
+  $("#ins-sales").innerHTML = `The best day in the last 90 was <b>${bestDay ? day(bestDay.date_day) : "–"}</b> (${money(bestDay?.revenue)}).
+    The forecast expects about <b>${money(fcTotal)}</b> over the next 30 days.`;
+  chart("#c-revenue", { data: { labels: labels.map(day), datasets: [
+      { type: "bar", label: "Revenue", data: [...daily.map((d) => d.revenue), ...fc.map(() => null)], backgroundColor: BRAND_C + "55", ...barStyle },
+      { type: "line", label: "7-day average", data: [...daily.map((d) => d.revenue_7d_avg), ...fc.map(() => null)], borderColor: BRAND_C, borderWidth: 2, pointRadius: 0, tension: .3 },
+      { type: "line", label: "Forecast", data: [...daily.map(() => null), ...fc.map((f) => f.forecast)], borderColor: DEAL_C, borderWidth: 2, borderDash: [6, 4], pointRadius: 0, tension: .3 }] },
+    options: { plugins: { legend: { display: true, labels: { boxWidth: 12 } }, tooltip: { callbacks: { label: (c) => c.raw == null ? null : `${c.dataset.label}: ${money(c.raw)}` } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: kMoney } }, x: { ticks: { maxTicksLimit: 12 }, grid: { display: false } } } } });
+  chart("#c-orders", { type: "bar", data: { labels: daily.map((d) => day(d.date_day)), datasets: [{ label: "Orders", data: daily.map((d) => d.revenue_orders), backgroundColor: BRAND_C, ...barStyle }] },
+    options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } } } } });
+  chart("#c-aov", { type: "line", data: { labels: daily.map((d) => day(d.date_day)), datasets: [{ label: "Avg order value", data: daily.map((d) => d.avg_order_value), borderColor: BRAND_C, borderWidth: 2, pointRadius: 0, tension: .3 }] },
+    options: { plugins: { tooltip: { callbacks: { label: (c) => `Avg order value: ${money(c.raw)}` } } }, scales: { y: { beginAtZero: true, ticks: { callback: kMoney } }, x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } } } } });
 
-  chart("#c-rfm", { type: "bar", data: { labels: a.rfm.map((r) => r.segment), datasets: [
-      { data: a.rfm.map((r) => r.customers), backgroundColor: a.rfm.map((r) => SEGMENT_COLORS[r.segment] || ACCENT), borderRadius: 4 }] },
-    options: { indexAxis: "y", plugins: { legend: { display: false }, tooltip: { callbacks: {
-      afterLabel: (c) => `avg spend ${money(a.rfm[c.dataIndex].avg_spend)} · last order ~${a.rfm[c.dataIndex].avg_recency} days ago` } } },
-      scales: { y: { grid: { display: false } } } } });
-
-  const months = [...new Set(a.category_monthly.map((r) => r.year_month))];
-  const cats = [...new Set(a.category_monthly.map((r) => r.category_name))];
-  chart("#c-category", { type: "bar", data: { labels: months, datasets: cats.map((c, i) => ({
-      label: c, backgroundColor: PALETTE[i % PALETTE.length],
-      data: months.map((m) => a.category_monthly.find((r) => r.year_month === m && r.category_name === c)?.revenue || 0) })) },
-    options: { plugins: { legend: { display: true, position: "bottom", labels: { boxWidth: 12 } } },
-      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, ticks: { callback: kMoney } } } } });
-
-  // cohort heatmap: rows = cohort, columns = months since first order
-  const cohorts = [...new Set(a.cohorts.map((r) => r.cohort))];
-  const maxM = Math.max(...a.cohorts.map((r) => r.months_since_first));
-  const cell = (v) => v == null ? `<td class="cell"></td>`
-    : `<td class="cell" style="background: rgba(47,111,237,${(0.08 + v * 0.85).toFixed(2)}); color:${v > .5 ? "#fff" : "inherit"}">${pct(v)}</td>`;
-  $("#cohorts").innerHTML = `<thead><tr><th>Cohort</th><th class="num">Size</th>${[...Array(maxM + 1).keys()].map((m) => `<th class="num">M${m}</th>`).join("")}</tr></thead><tbody>${
+  // ---- customers
+  const atRisk = a.rfm_value.filter((r) => ["At risk", "Cannot lose them"].includes(r.segment)).reduce((s, r) => s + r.customers, 0);
+  $("#ins-customers").innerHTML = `${champs ? `<b>${int(champs.customers)}</b> Champions buy ~${champs.avg_orders} times each.` : ""}
+    <b>${int(atRisk)}</b> good customers are at risk of leaving - the win-back list. About <b>${pct(avgM1(a.cohorts), 0)}</b> of new customers order again the next month.`;
+  const maxRev = Math.max(...a.rfm_value.map((r) => r.revenue));
+  $("#segments").innerHTML = a.rfm_value.map((r) => `<div class="seg"><b>${esc(r.segment)}</b>
+      <div class="track" title="${pct(r.revenue / rfmTotal)} of revenue"><div class="fill" style="width:${(r.revenue / maxRev) * 100}%"></div></div>
+      <span class="num small">${pct(r.revenue / rfmTotal, 0)} · ${int(r.customers)}</span><div class="act">→ ${SEG_ACTION[r.segment] || ""}</div></div>`).join("");
+  const cohorts = [...new Set(a.cohorts.map((r) => r.cohort))], maxM = Math.max(...a.cohorts.map((r) => r.months_since_first));
+  const cell = (v) => {
+    if (v == null) return `<td class="cell"></td>`;
+    const step = Math.min(BLUE_RAMP.length - 1, Math.round(v * (BLUE_RAMP.length - 1) / 0.7));
+    return `<td class="cell" style="background:${BLUE_RAMP[step]}; color:${step > 5 ? "#fff" : "#0b0b0b"}" title="${pct(v)} ordered again">${pct(v, 0)}</td>`;
+  };
+  $("#cohorts").innerHTML = `<thead><tr><th>First order</th><th class="num">Customers</th>${[...Array(maxM + 1).keys()].map((m) => `<th class="num">${m === 0 ? "Start" : "+" + m + " mo"}</th>`).join("")}</tr></thead><tbody>${
     cohorts.map((c) => { const rows = a.cohorts.filter((r) => r.cohort === c);
       return `<tr><td>${c}</td><td class="num">${rows[0].cohort_size}</td>${[...Array(maxM + 1).keys()].map((m) => cell(rows.find((r) => r.months_since_first === m)?.retention_pct)).join("")}</tr>`; }).join("")}</tbody>`;
-
-  $("#products").innerHTML = `<table><thead><tr><th>#</th><th>Product</th><th class="num">Units</th><th class="num">Revenue</th><th class="num">Margin</th><th class="num">Returns</th><th class="num">Stock</th></tr></thead><tbody>${
-    a.top_products.map((p) => `<tr><td>${p.revenue_rank}</td><td>${esc(p.product_name)}<div class="muted small">${esc(p.category_name)} · ${money(p.current_price)}</div></td>
-      <td class="num">${int(p.units_sold)}</td><td class="num">${money(p.revenue)}</td><td class="num">${pct(p.margin_pct)}</td>
-      <td class="num">${pct(p.return_rate)}</td><td class="num ${p.stock < 20 ? "stock-low" : ""}">${int(p.stock)}</td></tr>`).join("")}</tbody></table>`;
-
-  $("#customers").innerHTML = `<table><thead><tr><th>Customer</th><th>Segment</th><th class="num">Orders</th><th class="num">Lifetime value</th><th class="num">Next 12 mo (est.)</th></tr></thead><tbody>${
-    a.top_customers.map((c) => `<tr><td>${esc(c.full_name)}<div class="muted small">#${c.customer_id} · ${esc(c.country)}</div></td>
-      <td><span class="badge" style="background:${SEGMENT_COLORS[c.segment] || "var(--line)"};color:#fff">${esc(c.segment || "–")}</span></td>
+  $("#customers-table").innerHTML = `<table><thead><tr><th>Customer</th><th>Segment</th><th class="num">Orders</th><th class="num">Lifetime spend</th><th class="num">Next 12 months (est.)</th></tr></thead><tbody>${
+    a.top_customers.map((c) => `<tr><td><b>${esc(c.full_name)}</b><div class="muted small">#${c.customer_id} · ${esc(c.country)}</div></td><td><span class="badge">${esc(c.segment || "–")}</span></td>
       <td class="num">${int(c.orders)}</td><td class="num">${money(c.historical_ltv)}</td><td class="num">${money(c.predicted_12m_revenue)}</td></tr>`).join("")}</tbody></table>`;
-  renderMarketplace(a);
-}
-function renderMarketplace(a) {
-  if (!a.delivery.length) { $("#vendors").innerHTML = `<p class="muted">Run the pipeline to build the marketplace marts.</p>`; return; }
-  const d = a.delivery.slice(-30);
-  const stages = [["avg_accept_minutes", "Store accepts", "#2f6fed"], ["avg_pack_minutes", "Packing", "#e0a526"],
-                  ["avg_wait_rider_minutes", "Waiting for rider", "#d64545"], ["avg_pickup_minutes", "Rider to store", "#7c5ce0"], ["avg_ride_minutes", "In transit to customer", "#1f9d55"]];
-  chart("#c-delivery", { type: "bar", data: { labels: d.map((r) => new Date(r.date_day + "T00:00").toLocaleDateString([], { month: "short", day: "numeric" })),
-    datasets: stages.map(([k, l, c]) => ({ label: l, data: d.map((r) => r[k]), backgroundColor: c })) },
-    options: { plugins: { legend: { display: true, position: "bottom", labels: { boxWidth: 12 } } },
-      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, title: { display: true, text: "minutes" } } } } });
-  $("#vendors").innerHTML = `<table><thead><tr><th>Store</th><th class="num">Revenue</th><th class="num">Parcels</th><th class="num">Avg prep</th><th class="num">Avg to door</th><th class="num">Cancel</th><th class="num">Returns</th></tr></thead><tbody>${
-    a.vendors.map((v) => `<tr><td>${esc(v.vendor_name)}<div class="muted small">${stars(v.rating)}</div></td><td class="num">${money(v.revenue_30d)}</td>
-      <td class="num">${int(v.shipments_30d)}</td><td class="num">${v.avg_prep_minutes == null ? "–" : Math.round(v.avg_prep_minutes) + " min"}</td>
-      <td class="num">${v.avg_delivery_minutes == null ? "–" : (v.avg_delivery_minutes / 60).toFixed(1) + " h"}</td>
-      <td class="num">${pct(v.cancel_rate)}</td><td class="num">${pct(v.return_rate)}</td></tr>`).join("")}</tbody></table>`;
-}
-$("#reload").onclick = () => load();
-renderPortalHeader("analytics").then(() => { $("#live")?.remove(); load(); });  // gold isn't live - no stream here
 
-// The automatic pipeline rebuilds gold after new entries; reload the page's data when that happens.
+  // ---- products & categories
+  const topP = a.top_products[0];
+  $("#ins-products").innerHTML = `${cat[0] ? `<b>${esc(cat[0].category_name)}</b> is the biggest category this month (${money(cat[0].revenue)}); ` : ""}
+    ${topP ? `<b>${esc(topP.product_name)}</b> is the #1 product with ${money(topP.revenue)} lifetime revenue at a ${pct(topP.margin_pct, 0)} margin.` : ""}`;
+  chart("#c-cat30", { type: "bar", data: { labels: cat.map((c) => c.category_name), datasets: [{ label: "Revenue", data: cat.map((c) => c.revenue),
+      backgroundColor: cat.map((c) => catColor(c.category_name)), ...barStyle }] },
+    options: { indexAxis: "y", plugins: { tooltip: { callbacks: { label: (c) => `${money(c.raw)} · ${pct(c.raw / catTotal, 0)} of sales` } } },
+      scales: { x: { ticks: { callback: kMoney } }, y: { grid: { display: false } } } } });
+  const months = [...new Set(a.category_monthly.map((r) => r.year_month))];
+  chart("#c-catmonth", { type: "bar", data: { labels: months, datasets: CATEGORIES.map((c) => ({ label: c, backgroundColor: catColor(c),
+      data: months.map((m) => a.category_monthly.find((r) => r.year_month === m && r.category_name === c)?.revenue || 0), borderColor: css("--panel"), borderWidth: { top: 2 }, maxBarThickness: 46 })) },
+    options: { plugins: { legend: { display: true, position: "bottom", labels: { boxWidth: 12 } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${money(c.raw)}` } } },
+      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, ticks: { callback: kMoney } } } } });
+  const maxPR = Math.max(...a.top_products.map((p) => p.revenue));
+  $("#products-table").innerHTML = `<table><thead><tr><th>#</th><th>Product</th><th>Revenue</th><th class="num">Units</th><th class="num">Margin</th><th class="num">Returns</th><th class="num">Stock</th></tr></thead><tbody>${
+    a.top_products.map((p) => `<tr><td>${p.revenue_rank}</td><td><b>${esc(p.product_name)}</b><div class="small"><span style="color:${catColor(p.category_name)}">●</span> ${esc(p.category_name)} · ${money(p.current_price)}</div></td>
+      <td class="bar-cell"><i style="width:${(p.revenue / maxPR) * 100}%"></i><span>${money(p.revenue)}</span></td><td class="num">${int(p.units_sold)}</td>
+      <td class="num">${pct(p.margin_pct, 0)}</td><td class="num">${pct(p.return_rate)}</td><td class="num ${p.stock < 20 ? "stock-low" : ""}">${int(p.stock)}</td></tr>`).join("")}</tbody></table>`;
+
+  // ---- sellers
+  const v = a.vendors, vTotal = v.reduce((s, x) => s + x.revenue_30d, 0), fastest = [...v].filter((x) => x.avg_prep_minutes != null).sort((x, y) => x.avg_prep_minutes - y.avg_prep_minutes)[0];
+  $("#ins-sellers").innerHTML = v.length ? `<b>${esc(v[0].vendor_name)}</b> earned ${pct(v[0].revenue_30d / vTotal, 0)} of marketplace revenue this month.
+    ${fastest ? `<b>${esc(fastest.vendor_name)}</b> packs fastest (${mins(fastest.avg_prep_minutes)} on average).` : ""}` : "Run the pipeline to build seller metrics.";
+  const maxV = Math.max(...v.map((x) => x.revenue_30d), 1);
+  $("#sellers-table").innerHTML = `<table><thead><tr><th>#</th><th>Seller</th><th>Revenue</th><th class="num">Parcels</th><th class="num">Avg prep</th><th class="num">Avg to door</th><th class="num">Cancelled</th><th class="num">Returned</th></tr></thead><tbody>${
+    v.map((x) => `<tr><td>${x.revenue_rank}</td><td><b>${esc(x.vendor_name)}</b><div class="small">${stars(x.rating)} ${x.is_autopilot ? "· autopilot" : "· run by a person"}</div></td>
+      <td class="bar-cell"><i style="width:${(x.revenue_30d / maxV) * 100}%"></i><span>${money(x.revenue_30d)}</span></td><td class="num">${int(x.shipments_30d)}</td>
+      <td class="num">${mins(x.avg_prep_minutes)}</td><td class="num">${mins(x.avg_delivery_minutes)}</td><td class="num">${pct(x.cancel_rate)}</td><td class="num">${pct(x.return_rate)}</td></tr>`).join("")}</tbody></table>`;
+
+  // ---- delivery
+  const st = a.stage_median.filter((s) => s.minutes != null), slowest = [...st].sort((x, y) => y.minutes - x.minutes)[0];
+  const d30 = a.delivery.slice(-30);
+  $("#ins-delivery").innerHTML = `${slowest ? `The slowest step for a typical parcel is <b>${esc(slowest.stage.toLowerCase())}</b> (${mins(slowest.minutes)}).` : ""}
+    Riders delivered <b>${int(d30.reduce((s, d) => s + d.deliveries, 0))}</b> parcels in the last 30 days.
+    <span class="muted">(Older orders were imported with multi-day courier times; new marketplace orders are measured in minutes.)</span>`;
+  chart("#c-stages", { type: "bar", data: { labels: st.map((s) => s.stage), datasets: [{ label: "Median minutes", data: st.map((s) => s.minutes), backgroundColor: BRAND_C, ...barStyle }] },
+    options: { indexAxis: "y", plugins: { tooltip: { callbacks: { label: (c) => `typical: ${mins(c.raw)}` } } }, scales: { x: { type: "logarithmic", ticks: { callback: (val) => mins(val) } }, y: { grid: { display: false } } } } });
+  chart("#c-deliveries", { type: "bar", data: { labels: d30.map((d) => day(d.date_day)), datasets: [{ label: "Parcels delivered", data: d30.map((d) => d.deliveries), backgroundColor: SERIES[2], ...barStyle }] },
+    options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { ticks: { maxTicksLimit: 10 }, grid: { display: false } } } } });
+}
+function avgM1(cohorts) { const m1 = cohorts.filter((r) => r.months_since_first === 1); return m1.length ? m1.reduce((s, r) => s + r.retention_pct, 0) / m1.length : null; }
+
+// sticky section nav highlights where you are
+const obs = new IntersectionObserver((entries) => entries.forEach((e) => {
+  if (e.isIntersecting) $$("#bi-nav a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id));
+}), { rootMargin: "-40% 0px -55% 0px" });
+$$(".bi-section").forEach((s) => obs.observe(s));
+
+renderPortalHeader("business intelligence").then(() => { $("#live")?.remove(); load(); });
+// gold is rebuilt automatically after new orders: reload when it changes
 let lastBuilt = null;
 setInterval(async () => {
   try {
     const f = await api("/api/analytics/freshness");
-    if (lastBuilt && f.gold_built_at && f.gold_built_at !== lastBuilt) { await load(); toast("Analytics updated with the latest data", "good"); }
+    if (lastBuilt && f.gold_built_at && f.gold_built_at !== lastBuilt) { await load(); toast("Updated with the latest orders", "good"); }
     lastBuilt = f.gold_built_at;
   } catch {}
 }, 15000);

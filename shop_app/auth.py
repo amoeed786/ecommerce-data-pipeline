@@ -43,16 +43,19 @@ def _locked(email: str) -> bool:
     return len(recent) >= MAX_FAILS
 
 
-def login(email: str, password: str, response: Response) -> dict:
+def login(email: str, password: str, response: Response, expected_role: str | None = None) -> dict:
     email = email.strip().lower()
     if _locked(email):
         raise HTTPException(429, "Too many failed attempts. Try again in a few minutes.")
-    row = db.query_one("SELECT user_id, password_hash, is_active FROM dbo.users WHERE email = ?", email)
+    row = db.query_one("SELECT user_id, password_hash, is_active, role FROM dbo.users WHERE email = ?", email)
     if row is None or not verify_password(password, row["password_hash"]):
         _fails.setdefault(email, []).append(time.time())
         raise HTTPException(401, "Wrong email or password")  # same message either way: don't reveal which emails exist
     if not row["is_active"]:
         raise HTTPException(403, "This account is disabled")
+    if expected_role and row["role"] != expected_role:  # signed in on the wrong portal - point them to the right one
+        names = {"customer": "Shopper", "vendor": "Seller", "rider": "Rider", "admin": "Admin"}
+        raise HTTPException(403, f"This is a {names[row['role']]} account - choose “{names[row['role']]}” to sign in")
     _fails.pop(email, None)
     token = secrets.token_urlsafe(32)
     now = datetime.now().replace(microsecond=0)
@@ -99,6 +102,63 @@ def register_customer(first: str, last: str, email: str, password: str, city: st
         raise
     finally:
         conn.close()
+    return login(email, password, response)
+
+
+def _check_new_login(email: str, password: str) -> str:
+    email = email.strip().lower()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(400, "Please enter a valid email")
+    if len(password) < 8 or password.isalpha() or password.isdigit():
+        raise HTTPException(400, "Password must be at least 8 characters and mix letters with numbers or symbols")
+    if db.scalar("SELECT COUNT(*) FROM dbo.users WHERE email = ?", email):
+        raise HTTPException(400, "An account with this email already exists - try signing in")
+    return email
+
+
+def register_vendor(store_name: str, owner_name: str, email: str, password: str, city: str, country: str,
+                    tagline: str, response: Response) -> dict:
+    """A new seller opens a store. It starts with autopilot OFF: the seller handles orders in the seller center."""
+    store_name, owner_name = store_name.strip(), owner_name.strip()
+    if len(store_name) < 3 or not owner_name:
+        raise HTTPException(400, "Store name (3+ characters) and your name are required")
+    email = _check_new_login(email, password)
+    if db.scalar("SELECT COUNT(*) FROM dbo.vendors WHERE vendor_name = ?", store_name):
+        raise HTTPException(400, "That store name is taken - try another")
+    now = datetime.now().replace(microsecond=0)
+    with db.tx() as cur:
+        vid = cur.execute(
+            "INSERT INTO dbo.vendors (vendor_name, tagline, city, country, rating, is_bot, prep_seconds, created_at, "
+            "updated_at) OUTPUT INSERTED.vendor_id VALUES (?,?,?,?,5.0,0,30,?,?)",
+            store_name, tagline.strip() or None, city.strip() or None, country.strip() or None, now, now,
+        ).fetchval()
+        cur.execute(
+            "INSERT INTO dbo.users (email, password_hash, role, display_name, vendor_id, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?)", email, hash_password(password), "vendor", store_name, vid, now, now,
+        )
+    return login(email, password, response)
+
+
+def register_rider(full_name: str, email: str, password: str, phone: str, city: str, vehicle: str,
+                   response: Response) -> dict:
+    """A new rider joins. They start offline and go online in the rider app when ready."""
+    full_name = full_name.strip()
+    if not full_name:
+        raise HTTPException(400, "Your name is required")
+    if vehicle not in ("bike", "car", "van"):
+        raise HTTPException(400, "Vehicle must be bike, car or van")
+    email = _check_new_login(email, password)
+    now = datetime.now().replace(microsecond=0)
+    with db.tx() as cur:
+        rid = cur.execute(
+            "INSERT INTO dbo.riders (full_name, phone, city, vehicle, status, is_bot, created_at, updated_at) "
+            "OUTPUT INSERTED.rider_id VALUES (?,?,?,?, 'offline', 0, ?, ?)",
+            full_name, phone.strip() or None, city.strip() or None, vehicle, now, now,
+        ).fetchval()
+        cur.execute(
+            "INSERT INTO dbo.users (email, password_hash, role, display_name, rider_id, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?)", email, hash_password(password), "rider", full_name, rid, now, now,
+        )
     return login(email, password, response)
 
 

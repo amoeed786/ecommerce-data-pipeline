@@ -21,6 +21,12 @@ dbt_shop/.user.yml
 .dagster_home/
 orchestration/.dagster_home/
 
+# Product photos: downloaded by tools/fetch_product_images.py, uploaded by sellers
+shop_app/static/img/products/*
+!shop_app/static/img/products/.gitkeep
+shop_app/static/uploads/
+brand_photos/
+
 # Editors / OS
 .vscode/
 .idea/

@@ -30,7 +30,9 @@ from datetime import datetime
 from pathlib import Path
 
 import duckdb
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+import secrets
+
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -127,6 +129,26 @@ for path, file, roles in [
 class Login(BaseModel):
     email: str
     password: str
+    role: str | None = None  # the portal chosen on the sign-in page; a mismatch gets a helpful error
+
+
+class RegisterVendor(BaseModel):
+    store_name: str
+    owner_name: str
+    email: str
+    password: str
+    city: str = ""
+    country: str = ""
+    tagline: str = ""
+
+
+class RegisterRider(BaseModel):
+    full_name: str
+    email: str
+    password: str
+    phone: str = ""
+    city: str = ""
+    vehicle: str = "bike"
 
 
 class Register(BaseModel):
@@ -141,7 +163,19 @@ class Register(BaseModel):
 
 @app.post("/api/auth/login", tags=["auth"])
 def login(body: Login, response: Response):
-    return auth.login(body.email, body.password, response)
+    return auth.login(body.email, body.password, response, expected_role=body.role)
+
+
+@app.post("/api/auth/register/vendor", tags=["auth"])
+def register_vendor(body: RegisterVendor, response: Response):
+    return auth.register_vendor(body.store_name, body.owner_name, body.email, body.password,
+                                body.city, body.country, body.tagline, response)
+
+
+@app.post("/api/auth/register/rider", tags=["auth"])
+def register_rider(body: RegisterRider, response: Response):
+    return auth.register_rider(body.full_name, body.email, body.password, body.phone, body.city,
+                               body.vehicle, response)
 
 
 @app.post("/api/auth/register", tags=["auth"])
@@ -317,6 +351,45 @@ def vendor_action(shipment_id: int, action: str, user: dict = Depends(vendor)):
     with db.tx() as cur:
         fn(cur, shipment_id, vendor_id=user["vendor_id"])
     return {"ok": True}
+
+
+class Bulk(BaseModel):
+    shipment_ids: list[int] = Field(min_length=1, max_length=200)
+    action: str  # accept | ready | accept_ready
+
+
+@app.post("/api/vendor/shipments/bulk", tags=["vendor"])
+def vendor_bulk(body: Bulk, user: dict = Depends(vendor)):
+    return db.bulk_vendor_action(user["vendor_id"], body.shipment_ids, body.action)
+
+
+UPLOADS = STATIC / "uploads" / "products"
+IMAGE_TYPES = {b"\xff\xd8\xff": ".jpg", b"\x89PNG\r\n\x1a\n": ".png", b"RIFF": ".webp"}
+MAX_IMAGE_BYTES = 3 * 1024 * 1024
+
+
+async def save_product_image(product_id: int, file: UploadFile) -> str:
+    """Store an uploaded product photo. The file type is decided by its bytes, not its name or the
+    browser's claim, and the stored name is random - so an upload can never become a script or overwrite another."""
+    data = await file.read(MAX_IMAGE_BYTES + 1)
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(400, "Photo too large - 3 MB max")
+    ext = next((e for magic, e in IMAGE_TYPES.items() if data.startswith(magic)), None)
+    if ext is None or (ext == ".webp" and data[8:12] != b"WEBP"):
+        raise HTTPException(400, "Please upload a JPG, PNG or WebP photo")
+    UPLOADS.mkdir(parents=True, exist_ok=True)
+    name = f"{product_id}-{secrets.token_hex(8)}{ext}"
+    (UPLOADS / name).write_bytes(data)
+    url = f"/static/uploads/products/{name}"
+    db.set_product_image(product_id, url)
+    return url
+
+
+@app.post("/api/vendor/products/{product_id}/image", tags=["vendor"])
+async def vendor_product_image(product_id: int, file: UploadFile = File(...), user: dict = Depends(vendor)):
+    if not db.vendor_owns_product(user["vendor_id"], product_id):
+        raise HTTPException(404, "Product not found in your store")
+    return {"image_url": await save_product_image(product_id, file)}
 
 
 @app.get("/api/vendor/products", tags=["vendor"])
@@ -518,6 +591,11 @@ def admin_user_flags(user_id: int, body: Flags, me: dict = Depends(admin)):
     return {"ok": True}
 
 
+@app.post("/api/admin/products/{product_id}/image", tags=["admin"])
+async def admin_product_image(product_id: int, file: UploadFile = File(...), _: dict = Depends(admin)):
+    return {"image_url": await save_product_image(product_id, file)}
+
+
 @app.patch("/api/admin/products/{product_id}", tags=["admin"])
 def admin_update_product(product_id: int, body: ProductPatch, _: dict = Depends(admin)):
     db.update_product(product_id, body.unit_price, body.list_price, body.add_stock, body.is_active)
@@ -588,6 +666,23 @@ def gold_analytics(_: dict = Depends(admin)):
             ORDER BY l.historical_ltv DESC LIMIT 10"""),
         "vendors": q(f"SELECT * FROM {g('mart_vendor_performance')} ORDER BY revenue_30d DESC") if has("mart_vendor_performance") else [],
         "delivery": q(f"SELECT * FROM {g('mart_delivery_daily')} ORDER BY date_day") if has("mart_delivery_daily") else [],
+        "daily": q(f"""SELECT date_day, orders, revenue_orders, revenue, avg_order_value, margin_pct, revenue_7d_avg,
+                              cancelled_orders + returned_orders AS lost_orders
+                       FROM {g('mart_daily_sales')} WHERE date_day >= current_date - 90 AND date_day < current_date ORDER BY date_day"""),
+        "category_30d": q(f"""
+            SELECT p.category_name, sum(f.net_amount) AS revenue, sum(f.gross_margin) AS margin, sum(f.quantity) AS units
+            FROM {g('fct_order_items')} f JOIN {g('dim_product')} p USING (product_sk)
+            WHERE f.is_revenue AND f.order_ts >= current_date - 30 GROUP BY p.category_name ORDER BY revenue DESC"""),
+        "rfm_value": q(f"""SELECT segment, count(*) AS customers, sum(monetary) AS revenue, round(avg(frequency), 1) AS avg_orders
+                           FROM {g('mart_customer_rfm')} GROUP BY segment ORDER BY revenue DESC"""),
+        "stage_median": q(f"""
+            SELECT 'Waiting for approval' AS stage, 1 AS step, quantile_cont(minutes_to_confirm, 0.5) AS minutes FROM {g('fct_shipments')} WHERE created_at >= current_date - 30
+            UNION ALL SELECT 'Store accepts', 2, quantile_cont(minutes_to_accept, 0.5) FROM {g('fct_shipments')} WHERE created_at >= current_date - 30
+            UNION ALL SELECT 'Packing', 3, quantile_cont(minutes_to_pack, 0.5) FROM {g('fct_shipments')} WHERE created_at >= current_date - 30
+            UNION ALL SELECT 'Waiting for rider', 4, quantile_cont(minutes_waiting_rider, 0.5) FROM {g('fct_shipments')} WHERE created_at >= current_date - 30
+            UNION ALL SELECT 'Rider to store', 5, quantile_cont(minutes_to_pickup, 0.5) FROM {g('fct_shipments')} WHERE created_at >= current_date - 30
+            UNION ALL SELECT 'In transit to customer', 6, quantile_cont(minutes_ride, 0.5) FROM {g('fct_shipments')} WHERE created_at >= current_date - 30
+            ORDER BY step""") if has("fct_shipments") else [],
     }
 
 

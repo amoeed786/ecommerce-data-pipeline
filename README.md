@@ -24,6 +24,25 @@ SQL Server (ShopDB)  ->  Data lake (Parquet: bronze/silver/gold)  ->  DuckDB + d
 | + | Bonus: SCD2 (dim_customer, dim_product) and revenue forecast | Done |
 | + | Bonus: CDC (log-based change capture) | Not started: needs SQL Server Agent |
 
+## Kartora: the storefront brand
+
+The shop app is branded **Kartora** ("cart" + "aura"; tagline *Everything you love, delivered.*). The name and
+logo live in one place, `BRAND` and `LOGO_SVG` in `shop_app/static/common.js`, so a rename is a one-line change.
+Colors are in `style.css` (violet `--accent`, coral `--deal`).
+
+- **Sign in:** http://localhost:8000/login. Choose Shopper, Seller, Rider or Admin first, then sign in or create
+  an account. Admins sign in only; there's no admin sign-up. All demo logins are in [TEST_ACCOUNTS.md](TEST_ACCOUNTS.md).
+- **Product photos:** 37 openly licensed photos from Openverse, **reviewed by hand** (off-topic and unsuitable
+  images were removed), with credits shown on each product page. Products without an approved photo show
+  generated art.
+- **Your own brand photos:** either click a product photo in the seller center to upload one, or do it in bulk:
+  ```powershell
+  # put files named by SKU (ELE-00012.jpg) or product id (12.png) in .\brand_photos\, then:
+  .\.venv\Scripts\python.exe tools\import_brand_photos.py
+  ```
+- **Seller center:** tick several orders (or "select all"), then **⚡ Accept + pack & hand to rider** in one
+  click. There are also separate Accept and Mark packed buttons, and printable **packing slips**.
+
 ## Run everything (one command)
 
 ```powershell
@@ -217,11 +236,11 @@ top products and most valuable customers. It's as fresh as the last pipeline run
 
 | Role | Email | Password | Lands on |
 |---|---|---|---|
-| Customer | `customer@shoplite.test` | `Demo@123` | `/` storefront |
-| Vendor (you pack) | `vendor@shoplite.test` | `Demo@123` | `/vendor` seller center, ShopLite Demo Store |
-| Vendor (autopilot) | `techhub@`, `gadget@`, `stylestreet@`, `homenest@`, … `@shoplite.test` | `Demo@123` | `/vendor` |
-| Rider | `rider@shoplite.test` | `Demo@123` | `/rider` |
-| Admin | `admin@shoplite.test` | `Admin@123` | `/admin` |
+| Customer | `customer@kartora.test` | `Demo@123` | `/` storefront |
+| Vendor (you pack) | `vendor@kartora.test` | `Demo@123` | `/vendor` seller center, Kartora Demo Store |
+| Vendor (autopilot) | `techhub@`, `gadget@`, `stylestreet@`, `homenest@`, … `@kartora.test` | `Demo@123` | `/vendor` |
+| Rider | `rider@kartora.test` | `Demo@123` | `/rider` |
+| Admin | `admin@kartora.test` | `Admin@123` | `/admin` |
 
 Customers can also create their own account. Store and rider accounts are made by `migrate_marketplace.py`.
 
