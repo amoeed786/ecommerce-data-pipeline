@@ -108,21 +108,30 @@ async def shop_error(_: Request, exc: mp.MarketplaceError):
 
 # ================================================================== pages
 def page(file: str, *roles: str):
-    """Serve a page; if it needs a role the visitor doesn't have, send them to sign in."""
+    """Serve a page; if it needs a role the visitor doesn't have, send them to the right sign-in page
+    (admin pages -> the separate /admin/login, everything else -> the public /login)."""
     def handler(request: Request, user: dict | None = Depends(auth.current_user)):
         if roles and (user is None or user["role"] not in roles):
-            return RedirectResponse(f"/login?next={request.url.path}", status_code=303)
+            login = "/admin/login" if "admin" in roles else "/login"
+            return RedirectResponse(f"{login}?next={request.url.path}", status_code=303)
         return FileResponse(STATIC / file)
     return handler
 
 
 for path, file, roles in [
+    # public site
     ("/", "store.html", ()), ("/login", "login.html", ()),
     ("/vendor", "vendor.html", ("vendor",)), ("/rider", "rider.html", ("rider",)),
-    ("/admin", "admin.html", ("admin",)), ("/dashboard", "dashboard.html", ("admin",)),
-    ("/analytics", "analytics.html", ("admin",)),
+    # admin area - its own URL space and sign-in page, never linked from the public site
+    ("/admin/login", "admin_login.html", ()),
+    ("/admin", "admin.html", ("admin",)), ("/admin/dashboard", "dashboard.html", ("admin",)),
+    ("/admin/analytics", "analytics.html", ("admin",)),
 ]:
     app.add_api_route(path, page(file, *roles), methods=["GET"], include_in_schema=False)
+
+for old, new in [("/dashboard", "/admin/dashboard"), ("/analytics", "/admin/analytics")]:  # old bookmarks
+    app.add_api_route(old, (lambda n: lambda: RedirectResponse(n, status_code=308))(new), methods=["GET"],
+                      include_in_schema=False)
 
 
 # ================================================================== auth

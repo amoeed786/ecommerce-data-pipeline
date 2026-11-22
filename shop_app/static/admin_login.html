@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Admin console · Kartora</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    body { background: #0f0c22; color: #e8e6f5; }
+    .wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px;
+      background: radial-gradient(1200px 600px at 20% 0%, #2a1f6b 0%, transparent 60%), radial-gradient(900px 500px at 100% 100%, #3a1d2b 0%, transparent 60%), #0f0c22; }
+    .box { width: min(400px, 100%); background: #17132e; border: 1px solid #2c2650; border-radius: 16px; padding: 28px; box-shadow: 0 20px 50px rgba(0,0,0,.45); }
+    .box .brandmark { color: #fff; font-size: 22px; }
+    .box h1 { font-size: 20px; margin: 18px 0 4px; color: #fff; }
+    .box p { color: #9f99c4; margin: 0 0 18px; font-size: 13px; }
+    .field { color: #cfcbe6; }
+    .field input { width: 100%; padding: 11px 12px; background: #0f0c22; border-color: #2c2650; color: #fff; }
+    .field input:focus { border-color: #8f7bff; outline: 2px solid #2a1f6b; }
+    .lock { display: inline-flex; gap: 6px; align-items: center; font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+      color: #8f7bff; background: #221b4a; border-radius: 999px; padding: 3px 10px; }
+    .note { font-size: 12px; color: #6f6996; margin-top: 16px; text-align: center; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <form class="box" id="form" autocomplete="on">
+    <span data-brandmark="admin console" data-size="34"></span>
+    <h1>Sign in to the control room</h1>
+    <p><span class="lock">🔒 restricted</span> &nbsp;For marketplace administrators only.</p>
+    <div class="field">Admin email<input name="email" type="email" autocomplete="username" required autofocus></div>
+    <div class="field">Password<input name="password" type="password" autocomplete="current-password" required></div>
+    <button class="primary" style="width:100%; padding:12px; font-weight:700">Sign in</button>
+    <div class="note">Sessions expire after 7 days · 5 failed attempts lock the account for 5 minutes</div>
+  </form>
+</div>
+<script src="/static/common.js"></script>
+<script>
+const next = new URLSearchParams(location.search).get("next");
+const target = next && next.startsWith("/admin") && !next.startsWith("//") ? next : "/admin";
+$("#form").onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = $("button", e.target);
+  btn.disabled = true;
+  try {
+    await api("/api/auth/login", { method: "POST", body: { ...Object.fromEntries(new FormData(e.target)), role: "admin" } });
+    location.href = target;
+  } catch (err) { toast(err.message, "error", 5000); }
+  finally { btn.disabled = false; }
+};
+loadMe().then((me) => { if (me?.role === "admin") location.href = target; });  // already signed in
+</script>
+</body>
+</html>

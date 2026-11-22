@@ -95,9 +95,12 @@ def main() -> None:
 
     print(f"""
   Storefront   http://localhost:{args.port}
-  Sign in      http://localhost:{args.port}/login   (demo buttons for customer / vendor / rider / admin)
-  Admin        http://localhost:{args.port}/admin   (press Start on orders, or turn on auto-approve)
-  Analytics    http://localhost:{args.port}/analytics   (refreshes itself after each pipeline run)""")
+  Sign in      http://localhost:{args.port}/login   (shoppers, sellers, riders - demo buttons included)
+
+  Admin (separate, not linked from the store):
+  Admin login  http://localhost:{args.port}/admin/login   (see TEST_ACCOUNTS.md)
+  Control room http://localhost:{args.port}/admin   (press Start on orders, or turn on auto-approve)
+  BI           http://localhost:{args.port}/admin/analytics   (refreshes itself after each pipeline run)""")
     if not args.no_pipeline:
         print(f"  Dagster      http://localhost:{args.dagster_port}   (Runs = every automatic pipeline run)")
     print(f"\n  Automatic pipeline: {'OFF (--no-pipeline)' if args.no_pipeline else 'ON - new entries reach gold within ~1-2 minutes'}")

@@ -72,7 +72,7 @@
     <div class="card">
       <div class="row" style="justify-content:space-between"><h2>⚡ Automatic pipeline</h2><span id="auto-state"></span></div>
       <p class="muted small" style="margin-top:0">A Dagster sensor checks ShopDB every 30 seconds. When there are new or changed rows, it runs
-        extract → silver → dbt → gold export by itself, so every entry reaches gold and <a href="/analytics">Analytics</a> without you running anything.
+        extract → silver → dbt → gold export by itself, so every entry reaches gold and <a href="/admin/analytics">Analytics</a> without you running anything.
         Start it with <code>python start.py</code>. The manual buttons below are still there for learning.</p>
       <div class="portal-kpis" id="auto-kpis" style="margin:10px 0"></div>
       <div class="table-wrap" id="auto-runs"></div>
@@ -99,7 +99,7 @@
         </div>
         <div class="row" style="margin-top:8px">
           <button data-step="check_bronze">Check bronze</button><button data-step="inject_bad_data">Inject messy data</button>
-          <button data-step="check_db">Check source DB</button><a class="small" href="/analytics" style="margin-left:auto">See results in Analytics →</a>
+          <button data-step="check_db">Check source DB</button><a class="small" href="/admin/analytics" style="margin-left:auto">See results in Analytics →</a>
         </div>
         <pre id="step-out" class="out">Click a step…</pre>
       </div>

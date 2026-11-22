@@ -130,12 +130,13 @@ async function loadMe() {
   return ME;
 }
 async function logout() {
+  const wasAdmin = ME?.role === "admin";
   await api("/api/auth/logout", { method: "POST" }).catch(() => {});
-  location.href = "/login";
+  location.href = wasAdmin ? "/admin/login" : "/login";  // admins go back to their own sign-in page
 }
 const ROLE_HOME = { customer: "/", vendor: "/vendor", rider: "/rider", admin: "/admin" };
 const ROLE_LINKS = {
-  admin: [["/admin", "Admin"], ["/dashboard", "Live ops"], ["/analytics", "Business intelligence"], ["/", "Storefront"], ["/docs", "API docs"]],
+  admin: [["/admin", "Control room"], ["/admin/dashboard", "Live ops"], ["/admin/analytics", "Business intelligence"], ["/", "Storefront"], ["/docs", "API docs"]],
   vendor: [["/vendor", "Seller center"], ["/", "Storefront"]],
   rider: [["/rider", "Rider app"]],
   customer: [["/", "Shop"], ["/#/orders", "My orders"], ["/#/account", "My account"]],

@@ -3,12 +3,15 @@
 Demo logins for local testing. These are **not real credentials** - they exist only in your local ShopDB
 (created by `source_app/migrate_marketplace.py`). Accounts you create yourself on the sign-in page are not listed here.
 
-Sign in at **http://localhost:8000/login** → choose the account type → enter the email and password,
-or click **⚡ Use the demo account** for that type.
+**Shoppers, sellers, riders:** sign in at **http://localhost:8000/login** → choose the account type → enter the
+email and password, or click **⚡ Use the demo account** for that type.
+
+**Admin:** has its own sign-in page, **http://localhost:8000/admin/login**. It isn't linked anywhere on the public
+site, and admin accounts are refused on the public `/login`.
 
 | Account type | Email | Password | Opens |
 |---|---|---|---|
-| 🛠️ Admin | `admin@kartora.test` | `Admin@123` | `/admin` - order control, live board, vendors, riders, users, pipeline |
+| 🛠️ Admin | `admin@kartora.test` | `Admin@123` | sign in at `/admin/login` → `/admin` (control room), `/admin/dashboard`, `/admin/analytics` |
 | 🛍️ Shopper | `customer@kartora.test` | `Demo@123` | `/` storefront - cart, checkout, live order tracking |
 | 🛵 Rider (you deliver) | `rider@kartora.test` | `Demo@123` | `/rider` - go online, pick up, deliver |
 | 🏪 Seller (you pack) - Kartora Demo Store | `vendor@kartora.test` | `Demo@123` | `/vendor` - bulk accept + pack, products, photos |

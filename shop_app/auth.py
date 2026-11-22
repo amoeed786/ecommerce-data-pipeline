@@ -53,8 +53,14 @@ def login(email: str, password: str, response: Response, expected_role: str | No
         raise HTTPException(401, "Wrong email or password")  # same message either way: don't reveal which emails exist
     if not row["is_active"]:
         raise HTTPException(403, "This account is disabled")
-    if expected_role and row["role"] != expected_role:  # signed in on the wrong portal - point them to the right one
-        names = {"customer": "Shopper", "vendor": "Seller", "rider": "Rider", "admin": "Admin"}
+    # Admins sign in only on the separate admin page (/admin/login), and that page only accepts admins.
+    # Either mismatch gets the same answer as a wrong password, so neither page reveals that the other kind
+    # of account exists.
+    if (row["role"] == "admin") != (expected_role == "admin"):
+        _fails.setdefault(email, []).append(time.time())
+        raise HTTPException(401, "Wrong email or password")
+    if expected_role and row["role"] != expected_role:  # public portal, wrong type: point them to the right one
+        names = {"customer": "Shopper", "vendor": "Seller", "rider": "Rider"}
         raise HTTPException(403, f"This is a {names[row['role']]} account - choose “{names[row['role']]}” to sign in")
     _fails.pop(email, None)
     token = secrets.token_urlsafe(32)

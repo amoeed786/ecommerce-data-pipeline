@@ -48,11 +48,10 @@
     <section id="step-pick">
       <h2>How do you want to use Kartora?</h2>
       <p class="muted" style="margin:0 0 20px">Choose your account type to sign in or create an account.</p>
-      <div class="portal-pick">
+      <div class="portal-pick" style="grid-template-columns: repeat(3, 1fr)">
         <button data-role="customer"><span class="big">🛍️</span><b>Shopper</b><span class="muted small">Browse stores, check out, track every parcel live</span></button>
         <button data-role="vendor"><span class="big">🏪</span><b>Seller</b><span class="muted small">Open a store, accept orders, pack and hand over in one click</span></button>
         <button data-role="rider"><span class="big">🛵</span><b>Rider</b><span class="muted small">Go online, pick up parcels, deliver and earn</span></button>
-        <button data-role="admin"><span class="big">🛠️</span><b>Admin</b><span class="muted small">Run the marketplace, control orders, see the BI</span></button>
       </div>
       <p class="muted small" style="margin-top:22px">Just looking? <a href="/">Browse the store without an account →</a></p>
     </section>
@@ -110,15 +109,14 @@ const ROLES = {
   customer: { icon: "🛍️", title: "Shopper", sub: "Shop from every store on Kartora", demo: ["customer@kartora.test", "Demo@123"], signup: "/api/auth/register" },
   vendor: { icon: "🏪", title: "Seller", sub: "Manage your store and pack orders", demo: ["vendor@kartora.test", "Demo@123"], signup: "/api/auth/register/vendor" },
   rider: { icon: "🛵", title: "Rider", sub: "Deliver parcels and track earnings", demo: ["rider@kartora.test", "Demo@123"], signup: "/api/auth/register/rider" },
-  admin: { icon: "🛠️", title: "Admin", sub: "Marketplace control room - sign in only", demo: ["admin@kartora.test", "Admin@123"], signup: null },
-};
+};  // admins have their own sign-in page, not linked from here
 const params = new URLSearchParams(location.search);
 const next = params.get("next");
-const NEXT_ROLE = { "/admin": "admin", "/dashboard": "admin", "/analytics": "admin", "/vendor": "vendor", "/rider": "rider" };
+const NEXT_ROLE = { "/vendor": "vendor", "/rider": "rider" };
 let role = null, tab = "signin";
 
 function go(user) {
-  const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+  const safe = next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/admin") ? next : null;
   const okFor = (r) => !safe || NEXT_ROLE[safe.split("?")[0]] === r || (!NEXT_ROLE[safe.split("?")[0]] && r === "customer");
   location.href = safe && okFor(user.role) ? safe : ROLE_HOME[user.role];
 }
@@ -158,7 +156,7 @@ $("#signin").onsubmit = (e) => { e.preventDefault(); submit(e.target, "/api/auth
 
 const pre = params.get("as") || NEXT_ROLE[(next || "").split("?")[0]];
 if (ROLES[pre]) choose(pre);
-loadMe().then((me) => { if (me && !next && !params.get("as")) go(me); });  // already signed in → straight to your area
+loadMe().then((me) => { if (me && me.role !== "admin" && !next && !params.get("as")) go(me); });  // already signed in → straight to your area
 </script>
 </body>
 </html>

@@ -30,8 +30,14 @@ The shop app is branded **Kartora** ("cart" + "aura"; tagline *Everything you lo
 logo live in one place, `BRAND` and `LOGO_SVG` in `shop_app/static/common.js`, so a rename is a one-line change.
 Colors are in `style.css` (violet `--accent`, coral `--deal`).
 
-- **Sign in:** http://localhost:8000/login. Choose Shopper, Seller, Rider or Admin first, then sign in or create
-  an account. Admins sign in only; there's no admin sign-up. All demo logins are in [TEST_ACCOUNTS.md](TEST_ACCOUNTS.md).
+- **Sign in:** http://localhost:8000/login. Choose Shopper, Seller or Rider first, then sign in or create an
+  account. All demo logins are in [TEST_ACCOUNTS.md](TEST_ACCOUNTS.md).
+- **Admin area (separate):** sign in at http://localhost:8000/admin/login. Admin pages are `/admin`,
+  `/admin/dashboard` and `/admin/analytics`.
+  - Nothing on the public site links to the admin area.
+  - Admin accounts are refused on the public `/login`, and the admin page refuses non-admins. Both answer "wrong
+    email or password", so neither page reveals the other kind of account.
+  - Opening an admin page while signed out redirects to `/admin/login`.
 - **Product photos:** 37 openly licensed photos from Openverse, **reviewed by hand** (off-topic and unsuitable
   images were removed), with credits shown on each product page. Products without an approved photo show
   generated art.
@@ -269,7 +275,7 @@ order status follows its parcels: pending → processing → shipped → deliver
 | `/vendor` | New-order queue → Accept → Mark packed; KPIs; autopilot switch; products: price, sale price, restock, hide/show, add new |
 | `/rider` | Go online/offline, current job (pickup → drop-off, cash to collect), Picked up / Delivered buttons, earnings, history |
 | `/admin` | Order control, live shipments board, vendors, riders, users (disable accounts), catalog, simulator and pipeline |
-| `/dashboard`, `/analytics` | Admin only: live operations, and gold-layer analytics including vendor leaderboard and delivery-time breakdown |
+| `/admin/dashboard`, `/admin/analytics` | Admin only: live operations, and gold-layer analytics including vendor leaderboard and delivery-time breakdown |
 
 **Security:**
 - **Passwords:** salted scrypt hashes.
