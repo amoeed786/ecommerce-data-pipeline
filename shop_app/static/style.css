@@ -1,4 +1,4 @@
-/* Kartora portal styles (sign-in, seller center, rider app, live ops, analytics, payment page).
+/* Raunaqi portal styles (sign-in, seller center, rider app, live ops, analytics, payment page).
    Built on the design-system tokens in ds.css (load ds.css first): same neutrals, Inter, purple for actions only,
    orange-red for sale only, 8px grid, status colours shared with the admin console, light/dark via ds.css.
    The old variable names below are aliases, so page-level styles follow the theme automatically. */

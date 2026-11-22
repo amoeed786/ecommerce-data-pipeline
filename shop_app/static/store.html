@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Kartora · Shop independent stores, delivered</title>
-  <meta name="description" content="Kartora is a marketplace of independent stores: electronics, fashion, home, beauty and more, with free tracked delivery and 7-day returns.">
+  <title>Raunaqi · Shop independent stores, delivered</title>
+  <meta name="description" content="Raunaqi is a marketplace of independent stores: electronics, fashion, home, beauty and more, with free tracked delivery and 7-day returns.">
   <meta name="theme-color" content="#ffffff">
   <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/ds.css">
@@ -14,7 +14,7 @@
 <a class="skip" href="#view">Skip to content</a>
 <header class="sh">
   <div class="wrap sh-row">
-    <a class="logo" href="#/" aria-label="Kartora home"><span id="logo-mark"></span><span class="name">Kartora</span></a>
+    <a class="logo" href="#/" aria-label="Raunaqi home"><span id="logo-mark"></span><span class="name">Raunaqi</span></a>
     <form class="search" id="search" role="search">
       <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
       <label class="sr" for="q">Search products, brands and stores</label>
@@ -34,13 +34,13 @@
 
 <footer class="sf">
   <div class="wrap cols">
-    <div class="about"><a class="logo" href="#/"><span id="logo-mark2"></span><span>Kartora</span></a>
+    <div class="about"><a class="logo" href="#/"><span id="logo-mark2"></span><span>Raunaqi</span></a>
       <p>A marketplace of independent stores. Free tracked delivery, secure payments or cash on delivery, and 7-day returns.</p></div>
     <div><h2 class="sf-h">Shop</h2><a href="#/search?on_sale=1&sort=discount">Today's deals</a><a href="#/search?sort=popular">Best sellers</a><a href="#/search?sort=newest">New arrivals</a><a href="#/search?sort=rating">Top rated</a></div>
     <div><h2 class="sf-h">Your account</h2><a href="#/orders">Track an order</a><a href="#/account">Account</a><a href="#/wishlist">Wishlist</a><a href="/login">Sign in or join</a></div>
-    <div><h2 class="sf-h">Work with us</h2><a href="/login?as=vendor">Sell on Kartora</a><a href="/login?as=rider">Deliver with Kartora</a><a href="/vendor">Seller center</a></div>
+    <div><h2 class="sf-h">Work with us</h2><a href="/login?as=vendor">Sell on Raunaqi</a><a href="/login?as=rider">Deliver with Raunaqi</a><a href="/vendor">Seller center</a></div>
   </div>
-  <div class="wrap legal">© Kartora demo marketplace · no real payments · product photos are openly licensed and credited on each product page</div>
+  <div class="wrap legal">© Raunaqi demo marketplace · no real payments · product photos are openly licensed and credited on each product page</div>
 </footer>
 
 <nav class="bn" aria-label="Main">
@@ -96,11 +96,11 @@ function addToCart(id, qty = 1, silent = false) {
 function rememberViewed(p) {
   try {
     const slim = (({ related, reviews, specs, rating_histogram, description, ...rest }) => rest)(p);
-    const list = JSON.parse(localStorage.getItem("kartora.recent") || "[]").filter((x) => x.product_id !== p.product_id);
-    localStorage.setItem("kartora.recent", JSON.stringify([slim, ...list].slice(0, 12)));
+    const list = JSON.parse(localStorage.getItem("raunaqi.recent") || localStorage.getItem("kartora.recent") || "[]").filter((x) => x.product_id !== p.product_id);
+    localStorage.setItem("raunaqi.recent", JSON.stringify([slim, ...list].slice(0, 12)));
   } catch {}
 }
-const recentlyViewed = () => { try { return JSON.parse(localStorage.getItem("kartora.recent") || "[]"); } catch { return []; } };
+const recentlyViewed = () => { try { return JSON.parse(localStorage.getItem("raunaqi.recent") || localStorage.getItem("kartora.recent") || "[]"); } catch { return []; } };
 const cards = (list, opts) => { remember(list); return list.map((p) => productCard(p, opts)).join(""); };
 
 // ===================================================================== header
@@ -132,7 +132,7 @@ function countdown() {
 }
 async function pageHome() {
   const h = await apiCached("/api/home");
-  document.title = "Kartora · Shop independent stores, delivered";
+  document.title = "Raunaqi · Shop independent stores, delivered";
   const withPhoto = (list) => list.filter((p) => productImages(p).length).map((p) => ({ ...p, images: productImages(p) }));
   const heroPicks = [...withPhoto(h.flash_deals).slice(0, 2), ...withPhoto(h.top_rated).filter((p) => !h.flash_deals.slice(0, 2).some((d) => d.product_id === p.product_id)).slice(0, 1)];
   const maxOff = Math.max(0, ...h.flash_deals.map((p) => p.discount_pct || 0));
@@ -160,7 +160,7 @@ async function pageHome() {
       <a class="k-link" href="#/search?on_sale=1&sort=discount">See all ${icon("chevron-right", "sm")}</a></div>
       <div class="hrow">${cards(h.flash_deals)}</div></section>
 
-    <section class="sec props" aria-label="Why shop with Kartora">
+    <section class="sec props" aria-label="Why shop with Raunaqi">
       <div class="prop">${icon("truck")}<div><b>Free delivery</b><span>Tracked live, door to door</span></div></div>
       <div class="prop">${icon("shield-check")}<div><b>Secure payment</b><span>Card, mobile wallet or cash on delivery</span></div></div>
       <div class="prop">${icon("rotate-ccw")}<div><b>7-day returns</b><span>Changed your mind? No problem</span></div></div>
@@ -178,7 +178,7 @@ async function pageHome() {
     ${recent.length ? `<section class="sec lazy" aria-labelledby="rec-h"><div class="sec-head"><h2 class="k-h2" id="rec-h">Recently viewed</h2></div>
       <div class="hrow">${cards(recent)}</div></section>` : ""}
 
-    <section class="sec lazy" aria-labelledby="st-h"><div class="sec-head"><h2 class="k-h2" id="st-h">Stores on Kartora</h2></div>
+    <section class="sec lazy" aria-labelledby="st-h"><div class="sec-head"><h2 class="k-h2" id="st-h">Stores on Raunaqi</h2></div>
       <div class="stores">${h.vendors.map((v) => `<a class="store-card" href="#/store/${v.vendor_id}">
         <span class="avatar" aria-hidden="true">${esc(initials(v.vendor_name))}</span>
         <span style="min-width:0"><b>${esc(v.vendor_name)}</b><span class="meta">${icon("star")}${Number(v.rating).toFixed(1)} · ${int(v.products)} products${v.city ? ` · ${esc(v.city)}` : ""}</span></span></a>`).join("")}</div></section>`;
@@ -186,7 +186,7 @@ async function pageHome() {
 }
 
 function pageCategories() {
-  document.title = "Categories · Kartora";
+  document.title = "Categories · Raunaqi";
   view.innerHTML = `<div class="crumbs"><a href="#/">Home</a>${icon("chevron-right")}Categories</div>
     <h1 class="k-h1">All categories</h1>
     <div class="cats" style="margin-top:var(--k-s-3)">${S.categories.map((c) => `<a class="cat" href="#/c/${c.category_id}"><span class="circle">${icon(CATEGORY_ICON[c.category_name] || "shopping-bag")}</span>
@@ -201,7 +201,7 @@ async function pageListing(base = {}) {
   const vendor = base.vendor_id ? await apiCached(`/api/vendors/${base.vendor_id}`) : null;
   const cat = base.category_id ? S.categories.find((c) => c.category_id === +base.category_id) : null;
   const title = vendor ? vendor.vendor_name : cat ? cat.category_name : f.q ? `Results for “${f.q}”` : f.on_sale ? "Today's deals" : "All products";
-  document.title = `${title} · Kartora`;
+  document.title = `${title} · Raunaqi`;
   $("#q").value = f.q;
   const params = new URLSearchParams({ sort: f.sort, limit: 40 });
   ["q", "min_price", "max_price", "min_rating", "category_id", "vendor_id"].forEach((k) => f[k] && params.set(k, f[k]));
@@ -283,7 +283,7 @@ async function photoCredits(images) {
 async function pageProduct(id) {
   const p = await apiCached(`/api/products/${id}`);
   remember([p, ...p.related]); rememberViewed(p);
-  document.title = `${p.product_name} · Kartora`;
+  document.title = `${p.product_name} · Raunaqi`;
   const images = productImages(p);
   const sale = p.list_price > p.unit_price && p.discount_pct > 0;
   const stock = Number(p.stock);
@@ -350,7 +350,7 @@ async function pageProduct(id) {
         <div class="rv-sum"><div class="rv-big"><div class="n">${Number(p.rating).toFixed(1)}</div>${starRating(p.rating)}<div class="c">${int(p.review_count)} ratings</div></div>
           <div class="hist">${[5, 4, 3, 2, 1].map((s) => `<div><span>${s} star</span><span class="bar" role="img" aria-label="${hist[s] || 0}% ${s} star"><i style="width:${hist[s] || 0}%"></i></span><span>${hist[s] || 0}%</span></div>`).join("")}</div></div>
         ${(p.reviews || []).map((r) => `<article class="rv">
-          <div class="rv-head"><span class="avatar" aria-hidden="true">${esc(initials(r.author || "K"))}</span><span class="who">${esc(r.author || "Kartora customer")}</span>
+          <div class="rv-head"><span class="avatar" aria-hidden="true">${esc(initials(r.author || "K"))}</span><span class="who">${esc(r.author || "Raunaqi customer")}</span>
             <span class="when">${esc(r.city ? r.city + " · " : "")}${new Date(r.created_at).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}</span></div>
           <h3 class="rv-t">${starRating(r.rating)}${esc(r.title)}</h3>
           ${r.verified ? `<span class="verified">${icon("badge-check")}Verified purchase</span>` : ""}
@@ -403,7 +403,7 @@ async function pageProduct(id) {
 
 // ===================================================================== wishlist
 async function pageWishlist() {
-  document.title = "Wishlist · Kartora";
+  document.title = "Wishlist · Raunaqi";
   const ids = [...wishlist];
   const list = (await Promise.all(ids.map((id) => S.products[id] || apiCached(`/api/products/${id}`).catch(() => null)))).filter(Boolean);
   view.innerHTML = `<div class="crumbs"><a href="#/">Home</a>${icon("chevron-right")}Wishlist</div><h1 class="k-h1" style="margin-bottom:var(--k-s-3)">Wishlist</h1>
@@ -429,7 +429,7 @@ function setCartQty(id, qty) {
 function byVendor(lines) { const g = {}; lines.forEach((l) => (g[l.p.vendor_name] ||= []).push(l)); return g; }
 
 async function pageCart() {
-  document.title = "Cart · Kartora";
+  document.title = "Cart · Raunaqi";
   const lines = await cartProducts();
   if (!lines.length) {
     view.innerHTML = `<div class="empty panel" style="margin-top:var(--k-s-3)">${icon("shopping-cart")}<h2>Your cart is empty</h2>
@@ -463,7 +463,7 @@ async function pageCart() {
 
 // ===================================================================== checkout
 async function pageCheckout() {
-  document.title = "Checkout · Kartora";
+  document.title = "Checkout · Raunaqi";
   const me = await loadMe();
   if (!me) { location.href = `/login?as=customer&next=${encodeURIComponent("/#/checkout")}`; return; }
   if (me.role !== "customer") { view.innerHTML = `<div class="empty panel" style="margin-top:var(--k-s-3)">${icon("user")}<h2>Checkout is for customer accounts</h2>
@@ -530,7 +530,7 @@ async function needCustomer() {
   return me;
 }
 async function pageOrders() {
-  document.title = "Orders · Kartora";
+  document.title = "Orders · Raunaqi";
   if (!(await needCustomer())) return;
   const orders = await api("/api/me/orders");
   view.innerHTML = `<h1 class="k-h1" style="margin:var(--k-s-3) 0">Your orders</h1>
@@ -551,7 +551,7 @@ function stepper(s) {
     <span class="dot">${icon(reached[i] ? "check" : ic)}</span>${text}<time>${s[col] ? fmtDateTime(s[col]) : ""}</time></li>`).join("")}</ol>`;
 }
 async function pageOrder(id) {
-  document.title = `Order #${id} · Kartora`;
+  document.title = `Order #${id} · Raunaqi`;
   if (!(await needCustomer())) return;
   const o = await api(`/api/me/orders/${id}`);
   const placed = hashQuery().get("placed"), paid = hashQuery().get("paid");
@@ -586,7 +586,7 @@ async function pageOrder(id) {
   });
 }
 async function pageAccount() {
-  document.title = "Account · Kartora";
+  document.title = "Account · Raunaqi";
   const me = await needCustomer();
   if (!me) return;
   const p = await api("/api/me/profile");
@@ -653,7 +653,7 @@ async function doRender({ quiet = false } = {}) {
           <p>It may have been removed, or the link is wrong.</p><a class="k-btn primary" href="#/">Back to the shop</a></div>`
       : `<div class="empty panel" style="margin-top:var(--k-s-3)">${icon("circle-alert")}<h2>Something went wrong</h2><p>${esc(e.message)}</p>
           <button class="k-btn primary" onclick="render()">Try again</button></div>`;
-    document.title = "Not found · Kartora";
+    document.title = "Not found · Raunaqi";
   }
   clearTimeout(skel);
   if (quiet) return;

@@ -1,4 +1,4 @@
-# Kartora - security controls
+# Raunaqi - security controls
 
 Each control below was tested against the running app on 2026-11-22. The tests are scripted HTTP probes (`secprobe`) plus browser runs.
 

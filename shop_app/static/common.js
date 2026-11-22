@@ -1,13 +1,13 @@
-// Shared helpers for every Kartora page.
+// Shared helpers for every Raunaqi page.
 try { const t = localStorage.getItem("ka.theme"); if (t && t !== "system") document.documentElement.dataset.theme = t; } catch {}
 // ---- Brand: change the name here and every page follows. ----
-const BRAND = { name: "Kartora", tagline: "Everything you love, delivered." };
+const BRAND = { name: "Raunaqi", tagline: "Everything you love, delivered." };
 const LOGO_SVG = (size = 30) => `<svg width="${size}" height="${size}" viewBox="0 0 40 40" aria-hidden="true">
   <defs><linearGradient id="kg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6d4bff"/><stop offset="1" stop-color="#ff6a3d"/></linearGradient></defs>
   <rect width="40" height="40" rx="11" fill="url(#kg)"/>
   <path d="M13 15h14l-1.4 15.2a2 2 0 0 1-2 1.8h-7.2a2 2 0 0 1-2-1.8z" fill="#fff"/>
   <path d="M16 15v-2a4 4 0 0 1 8 0v2" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
-  <path d="M18 19.5v8M18 23.5l4-4M19.3 22.2l3 5.3" stroke="#5b3df5" stroke-width="2" stroke-linecap="round" fill="none"/></svg>`;
+  <path d="M17.6 27.5v-8h2.9a2.3 2.3 0 0 1 0 4.6h-2.9M20.2 24.1l2.5 3.4" stroke="#5b3df5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
 const brandMark = (sub = "", size = 30) =>
   `<span class="brandmark">${LOGO_SVG(size)}<span class="bm-name">${BRAND.name}</span>${sub ? `<span class="bm-sub">${sub}</span>` : ""}</span>`;
 const $ = (sel, el = document) => el.querySelector(sel);

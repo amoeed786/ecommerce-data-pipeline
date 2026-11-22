@@ -1,4 +1,4 @@
-"""Run the Kartora web app on localhost over BOTH IPv6 and IPv4 - local only, never on the network.
+"""Run the Raunaqi web app on localhost over BOTH IPv6 and IPv4 - local only, never on the network.
 
 Why: on Windows, "localhost" resolves to IPv6 (::1) first. Plain `uvicorn --port 8000` listens on IPv4
 (127.0.0.1) only, so every new connection to http://localhost waits for the IPv6 attempt to fail
@@ -32,7 +32,7 @@ def local_sockets(port: int) -> list[socket.socket]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run Kartora on localhost (IPv4 + IPv6)")
+    parser = argparse.ArgumentParser(description="Run Raunaqi on localhost (IPv4 + IPv6)")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     config = uvicorn.Config("shop_app.main:app", log_level="info")

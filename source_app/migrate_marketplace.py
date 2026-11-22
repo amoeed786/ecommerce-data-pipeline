@@ -42,9 +42,9 @@ VENDORS = [
     ("GlowUp Beauty", "Skincare and cosmetics you'll love", "Islamabad", "Pakistan", ["Beauty"], 1, 20),
     ("ToyBox", "Fun for every age", "Manchester", "United Kingdom", ["Toys"], 1, 30),
     ("FreshMart", "Pantry staples and treats", "Karachi", "Pakistan", ["Grocery"], 1, 15),
-    ("Kartora Demo Store", "Your own store - you accept and pack these orders", "Lahore", "Pakistan", [], 0, 30),
+    ("Raunaqi Demo Store", "Your own store - you accept and pack these orders", "Lahore", "Pakistan", [], 0, 30),
 ]
-DEMO_VENDOR = "Kartora Demo Store"
+DEMO_VENDOR = "Raunaqi Demo Store"
 BOT_RIDERS = 8
 
 DESCRIPTIONS = {
@@ -191,7 +191,7 @@ def seed_users(cur, vendor_ids: dict[str, int], ts) -> list[tuple[str, str, str]
         )
         created.append((role, email, password))
 
-    add("admin@kartora.test", ADMIN_PASSWORD, "admin", "Store Admin")
+    add("admin@raunaqi.test", ADMIN_PASSWORD, "admin", "Store Admin")
     # demo customer: someone with a believable order history (8-25 orders)
     cust = cur.execute(
         "SELECT TOP 1 c.customer_id, c.first_name + ' ' + c.last_name FROM dbo.customers c "
@@ -199,14 +199,14 @@ def seed_users(cur, vendor_ids: dict[str, int], ts) -> list[tuple[str, str, str]
         "HAVING COUNT(*) BETWEEN 8 AND 25 ORDER BY c.customer_id"
     ).fetchone()
     if cust:
-        add("customer@kartora.test", DEMO_PASSWORD, "customer", cust[1], customer_id=cust[0])
+        add("customer@raunaqi.test", DEMO_PASSWORD, "customer", cust[1], customer_id=cust[0])
     for name, vid in vendor_ids.items():
         slug = re.sub(r"[^a-z]", "", name.lower().split()[0])
-        add("vendor@kartora.test" if name == DEMO_VENDOR else f"{slug}@kartora.test",
+        add("vendor@raunaqi.test" if name == DEMO_VENDOR else f"{slug}@raunaqi.test",
             DEMO_PASSWORD, "vendor", name, vendor_id=vid)
     rider = cur.execute("SELECT rider_id FROM dbo.riders WHERE is_bot = 0").fetchval()
     if rider:
-        add("rider@kartora.test", DEMO_PASSWORD, "rider", "Demo Rider", rider_id=rider)
+        add("rider@raunaqi.test", DEMO_PASSWORD, "rider", "Demo Rider", rider_id=rider)
     return created
 
 

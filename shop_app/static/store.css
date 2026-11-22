@@ -1,4 +1,4 @@
-/* Kartora storefront - page layouts built on ds.css tokens. Mobile-first: base rules are for phones,
+/* Raunaqi storefront - page layouts built on ds.css tokens. Mobile-first: base rules are for phones,
    min-width queries add the desktop layout. Every media box has a fixed aspect ratio (no layout shift). */
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }

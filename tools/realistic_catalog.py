@@ -195,7 +195,7 @@ def main() -> None:
         reviews = int(min(4800, max(12, (sold or 1) * random.uniform(.4, 1.6) + random.uniform(0, 60))))
         specs = {"Brand": brand_out or brand, **spec()}
         desc = (f"{nm.split(',')[0]} from {brand_out or brand}. Built for everyday use, backed by a 1-year seller warranty "
-                f"and Kartora's 7-day easy returns.")
+                f"and Raunaqi's 7-day easy returns.")
         cur.execute("UPDATE dbo.products SET product_name = ?, brand = ?, photo_type = ?, unit_price = ?, unit_cost = ?, list_price = ?, "
                     "rating = ?, review_count = ?, specs = ?, description = ?, updated_at = ? WHERE product_id = ?",
                     nm, brand_out or brand, ptype, price, cost, list_price, Decimal(str(rating)), reviews, json.dumps(specs), desc, now, pid)

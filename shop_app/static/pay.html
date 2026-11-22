@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>Secure payment · Kartora Pay</title>
+  <title>Secure payment · Raunaqi Pay</title>
   <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/ds.css">
   <link rel="stylesheet" href="/static/style.css">
@@ -55,7 +55,7 @@ async function load() {
     return;
   }
   $("#body").innerHTML = `
-    <div class="muted small">Paying Kartora for order #${info.order_id}</div>
+    <div class="muted small">Paying Raunaqi for order #${info.order_id}</div>
     <div class="amount">${money(info.amount)}</div>
     <div class="muted small" style="margin-bottom:16px">Hi ${esc(info.customer_first_name)} - enter your card details below.</div>
     <div id="msg">${info.failure_reason ? `<div class="msg err">Last attempt failed: ${esc(info.failure_reason)}. Please try again.</div>` : ""}</div>

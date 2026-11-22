@@ -1,4 +1,4 @@
-// Kartora design-system components (storefront). Depends on common.js (esc, money, int).
+// Raunaqi design-system components (storefront). Depends on common.js (esc, money, int).
 
 // Icons reference a sprite that is inlined into the page once: <use> pointing into an EXTERNAL file is
 // ~10x slower to lay out in Chromium (measured 1.2 s vs 0.1 s for 36 cards on a throttled phone).
@@ -26,10 +26,10 @@ function starRating(rating, reviews) {
     <span aria-hidden="true">${r ? r.toFixed(1) : "New"}${reviews ? ` <span class="k-muted">(${int(reviews)})</span>` : ""}</span></span>`;
 }
 
-const wishlist = new Set(JSON.parse(localStorage.getItem("kartora.wishlist") || "[]"));
+const wishlist = new Set(JSON.parse(localStorage.getItem("raunaqi.wishlist") || localStorage.getItem("kartora.wishlist") || "[]"));
 function toggleWish(id, btn) {
   wishlist.has(id) ? wishlist.delete(id) : wishlist.add(id);
-  localStorage.setItem("kartora.wishlist", JSON.stringify([...wishlist]));
+  localStorage.setItem("raunaqi.wishlist", JSON.stringify([...wishlist]));
   btn.classList.toggle("on", wishlist.has(id));
   btn.setAttribute("aria-pressed", wishlist.has(id));
   toast(wishlist.has(id) ? "Saved to your wishlist" : "Removed from your wishlist");

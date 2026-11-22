@@ -27,7 +27,7 @@ sys.path.insert(0, str(ROOT))
 CAND = ROOT / "data_lake" / "_state" / "photo_candidates"
 OUT = ROOT / "shop_app" / "static" / "img" / "products"
 API = "https://api.openverse.org/v1/images/"
-UA = {"User-Agent": "kartora-photo-pipeline/1.0 (local demo store; python-urllib)"}
+UA = {"User-Agent": "raunaqi-photo-pipeline/1.0 (local demo store; python-urllib)"}
 SIZES = (240, 480, 960)
 
 # product type -> search phrase (biased toward clean product shots)

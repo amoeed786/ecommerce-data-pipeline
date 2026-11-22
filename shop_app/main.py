@@ -72,12 +72,12 @@ simulator: dict = {"proc": None, "interval": None}
 
 
 def _admin_path() -> str:
-    """ADMIN_PATH from .env (default /admin): where the admin area lives, e.g. /kartora-control-7f3a.
+    """ADMIN_PATH from .env (default /admin): where the admin area lives, e.g. /raunaqi-control-7f3a.
     Changing it moves the admin sign-in and pages; the public site never links to it."""
     path = "/" + os.getenv("ADMIN_PATH", "/admin").strip().strip("/")
     reserved = ("/login", "/vendor", "/rider", "/api", "/static", "/docs", "/redoc", "/openapi.json")
     if path == "/" or not re.fullmatch(r"(/[A-Za-z0-9_-]+)+", path) or path.lower().startswith(reserved):
-        raise RuntimeError(f"ADMIN_PATH={path!r} is not allowed: use letters, digits, - or _ (e.g. /kartora-control) "
+        raise RuntimeError(f"ADMIN_PATH={path!r} is not allowed: use letters, digits, - or _ (e.g. /raunaqi-control) "
                            f"and don't reuse {', '.join(reserved)}")
     return path
 
@@ -707,7 +707,7 @@ def openapi_json(_: dict = Depends(admin)):
 @app.get("/docs", include_in_schema=False)
 def api_docs(_: dict = Depends(admin)):
     from fastapi.openapi.docs import get_swagger_ui_html  # noqa: PLC0415
-    return get_swagger_ui_html(openapi_url="/openapi.json", title="Kartora API (admin)")
+    return get_swagger_ui_html(openapi_url="/openapi.json", title="Raunaqi API (admin)")
 
 
 @app.get("/api/admin/kpis", tags=["admin"])

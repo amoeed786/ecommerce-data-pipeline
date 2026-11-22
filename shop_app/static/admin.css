@@ -1,4 +1,4 @@
-/* Kartora admin console - operations UI on the ds.css tokens.
+/* Raunaqi admin console - operations UI on the ds.css tokens.
    Compact by default (36px rows), light/dark/system theme via [data-theme] on <html>. */
 :root { --a-side: 232px; --a-side-c: 60px; --a-top: 52px; --a-row: 36px; --a-max: 1480px; }  /* theme + status colours live in ds.css */
 html.comfortable { --a-row: 44px; }

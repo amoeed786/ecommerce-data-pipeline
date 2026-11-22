@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Welcome · Kartora</title>
+  <title>Welcome · Raunaqi</title>
   <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/ds.css">
   <link rel="stylesheet" href="/static/style.css">
@@ -46,9 +46,9 @@
   </aside>
 
   <main class="pick-side">
-    <!-- step 1: choose how you use Kartora -->
+    <!-- step 1: choose how you use Raunaqi -->
     <section id="step-pick">
-      <h2>How do you want to use Kartora?</h2>
+      <h2>How do you want to use Raunaqi?</h2>
       <p class="muted" style="margin:0 0 20px">Choose your account type to sign in or create an account.</p>
       <div class="portal-pick" style="grid-template-columns: repeat(3, 1fr)">
         <button data-role="customer"><span class="big"><svg class="ic lg" aria-hidden="true"><use href="#i-shopping-bag"/></svg></span><b>Shopper</b><span class="muted small">Browse stores, check out, track every parcel live</span></button>
@@ -109,9 +109,9 @@
 <script src="/static/ds.js"></script>
 <script>
 const ROLES = {
-  customer: { icon: '<svg class="ic sm" aria-hidden="true"><use href="#i-shopping-bag"/></svg>', title: "Shopper", sub: "Shop from every store on Kartora", demo: ["customer@kartora.test", "Demo@123"], signup: "/api/auth/register" },
-  vendor: { icon: '<svg class="ic sm" aria-hidden="true"><use href="#i-store"/></svg>', title: "Seller", sub: "Manage your store and pack orders", demo: ["vendor@kartora.test", "Demo@123"], signup: "/api/auth/register/vendor" },
-  rider: { icon: '<svg class="ic sm" aria-hidden="true"><use href="#i-bike"/></svg>', title: "Rider", sub: "Deliver parcels and track earnings", demo: ["rider@kartora.test", "Demo@123"], signup: "/api/auth/register/rider" },
+  customer: { icon: '<svg class="ic sm" aria-hidden="true"><use href="#i-shopping-bag"/></svg>', title: "Shopper", sub: "Shop from every store on Raunaqi", demo: ["customer@raunaqi.test", "Demo@123"], signup: "/api/auth/register" },
+  vendor: { icon: '<svg class="ic sm" aria-hidden="true"><use href="#i-store"/></svg>', title: "Seller", sub: "Manage your store and pack orders", demo: ["vendor@raunaqi.test", "Demo@123"], signup: "/api/auth/register/vendor" },
+  rider: { icon: '<svg class="ic sm" aria-hidden="true"><use href="#i-bike"/></svg>', title: "Rider", sub: "Deliver parcels and track earnings", demo: ["rider@raunaqi.test", "Demo@123"], signup: "/api/auth/register/rider" },
 };  // admins have their own sign-in page, not linked from here
 const params = new URLSearchParams(location.search);
 const next = params.get("next");

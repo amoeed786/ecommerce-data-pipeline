@@ -1,4 +1,4 @@
-# Kartora - Phase 1 audit
+# Raunaqi - Phase 1 audit
 
 Audited 2026-11-22 against commit `4441b71`, on a local test server with the live ShopDB data.
 

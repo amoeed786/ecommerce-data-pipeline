@@ -24,9 +24,9 @@ SQL Server (ShopDB)  ->  Data lake (Parquet: bronze/silver/gold)  ->  DuckDB + d
 | + | Bonus: SCD2 (dim_customer, dim_product) and revenue forecast | Done |
 | + | Bonus: CDC (log-based change capture) | Not started: needs SQL Server Agent |
 
-## Kartora: the storefront brand
+## Raunaqi: the storefront brand
 
-The shop app is branded **Kartora** ("cart" + "aura"; tagline *Everything you love, delivered.*). The name and
+The shop app is branded **Raunaqi** ("cart" + "aura"; tagline *Everything you love, delivered.*). The name and
 logo live in one place, `BRAND` and `LOGO_SVG` in `shop_app/static/common.js`, so a rename is a one-line change.
 One design system for every page: tokens, Inter, Lucide icons and the light/dark theme live in `shop_app/static/ds.css` + `ds.js` (gallery at `/static/design.html`). Purple is for actions only, orange-red for sale prices only, and status pills use one palette everywhere (gray waiting, blue in progress, purple on the move, green done, red stopped, amber returned). `store.css` = storefront, `admin.css` = admin console, `style.css` = seller center, rider app, sign-in and payment page. No emoji anywhere.
 
@@ -40,7 +40,7 @@ One design system for every page: tokens, Inter, Lucide icons and the light/dark
   - Admin accounts are refused on the public `/login`, and the admin page refuses non-admins. Both answer "wrong
     email or password", so neither page reveals the other kind of account.
   - Opening an admin page while signed out redirects to `/admin/login`.
-  - **The path is configurable:** set `ADMIN_PATH` in `.env` (e.g. `ADMIN_PATH=/kartora-control-7f3a91`) and
+  - **The path is configurable:** set `ADMIN_PATH` in `.env` (e.g. `ADMIN_PATH=/raunaqi-control-7f3a91`) and
     restart. The sign-in page becomes `<ADMIN_PATH>/login`, and `/admin` (plus the old `/dashboard` and
     `/analytics` shortcuts) returns a plain 404.
     - Public pages and scripts never contain the path. Only a signed-in admin's `/api/auth/me` includes it.
@@ -296,11 +296,11 @@ top products and most valuable customers. It's as fresh as the last pipeline run
 
 | Role | Email | Password | Lands on |
 |---|---|---|---|
-| Customer | `customer@kartora.test` | `Demo@123` | `/` storefront |
-| Vendor (you pack) | `vendor@kartora.test` | `Demo@123` | `/vendor` seller center, Kartora Demo Store |
-| Vendor (autopilot) | `techhub@`, `gadget@`, `stylestreet@`, `homenest@`, … `@kartora.test` | `Demo@123` | `/vendor` |
-| Rider | `rider@kartora.test` | `Demo@123` | `/rider` |
-| Admin | `admin@kartora.test` | `Admin@123` | `/admin` |
+| Customer | `customer@raunaqi.test` | `Demo@123` | `/` storefront |
+| Vendor (you pack) | `vendor@raunaqi.test` | `Demo@123` | `/vendor` seller center, Raunaqi Demo Store |
+| Vendor (autopilot) | `techhub@`, `gadget@`, `stylestreet@`, `homenest@`, … `@raunaqi.test` | `Demo@123` | `/vendor` |
+| Rider | `rider@raunaqi.test` | `Demo@123` | `/rider` |
+| Admin | `admin@raunaqi.test` | `Admin@123` | `/admin` |
 
 Customers can also create their own account. Store and rider accounts are made by `migrate_marketplace.py`.
 

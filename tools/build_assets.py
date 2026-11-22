@@ -40,7 +40,7 @@ SAFE_ATTR = re.compile(r"^(d|cx|cy|r|rx|ry|x|y|x1|x2|y1|y2|width|height|points)$
 
 
 def fetch(url: str) -> bytes:
-    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "kartora-asset-builder"}), timeout=30) as r:
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "raunaqi-asset-builder"}), timeout=30) as r:
         return r.read()
 
 

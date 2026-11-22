@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Control room · Kartora</title>
+  <title>Control room · Raunaqi</title>
   <script>  // theme + density before first paint (no flash)
     try { const t = localStorage.getItem("ka.theme"); if (t && t !== "system") document.documentElement.dataset.theme = t;
           if (localStorage.getItem("ka.density") === "comfortable") document.documentElement.classList.add("comfortable"); } catch {}
@@ -16,7 +16,7 @@
 <body class="k">
 <div class="app" id="app">
   <aside class="side" aria-label="Admin navigation">
-    <div class="side-head"><span id="logo"></span><span class="name">Kartora</span><span class="tag">Admin</span></div>
+    <div class="side-head"><span id="logo"></span><span class="name">Raunaqi</span><span class="tag">Admin</span></div>
     <nav id="sidenav"></nav>
     <div class="side-foot"><a class="nav" href="#" id="collapse" aria-label="Collapse sidebar"><svg class="ic"><use href="#i-panel-left"/></svg><span class="lbl">Collapse</span></a></div>
   </aside>
@@ -756,7 +756,7 @@ async function route() {
   timers.forEach(clearInterval); timers = []; ordersTable = null; closeDrawer();
   current = key;
   $$("#sidenav a.nav").forEach((a) => a.classList.toggle("on", a.dataset.page === key));
-  $("#crumb").textContent = PAGES[key].title; document.title = `${PAGES[key].title} · Kartora admin`;
+  $("#crumb").textContent = PAGES[key].title; document.title = `${PAGES[key].title} · Raunaqi admin`;
   $("#page").scrollTop = 0;
   try { await PAGES[key].render(); } catch (e) { console.error(e.stack || e); view.innerHTML = `<div class="empty">${icon("triangle-alert")}<b>Couldn't load this page</b><br>${esc(e.message)}<br><br><button class="btn" onclick="current=null; route()">Try again</button></div>`; }
 }
