@@ -116,7 +116,7 @@ async function loadStats() {
 
 const refresh = throttle(loadStats, 3000);
 let feedStarted = false;
-liveEvents((ev) => {
+function startFeed() { liveEvents((ev) => {
   if (!feedStarted) { $("#feed").innerHTML = ""; feedStarted = true; }
   const li = document.createElement("li");
   li.className = "flash";
@@ -125,9 +125,9 @@ liveEvents((ev) => {
   while ($("#feed").children.length > 25) $("#feed").lastElementChild.remove();
   if (ev.kind === "order") flashOrders.add(ev.id);
   refresh();
-});
+}); }
 setInterval(loadStats, 30000);   // safety net: the minute chart still moves even when nothing happens
-mountAdminShell("@live", "Live ops").then((me) => { if (me) loadStats(); });
+mountAdminShell("@live", "Live ops").then((me) => { if (me) { loadStats(); startFeed(); } });  // after the shell: its #live dot exists now
 </script>
 </body>
 </html>

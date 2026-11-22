@@ -65,39 +65,39 @@
       <div class="tabs" id="auth-tabs"><button data-tab="signin" class="on">Sign in</button><button data-tab="signup">Create account</button></div>
 
       <form id="signin">
-        <div class="field">Email<input name="email" type="email" autocomplete="username" required></div>
-        <div class="field">Password<input name="password" type="password" autocomplete="current-password" required></div>
+        <label class="field">Email<input name="email" type="email" autocomplete="username" required></label>
+        <label class="field">Password<input name="password" type="password" autocomplete="current-password" required></label>
         <button class="primary" style="width:100%; padding:12px; font-weight:700">Sign in</button>
         <button type="button" class="demo-btn" id="demo"></button>
       </form>
 
       <form id="signup-customer" class="hidden">
-        <div class="two"><div class="field">First name<input name="first_name" required autocomplete="given-name"></div>
-          <div class="field">Last name<input name="last_name" required autocomplete="family-name"></div></div>
-        <div class="field">Email<input name="email" type="email" required autocomplete="email"></div>
-        <div class="field">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"><span class="muted small">8+ characters, letters with numbers or symbols</span></div>
-        <div class="two"><div class="field">City<input name="city"></div><div class="field">Country<input name="country" value="Pakistan"></div></div>
-        <div class="field">Phone<input name="phone" autocomplete="tel"></div>
+        <div class="two"><label class="field">First name<input name="first_name" required autocomplete="given-name"></label>
+          <label class="field">Last name<input name="last_name" required autocomplete="family-name"></label></div>
+        <label class="field">Email<input name="email" type="email" required autocomplete="email"></label>
+        <label class="field">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"><span class="muted small">8+ characters, letters with numbers or symbols</span></label>
+        <div class="two"><label class="field">City<input name="city"></label><label class="field">Country<input name="country" value="Pakistan"></label></div>
+        <label class="field">Phone<input name="phone" autocomplete="tel"></label>
         <button class="primary" style="width:100%; padding:12px; font-weight:700">Create shopper account</button>
       </form>
 
       <form id="signup-vendor" class="hidden">
-        <div class="field">Store name<input name="store_name" required minlength="3" placeholder="e.g. Lahore Leather Co."></div>
-        <div class="field">Tagline<input name="tagline" placeholder="One line about what you sell"></div>
-        <div class="two"><div class="field">Your name<input name="owner_name" required></div><div class="field">City<input name="city"></div></div>
-        <div class="field">Country<input name="country" value="Pakistan"></div>
-        <div class="field">Email<input name="email" type="email" required autocomplete="email"></div>
-        <div class="field">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></div>
+        <label class="field">Store name<input name="store_name" required minlength="3" placeholder="e.g. Lahore Leather Co."></label>
+        <label class="field">Tagline<input name="tagline" placeholder="One line about what you sell"></label>
+        <div class="two"><label class="field">Your name<input name="owner_name" required></label><label class="field">City<input name="city"></label></div>
+        <label class="field">Country<input name="country" value="Pakistan"></label>
+        <label class="field">Email<input name="email" type="email" required autocomplete="email"></label>
+        <label class="field">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
         <button class="primary" style="width:100%; padding:12px; font-weight:700">Open my store</button>
         <p class="muted small">Your store starts with autopilot off - you accept and pack orders in the seller center.</p>
       </form>
 
       <form id="signup-rider" class="hidden">
-        <div class="field">Full name<input name="full_name" required autocomplete="name"></div>
-        <div class="two"><div class="field">Phone<input name="phone" autocomplete="tel"></div><div class="field">City<input name="city"></div></div>
-        <div class="field">Vehicle<select name="vehicle"><option value="bike">Motorbike</option><option value="car">Car</option><option value="van">Van</option></select></div>
-        <div class="field">Email<input name="email" type="email" required autocomplete="email"></div>
-        <div class="field">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></div>
+        <label class="field">Full name<input name="full_name" required autocomplete="name"></label>
+        <div class="two"><label class="field">Phone<input name="phone" autocomplete="tel"></label><label class="field">City<input name="city"></label></div>
+        <label class="field">Vehicle<select name="vehicle"><option value="bike">Motorbike</option><option value="car">Car</option><option value="van">Van</option></select></label>
+        <label class="field">Email<input name="email" type="email" required autocomplete="email"></label>
+        <label class="field">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
         <button class="primary" style="width:100%; padding:12px; font-weight:700">Join as a rider</button>
         <p class="muted small">You start offline - go online in the rider app when you're ready for deliveries.</p>
       </form>
@@ -119,7 +119,9 @@ const NEXT_ROLE = { "/vendor": "vendor", "/rider": "rider" };
 let role = null, tab = "signin";
 
 function go(user) {
-  const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : null;  // okFor() only allows shop/seller/rider pages
+  // only same-site destinations: resolve against our origin, so tricks like "/\\evil.com" or "//evil.com" are rejected
+  let safe = null;
+  try { const u = new URL(next || "", location.origin); if (next && u.origin === location.origin) safe = u.pathname + u.search + u.hash; } catch {}
   const okFor = (r) => !safe || NEXT_ROLE[safe.split("?")[0]] === r || (!NEXT_ROLE[safe.split("?")[0]] && r === "customer");
   location.href = safe && okFor(user.role) ? safe : ROLE_HOME[user.role];
 }
@@ -129,7 +131,7 @@ function choose(r) {
   const R = ROLES[r];
   $("#step-pick").classList.add("hidden");
   $("#step-auth").classList.remove("hidden");
-  $("#r-icon").textContent = R.icon; $("#r-title").textContent = R.title; $("#r-sub").textContent = R.sub;
+  $("#r-icon").innerHTML = R.icon;  // constant markup, not user data $("#r-title").textContent = R.title; $("#r-sub").textContent = R.sub;
   $("#auth-tabs").classList.toggle("hidden", !R.signup);
   $("#demo").innerHTML = `<svg class="ic sm" aria-hidden="true"><use href="#i-zap"/></svg> Use the demo ${R.title.toLowerCase()} account <span class="muted small">(${R.demo[0]})</span>`;
   history.replaceState(null, "", `/login?as=${r}${next ? "&next=" + encodeURIComponent(next) : ""}`);

@@ -406,6 +406,19 @@ def update_product(product_id: int, unit_price: float | None = None, list_price:
                         "WHERE product_id = ?", add_stock, ts, product_id)
 
 
+def admin_products() -> list[dict]:
+    return with_images(query("""
+        SELECT p.product_id, p.product_name, p.sku, p.brand, p.unit_price, p.list_price, p.is_active, p.image_url, p.gallery,
+               c.category_name, v.vendor_name, v.is_active AS vendor_active,
+               coalesce(i.quantity_on_hand, 0) AS stock, coalesce(s.sold, 0) AS sold
+        FROM dbo.products p
+        JOIN dbo.categories c ON c.category_id = p.category_id
+        LEFT JOIN dbo.vendors v ON v.vendor_id = p.vendor_id
+        LEFT JOIN dbo.inventory i ON i.product_id = p.product_id
+        LEFT JOIN (SELECT product_id, SUM(quantity) AS sold FROM dbo.order_items GROUP BY product_id) s ON s.product_id = p.product_id
+        ORDER BY coalesce(s.sold, 0) DESC, p.product_id"""))
+
+
 def set_product_image(product_id: int, image_url: str) -> None:
     clear_catalog_cache()
     if not execute("UPDATE dbo.products SET image_url = ?, updated_at = ? WHERE product_id = ?",
@@ -508,6 +521,7 @@ def admin_overview() -> dict:
         "shipments_by_status": query("SELECT status, COUNT(*) AS n FROM dbo.shipments "
                                      "WHERE status IN ('pending','confirmed','packing','ready','assigned','picked_up') GROUP BY status"),
         "riders_by_status": query("SELECT status, COUNT(*) AS n FROM dbo.riders GROUP BY status"),
+        "orders_by_status": query("SELECT status, COUNT(*) AS n FROM dbo.orders WHERE order_date <= SYSDATETIME() GROUP BY status"),
         "pending_orders": scalar("SELECT COUNT(*) FROM dbo.orders WHERE status = 'pending' AND order_date <= SYSDATETIME()"
                                " AND NOT EXISTS (SELECT 1 FROM dbo.payments p WHERE p.order_id = dbo.orders.order_id AND p.payment_status = 'pending' AND p.payment_method <> 'cash_on_delivery')"),
     }
@@ -522,6 +536,7 @@ def order_queue(statuses: list[str], limit: int = 100) -> list[dict]:
     """, *statuses)
 
 
+@catalog_cached   # daily totals: fine to be up to 15 s old; refreshed in the background so nobody waits
 def admin_kpis(days: int = 28) -> dict:
     """Daily operations series for the console's KPI cards (current period vs the one before)."""
     n = int(days)

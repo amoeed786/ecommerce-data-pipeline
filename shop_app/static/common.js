@@ -16,7 +16,7 @@ const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 // One market: Pakistan, PKR. Prices are whole rupees ("Rs 4,999"); amounts with paisa keep 2 decimals.
 const CURRENCY = { symbol: "Rs", locale: "en-PK" };
 const money = (v) => {
-  const n = Number(v || 0), whole = Math.abs(n % 1) < 0.005;
+  const n = Math.round(Number(v || 0) * 100) / 100, whole = Number.isInteger(n);   // round to paisa first, then decide
   return `${n < 0 ? "−" : ""}${CURRENCY.symbol} ${Math.abs(n).toLocaleString(CURRENCY.locale, { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 })}`;
 };
 const moneyShort = (v) => { const a = Math.abs(v), s = v < 0 ? "−" : "";
@@ -89,13 +89,28 @@ function toast(msg, kind = "info", ms = 3500) {
 }
 
 // Live change feed (Server-Sent Events). The server only sends what this user may see.
+// The stream is closed when the page is hidden for navigation (pagehide) and reopened if the page comes back from the
+// back/forward cache. Without that, every page you leave keeps its stream open in the cache; browsers allow only 6
+// connections per site, so after a few page switches new pages wait for a free one (seconds, sometimes 30 s).
+// Returns a stable handle: listeners added with handle.addEventListener survive reconnects.
 function liveEvents(onEvent) {
-  const dot = $("#live");
-  const es = new EventSource("/api/events");
-  es.onopen = () => { dot?.classList.add("on"); if (dot) dot.textContent = "live"; };
-  es.onerror = () => { dot?.classList.remove("on"); if (dot) dot.textContent = "reconnecting…"; };
-  es.onmessage = (e) => onEvent(JSON.parse(e.data));
-  return es;
+  const listeners = [];
+  let es = null;
+  const connect = () => {
+    const dot = $("#live");
+    es = new EventSource("/api/events");
+    es.onopen = () => { dot?.classList.add("on"); if (dot) dot.textContent = "live"; };
+    es.onerror = () => { dot?.classList.remove("on"); if (dot) dot.textContent = "reconnecting…"; };
+    es.onmessage = (e) => onEvent(JSON.parse(e.data));
+    listeners.forEach(([type, fn]) => es.addEventListener(type, fn));
+  };
+  connect();
+  window.addEventListener("pagehide", () => { es?.close(); es = null; });
+  window.addEventListener("pageshow", (e) => { if (e.persisted && !es) connect(); });
+  return {
+    addEventListener(type, fn) { listeners.push([type, fn]); es?.addEventListener(type, fn); },
+    close() { es?.close(); es = null; },
+  };
 }
 
 function throttle(fn, ms) {

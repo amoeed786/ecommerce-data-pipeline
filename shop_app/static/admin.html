@@ -34,7 +34,7 @@
   <main class="page" id="page"><div class="wrap" id="view"></div></main>
 </div>
 <div class="scrim" id="scrim"></div>
-<aside class="drawer" id="drawer" aria-label="Details" aria-hidden="true"></aside>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Details" aria-hidden="true"></aside>
 <dialog class="dlg" id="dlg"></dialog>
 <dialog class="cmdk" id="cmdk"><div class="q"><svg class="ic"><use href="#i-search"/></svg><input id="cmdk-q" placeholder="Type a page, an action, or an order number…" autocomplete="off"><kbd>Esc</kbd></div><div class="list" id="cmdk-list"></div></dialog>
 
@@ -60,6 +60,8 @@ const sw = (attrs, on, lbl) => `<label class="switch"><input type="checkbox" ${a
 const mins = (s) => (s == null ? "–" : s < 60 ? `${Math.round(s)}s` : s < 3600 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`);
 const PAY_LABEL = { cash_on_delivery: "Cash on delivery", credit_card: "Credit card", debit_card: "Debit card", paypal: "Mobile wallet", bank_transfer: "Bank transfer" };
 const DAGSTER = "http://localhost:3000";
+// YYYY-MM-DD in local time (the server buckets days with local GETDATE(), not UTC)
+const localDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 async function act(path, body, msg, method = "POST") {
   try { const r = await api(path, { method, body }); if (msg) toast(msg, "good"); return r || true; } catch (e) { toast(e.message, "error", 6000); return false; }
@@ -71,6 +73,7 @@ function confirmDlg({ title, body, ok = "Confirm", danger = false, input = null 
       ${input ? `<input class="input" id="dlg-in" placeholder="${esc(input)}" required minlength="3">` : ""}</div>
       <div class="f"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn ${danger ? "danger solid" : "primary"}" value="ok">${esc(ok)}</button></div></form>`;
     d.onclose = () => resolve(d.returnValue === "ok" ? (input ? $("#dlg-in").value.trim() : true) : false);
+    d.returnValue = "";  // the dialog is reused: Esc must never inherit a previous "ok"
     d.showModal(); (input ? $("#dlg-in") : d.querySelector(".btn.primary, .btn.danger"))?.focus();
   });
 }
@@ -117,7 +120,7 @@ class DataTable {
     const all = this.view(), pages = Math.max(1, Math.ceil(all.length / this.pageSize));
     this.page = Math.min(this.page, pages - 1);
     const rows = all.slice(this.page * this.pageSize, (this.page + 1) * this.pageSize);
-    const counts = this.filter ? Object.fromEntries(this.filter.options.map(([v]) => [v, (this.rows || []).filter((x) => this.filter.test(x, v)).length])) : {};
+    const counts = this.counts || (this.filter ? Object.fromEntries(this.filter.options.map(([v]) => [v, (this.rows || []).filter((x) => this.filter.test(x, v)).length])) : {});
     const allSel = rows.length && rows.every((r) => this.sel.has(this.rowId(r)));
     const focus = document.activeElement === this.el.querySelector(".dt-q");
     this.el.innerHTML = `<div class="card">
@@ -128,7 +131,7 @@ class DataTable {
         <button class="btn sm ghost" data-bulk="clear">Clear</button></div>` : ""}
       <div class="dt-scroll"><table class="dt"><thead><tr>${this.select ? `<th class="cb"><input type="checkbox" data-all ${allSel ? "checked" : ""} aria-label="Select all on this page"></th>` : ""}
         ${this.cols.map((c) => `<th class="${c.num ? "num" : ""} ${c.sort !== false && c.key ? "sortable" : ""}" ${c.key && c.sort !== false ? `data-sort="${c.key}" aria-sort="${this.sortKey === c.key ? (this.sortDir > 0 ? "ascending" : "descending") : "none"}"` : ""} ${c.width ? `style="width:${c.width}"` : ""}>${esc(c.label)}${this.sortKey === c.key ? icon(this.sortDir > 0 ? "arrow-up" : "arrow-down") : ""}</th>`).join("")}</tr></thead>
-        <tbody>${rows.map((r) => { const id = this.rowId(r); return `<tr class="${this.onRow ? "click" : ""} ${this.sel.has(id) ? "sel" : ""} ${this.flash?.has(id) ? "flash" : ""}" data-id="${id}">
+        <tbody>${rows.map((r) => { const id = this.rowId(r); return `<tr class="${this.onRow ? "click" : ""} ${this.sel.has(id) ? "sel" : ""} ${this.flash?.has(id) ? "flash" : ""}" data-id="${id}" ${this.onRow ? 'tabindex="0"' : ""}>
           ${this.select ? `<td class="cb"><input type="checkbox" data-cb="${id}" ${this.sel.has(id) ? "checked" : ""} aria-label="Select row"></td>` : ""}
           ${this.cols.map((c) => `<td class="${c.num ? "num" : ""}">${c.render ? c.render(r) : esc(r[c.key] ?? "")}</td>`).join("")}</tr>`; }).join("")}</tbody></table>
         ${rows.length ? "" : `<div class="empty">${icon("inbox")}${esc(this.empty || "Nothing to show")}</div>`}</div>
@@ -150,22 +153,37 @@ class DataTable {
       const chosen = (this.rows || []).filter((r) => this.sel.has(this.rowId(r)));
       if (await this.bulk[+b.dataset.bulk][2](chosen) !== false) { this.sel.clear(); this.render(); }
     }));
-    if (this.onRow) this.el.querySelectorAll("tbody tr[data-id]").forEach((tr) => (tr.onclick = (e) => {
-      if (e.target.closest("input, button, a, select, label")) return;
-      const id = isNaN(tr.dataset.id) ? tr.dataset.id : +tr.dataset.id; this.onRow((this.rows || []).find((r) => this.rowId(r) === id));
-    }));
+    if (this.onRow) this.el.querySelectorAll("tbody tr[data-id]").forEach((tr) => {
+      const open = () => { const id = isNaN(tr.dataset.id) ? tr.dataset.id : +tr.dataset.id; this.onRow((this.rows || []).find((r) => this.rowId(r) === id), tr); };
+      tr.onclick = (e) => { if (!e.target.closest("input, button, a, select, label")) open(); };
+      tr.onkeydown = (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === tr) { e.preventDefault(); open(); } };  // keyboard users
+    });
     this.afterRender?.(this.el);
   }
 }
 
 // ---------------------------------------------------------------- drawer
-let drawerFor = null;
+let drawerFor = null, drawerOpener = null;
 function openDrawer(html, key) {
+  if (!drawerFor) drawerOpener = document.activeElement;   // focus goes back here on close
   drawerFor = key; const d = $("#drawer"); d.innerHTML = html; d.classList.add("on"); d.setAttribute("aria-hidden", "false"); $("#scrim").classList.add("on");
   d.querySelector("[data-close]")?.addEventListener("click", closeDrawer);
   setTimeout(() => d.querySelector("[data-close]")?.focus(), 50);
 }
-function closeDrawer() { drawerFor = null; $("#drawer").classList.remove("on"); $("#drawer").setAttribute("aria-hidden", "true"); $("#scrim").classList.remove("on"); }
+function closeDrawer() {
+  const was = drawerFor; drawerFor = null;
+  $("#drawer").classList.remove("on"); $("#drawer").setAttribute("aria-hidden", "true"); $("#scrim").classList.remove("on");
+  if (was && drawerOpener && document.contains(drawerOpener)) drawerOpener.focus();
+  drawerOpener = null;
+}
+// keep keyboard focus inside the open drawer (it's modal)
+$("#drawer").addEventListener("keydown", (e) => {
+  if (e.key !== "Tab") return;
+  const f = [...$("#drawer").querySelectorAll("button, a[href], select, input, [tabindex]:not([tabindex='-1'])")].filter((x) => !x.disabled && x.offsetParent);
+  if (!f.length) return;
+  if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f.at(-1).focus(); }
+  else if (!e.shiftKey && document.activeElement === f.at(-1)) { e.preventDefault(); f[0].focus(); }
+});
 $("#scrim").onclick = closeDrawer;
 
 // ===================================================================== pages
@@ -249,6 +267,10 @@ async function loadKpis() {
 async function loadOverview() {
   if (!$("#o-strip")) return;
   const o = await api("/api/admin/overview");
+  if (ordersTable) {  // status chip counts come from the server (the table only holds the selected statuses)
+    const counts = Object.fromEntries(ORDER_STATUSES.map((s) => [s, 0]).concat((o.orders_by_status || []).map((r) => [r.status, r.n])));
+    if (JSON.stringify(counts) !== JSON.stringify(ordersTable.counts)) { ordersTable.counts = counts; if (ordersTable.rows) ordersTable.render(); }
+  }
   const auto = o.settings.auto_approve === "true", speed = +o.settings.sim_speed, e = o.engine;
   const by = Object.fromEntries(o.shipments_by_status.map((r) => [r.status, r.n]));
   const riders = Object.fromEntries(o.riders_by_status.map((r) => [r.status, r.n]));
@@ -274,7 +296,9 @@ async function loadOrders() {
   const rows = orderFilter.length ? await api("/api/admin/orders?" + new URLSearchParams([...orderFilter.map((s) => ["status", s]), ["limit", 500]])) : [];
   ordersTable.setRows(rows);
 }
-const refreshOrders = throttle(() => { if (current === "orders") loadOrders(); if (drawerFor?.startsWith("order:")) showOrder(+drawerFor.split(":")[1], true); }, 1200);
+const refreshOrders = throttle(() => { if (current === "orders") loadOrders(); }, 1200);
+// the open order drawer refreshes only when *that* order changes (from any page)
+const refreshDrawer = throttle(() => { if (drawerFor?.startsWith("order:")) showOrder(+drawerFor.split(":")[1], true); }, 1200);
 
 // order drawer: items, parcels, timeline, customer, rider, payment, audit log, act-as buttons
 const SHIP_STEPS = [["created_at", "Placed"], ["confirmed_at", "Started"], ["accepted_at", "Accepted"], ["ready_at", "Packed"], ["assigned_at", "Rider assigned"], ["picked_up_at", "Picked up"], ["delivered_at", "Delivered"]];
@@ -330,7 +354,13 @@ async function showOrder(id, quiet = false) {
       ${o.can_return ? `<button class="btn" data-oact="return">${icon("rotate-ccw")}Mark returned</button>` : ""}
       <a class="btn ghost" style="margin-left:auto" href="/#/orders/${o.order_id}" target="_blank" rel="noopener">${icon("external-link")}Customer view</a></div>`;
   const d = $("#drawer"), scroll = d.querySelector(".drawer-b")?.scrollTop || 0;
+  // a live redraw must not undo what the admin is doing: keep dropdown choices and keyboard focus
+  const picked = Object.fromEntries([...d.querySelectorAll("select[id]")].map((s) => [s.id, s.value]));
+  const a = document.activeElement, focusKey = a && d.contains(a) && a !== d
+    ? (a.id ? `#${a.id}` : [...a.attributes].filter((x) => x.name.startsWith("data-")).map((x) => `[${x.name}="${x.value}"]`).join("") || null) : null;
   d.innerHTML = html; d.querySelector(".drawer-b").scrollTop = scroll;
+  Object.entries(picked).forEach(([sid, v]) => { const s = d.querySelector(`#${sid}`); if (s && [...s.options].some((o) => o.value === v)) s.value = v; });
+  if (focusKey) d.querySelector(focusKey)?.focus();
   d.querySelector("[data-close]").onclick = closeDrawer;
   const after = () => { showOrder(id, true); loadOrders(); loadOverview(); };
   d.querySelectorAll("[data-oact]").forEach((b) => (b.onclick = async () => {
@@ -408,7 +438,7 @@ PAGES.riders = {
     });
     const load = async () => {
       const [riders, tr] = await Promise.all([api("/api/admin/riders"), api("/api/admin/trends")]);
-      const days = Array.from({ length: 7 }, (_, i) => new Date(Date.now() - (6 - i) * 864e5).toISOString().slice(0, 10));
+      const days = Array.from({ length: 7 }, (_, i) => localDay(new Date(Date.now() - (6 - i) * 864e5)));
       riders.forEach((r) => { const mine = tr.rider_week.filter((x) => x.rider_id === r.rider_id);
         r.week = days.map((d) => mine.find((x) => x.day.slice(0, 10) === d)?.delivered || 0); r.week_total = r.week.reduce((a, b) => a + b, 0); r.earned = mine.reduce((a, x) => a + x.earned, 0); });
       const by = (s) => riders.filter((r) => r.status === s).length, active = riders.filter((r) => r.week_total);
@@ -457,7 +487,7 @@ PAGES.vendors = {
       },
     });
     const [v, tr] = await Promise.all([api("/api/admin/vendors"), api("/api/admin/trends")]);
-    const days = Array.from({ length: 14 }, (_, i) => new Date(Date.now() - (13 - i) * 864e5).toISOString().slice(0, 10));
+    const days = Array.from({ length: 14 }, (_, i) => localDay(new Date(Date.now() - (13 - i) * 864e5)));
     v.forEach((x) => { const mine = tr.vendor_prep.filter((p) => p.vendor_id === x.vendor_id);
       x.prep = days.map((d) => mine.find((p) => p.day.slice(0, 10) === d)?.prep_minutes ?? null).filter((n) => n != null);
       const w = mine.slice(-7); x.prep_now = w.length ? w.reduce((a, p) => a + p.prep_minutes * p.parcels, 0) / w.reduce((a, p) => a + p.parcels, 0) : null; });
@@ -476,7 +506,7 @@ PAGES.catalog = {
       filter: { options: [["low", "Low stock"], ["out", "Out of stock"], ["sale", "On sale"]], test: (p, f) => ({ low: p.stock > 0 && p.stock < 20, out: p.stock <= 0, sale: p.list_price > p.unit_price }[f]) },
       cols: [
         { key: "product_name", label: "Product", render: (p) => { const im = productImages(p)[0]; return `<div class="cell2"><span style="width:32px; height:32px; border:1px solid var(--k-border); border-radius:6px; background:#fff; flex:none; overflow:hidden; display:grid; place-items:center">${im ? `<img src="${esc(im.srcset ? im.src.replace("-480.", "-240.") : im.src)}" alt="" width="32" height="32" loading="lazy" style="object-fit:contain; width:100%; height:100%">` : icon(CATEGORY_ICON[p.category_name] || "package", "xs")}</span>
-          <div style="min-width:0"><div class="t" style="max-width:340px; overflow:hidden; text-overflow:ellipsis">${esc(p.product_name)}</div><div class="m">${esc(p.sku)} · ${esc(p.category_name)}</div></div></div>`; } },
+          <div style="min-width:0"><div class="t" style="max-width:340px; overflow:hidden; text-overflow:ellipsis">${esc(p.product_name)}</div><div class="m">${esc(p.sku)} · ${esc(p.category_name)}${!p.is_active || p.vendor_active === false ? " · " + pill("cancelled", !p.is_active ? "inactive" : "store hidden") : ""}</div></div></div>`; } },
         { key: "vendor_name", label: "Store" }, { key: "sold", label: "Sold", num: true, render: (p) => int(p.sold) },
         { key: "stock", label: "Stock", num: true, render: (p) => `<b style="color:${p.stock <= 0 ? "var(--st-red)" : p.stock < 20 ? "var(--st-amber)" : "inherit"}">${int(p.stock)}</b>` },
         { key: "unit_price", label: "Price (Rs)", num: true, render: (p) => `<input class="input sm num" type="number" min="1" step="1" value="${p.unit_price}" id="pr-${p.product_id}" style="width:96px" aria-label="Price">` },
@@ -489,7 +519,7 @@ PAGES.catalog = {
         el.querySelectorAll("[data-restock]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/products/${b.dataset.restock}`, { add_stock: +$(`#rs-${b.dataset.restock}`).value }, "Restocked", "PATCH")) load(); }));
       },
     });
-    const load = async () => t.setRows((await api("/api/products?limit=500&sort=popular")).items);
+    const load = async () => t.setRows(await api("/api/admin/products"));
     await load();
   },
 };
@@ -808,6 +838,7 @@ function notify(ic, html) { notes.unshift({ ic, html, t: new Date().toISOString(
     if (ev.kind === "shipment" && ev.status === "delivered") notify("house", `Order #${ev.order_id} delivered by ${esc(ev.detail || "rider")}`);
     if (ev.kind === "shipment" && ev.status === "cancelled") notify("x", `Order #${ev.order_id}: parcel cancelled`);
     PAGES[current]?.live?.(ev);
+    if ((ev.kind === "order" || ev.kind === "shipment") && drawerFor === `order:${ev.order_id}`) refreshDrawer();
   });
   const dot = $("#livedot");
   es.addEventListener("open", () => { dot.classList.add("on"); dot.querySelector("span").textContent = "Live"; });

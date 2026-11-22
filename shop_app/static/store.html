@@ -114,7 +114,7 @@ async function renderAccount() {
   const items = me.role === "customer"
     ? `<a href="#/orders">${icon("package")}Orders</a><a href="#/wishlist">${icon("heart")}Wishlist</a><a href="#/account">${icon("user")}Account</a>`
     : `<a href="${roleHome(me)}">${icon("arrow-right")}Go to ${me.role === "admin" ? "admin" : me.role === "vendor" ? "seller center" : "rider app"}</a>`;
-  box.innerHTML = `<div class="menu"><button class="sh-act" aria-haspopup="true" onclick="this.parentElement.classList.toggle('open')">${icon("circle-user")}
+  box.innerHTML = `<div class="menu"><button class="sh-act" aria-haspopup="true" aria-expanded="false" onclick="this.setAttribute('aria-expanded', this.parentElement.classList.toggle('open'))">${icon("circle-user")}
       <span class="lbl">${esc(me.display_name.split(" ")[0])}</span>${icon("chevron-down", "sm")}</button>
     <div class="drop"><div class="who">Signed in as<br><b style="color:var(--k-text)">${esc(me.email)}</b></div>${items}<button onclick="logout()">${icon("log-out")}Sign out</button></div></div>`;
 }
@@ -149,7 +149,7 @@ async function pageHome() {
       <div class="hero-tiles">${heroPicks.map((p, i) => { const sale = p.list_price > p.unit_price; return `
         <a class="hero-tile" href="#/p/${p.product_id}" aria-label="${esc(p.product_name)}, ${money(p.unit_price)}">
           ${imgTag(p.images[0], { sizes: "(max-width: 900px) 30vw, 200px", lazy: false, alt: "" })}
-          <span class="cap"><b class="${sale ? "sale" : ""}">${money(p.unit_price)}</b>${esc(p.product_name.split(",")[0]).slice(0, 34)}</span></a>`; }).join("")}</div>
+          <span class="cap"><b class="${sale ? "sale" : ""}">${money(p.unit_price)}</b>${esc(p.product_name.split(",")[0].slice(0, 34))}</span></a>`; }).join("")}</div>
     </section>
 
     <section class="sec" aria-labelledby="cat-h"><div class="sec-head"><h2 class="k-h2" id="cat-h">Shop by category</h2></div>
@@ -260,11 +260,14 @@ async function pageListing(base = {}) {
   $$("[data-clear]").forEach((el) => (el.onclick = () => el.dataset.clear === "all"
     ? setQ({ q: "", min_price: "", max_price: "", min_rating: "", on_sale: "", in_stock: "" }) : setQ({ [el.dataset.clear]: "" })));
   $("#more")?.addEventListener("click", async (e) => {
-    e.currentTarget.disabled = true;
+    const btn = e.currentTarget, grid = $("#grid"), at = location.hash;
+    btn.disabled = true;
     offset += 40; params.set("offset", offset);
-    const more = await apiCached("/api/products?" + params);
-    $("#grid").insertAdjacentHTML("beforeend", cards(more.items));
-    if (offset + 40 >= res.total) $("#more").remove(); else $("#more").disabled = false;
+    const more = await apiCached("/api/products?" + params).catch(() => null);
+    if (location.hash !== at || !grid.isConnected) return;   // the shopper moved on while this loaded
+    if (!more) { btn.disabled = false; return toast("Couldn't load more products", "error"); }
+    grid.insertAdjacentHTML("beforeend", cards(more.items));
+    if (offset + 40 >= res.total) btn.remove(); else btn.disabled = false;
   });
 }
 
@@ -644,8 +647,14 @@ async function doRender({ quiet = false } = {}) {
   const sameRoute = routeBase(h) === lastBase;
   const skel = quiet || sameRoute ? null : setTimeout(() => (view.innerHTML = skeletonFor(h)), 120);  // only if slow
   try { await fn(h.match(re)); }
-  catch (e) { view.innerHTML = `<div class="empty panel" style="margin-top:var(--k-s-3)">${icon("circle-alert")}<h2>Something went wrong</h2><p>${esc(e.message)}</p>
-    <button class="k-btn primary" onclick="render()">Try again</button></div>`; }
+  catch (e) {
+    view.innerHTML = e.status === 404
+      ? `<div class="empty panel" style="margin-top:var(--k-s-3)">${icon("search")}<h2>${/^#\/orders/.test(h) ? "We couldn't find that order" : "This product isn't available"}</h2>
+          <p>It may have been removed, or the link is wrong.</p><a class="k-btn primary" href="#/">Back to the shop</a></div>`
+      : `<div class="empty panel" style="margin-top:var(--k-s-3)">${icon("circle-alert")}<h2>Something went wrong</h2><p>${esc(e.message)}</p>
+          <button class="k-btn primary" onclick="render()">Try again</button></div>`;
+    document.title = "Not found · Kartora";
+  }
   clearTimeout(skel);
   if (quiet) return;
   if (!sameRoute) {
@@ -680,6 +689,7 @@ liveEvents((ev) => {
 
 (async () => {
   $("#logo-mark").innerHTML = LOGO_SVG(32); $("#logo-mark2").innerHTML = LOGO_SVG(28);
+  view.innerHTML = skeletonFor(location.hash || "#/");   // the page's shape right away, even before the first data arrives
   saveCart(); updateWishCount();
   if (/^#?\/?$/.test(location.hash)) prefetch("/api/home");
   const [cats, cfg] = await Promise.all([apiCached("/api/categories", 300000), apiCached("/api/config", 300000).catch(() => null), loadMe()]);

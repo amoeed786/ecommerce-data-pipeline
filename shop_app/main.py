@@ -20,12 +20,14 @@ Background tasks: the live change feed (SSE) and the fulfillment autopilot (sour
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
 import re
 import subprocess
 import sys
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -34,7 +36,7 @@ import duckdb
 import secrets
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
@@ -123,10 +125,17 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 @app.middleware("http")
 async def cache_headers(request: Request, call_next):
     """Photos never change under the same name (seller uploads get a new random name each time), so browsers
-    may keep them for a week. Pages, scripts and API responses keep revalidating so updates show at once."""
+    may keep them for a week. Pages, scripts and API responses keep revalidating so updates show at once.
+    Requests slower than 1.5 s are logged, so a slow screen can be traced to its endpoint."""
+    t0 = time.perf_counter()
     response = await call_next(request)
     path = request.url.path
-    if path.startswith(("/static/img/", "/static/uploads/")):
+    ms = (time.perf_counter() - t0) * 1000
+    if ms > 1500 and path != "/api/events":
+        log.warning("slow request %.0f ms %s %s", ms, request.method, request.url.path + (f"?{request.url.query}" if request.url.query else ""))
+    if path.startswith("/static/") and "v=" in request.url.query:   # content-versioned URL: never changes
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path.startswith(("/static/img/", "/static/uploads/", "/static/fonts/")):
         response.headers["Cache-Control"] = "public, max-age=604800"
     elif path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache"  # use the copy only after checking it's still current (ETag)
@@ -144,6 +153,27 @@ async def payment_error(_: Request, exc: Exception):
 
 
 # ================================================================== pages
+_asset_rx = re.compile(r'(/static/[\w./-]+\.(?:css|js))(?=["\'])')
+_page_cache: dict[str, tuple[float, str]] = {}
+
+
+def versioned_page(file: str) -> HTMLResponse:
+    """The page with every /static/*.css|js reference stamped with a content hash (?v=...). Those files can then
+    be cached for a year: a browser never has to re-check them on each page view (fewer requests competing for the
+    6 connections a browser opens per site), and any change to a file gives it a new URL, so updates still show at once."""
+    path = STATIC / file
+    deps = sorted({m.group(1) for m in _asset_rx.finditer(path.read_text(encoding="utf-8"))})
+    stamp = max([path.stat().st_mtime] + [(STATIC / d.removeprefix("/static/")).stat().st_mtime
+                                          for d in deps if (STATIC / d.removeprefix("/static/")).exists()])
+    hit = _page_cache.get(file)
+    if not hit or hit[0] != stamp:
+        def version(m: re.Match) -> str:
+            f = STATIC / m.group(1).removeprefix("/static/")
+            return f"{m.group(1)}?v={hashlib.sha1(f.read_bytes()).hexdigest()[:10]}" if f.exists() else m.group(1)
+        hit = _page_cache[file] = (stamp, _asset_rx.sub(version, path.read_text(encoding="utf-8")))
+    return HTMLResponse(hit[1], headers={"Cache-Control": "no-cache"})
+
+
 def page(file: str, *roles: str):
     """Serve a page; if it needs a role the visitor doesn't have, send them to the right sign-in page
     (admin pages -> the separate /admin/login, everything else -> the public /login)."""
@@ -151,7 +181,7 @@ def page(file: str, *roles: str):
         if roles and (user is None or user["role"] not in roles):
             login = f"{ADMIN_PATH}/login" if "admin" in roles else "/login"
             return RedirectResponse(f"{login}?next={request.url.path}", status_code=303)
-        return FileResponse(STATIC / file)
+        return versioned_page(file)
     return handler
 
 
@@ -352,7 +382,7 @@ class SandboxCard(BaseModel):
 
 @app.get("/pay/{session_ref}", include_in_schema=False)
 def payment_page(session_ref: str):
-    return FileResponse(STATIC / "pay.html")  # the session ref is long and random: knowing it is the access
+    return versioned_page("pay.html")  # the session ref is long and random: knowing it is the access
 
 
 @app.get("/api/pay/{session_ref}", tags=["payments"])
@@ -760,6 +790,12 @@ def admin_user_flags(user_id: int, body: Flags, me: dict = Depends(admin)):
 @app.post("/api/admin/products/{product_id}/image", tags=["admin"])
 async def admin_product_image(product_id: int, file: UploadFile = File(...), _: dict = Depends(admin)):
     return {"image_url": await save_product_image(product_id, file)}
+
+
+@app.get("/api/admin/products", tags=["admin"])
+def admin_products(_: dict = Depends(admin)):
+    """Every product, including inactive ones and those of hidden stores (the public catalog leaves those out)."""
+    return db.admin_products()
 
 
 @app.patch("/api/admin/products/{product_id}", tags=["admin"])

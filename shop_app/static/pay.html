@@ -60,12 +60,12 @@ async function load() {
     <div class="muted small" style="margin-bottom:16px">Hi ${esc(info.customer_first_name)} - enter your card details below.</div>
     <div id="msg">${info.failure_reason ? `<div class="msg err">Last attempt failed: ${esc(info.failure_reason)}. Please try again.</div>` : ""}</div>
     <form id="card" autocomplete="on">
-      <div class="field">Card number<input name="card_number" inputmode="numeric" autocomplete="cc-number" placeholder="1234 1234 1234 1234" maxlength="23" required></div>
+      <label class="field">Card number<input name="card_number" inputmode="numeric" autocomplete="cc-number" placeholder="1234 1234 1234 1234" maxlength="23" required></label>
       <div class="two">
-        <div class="field">Expiry<input name="expiry" autocomplete="cc-exp" placeholder="MM / YY" maxlength="7" required></div>
-        <div class="field">CVC<input name="cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4" required></div>
+        <label class="field">Expiry<input name="expiry" autocomplete="cc-exp" placeholder="MM / YY" maxlength="7" required></label>
+        <label class="field">CVC<input name="cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4" required></label>
       </div>
-      <div class="field">Name on card<input name="name" autocomplete="cc-name" required></div>
+      <label class="field">Name on card<input name="name" autocomplete="cc-name" required></label>
       <button class="buy paybtn" id="paybtn">Pay ${money(info.amount)}</button>
     </form>
     <div class="testcards">Sandbox test cards (any future expiry, any CVC):<br>

@@ -68,6 +68,7 @@
 /* ---------------------------------------------------------------- base (opt-in with .k) */
 .k { font-family: var(--k-font); color: var(--k-text); background: var(--k-bg); font-size: var(--k-fs-14); line-height: 1.5;
   -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01"; }
+.k button, .k input, .k select, .k textarea { font-family: inherit; }
 .k .num, .k .price { font-variant-numeric: tabular-nums; }
 .k a { color: var(--k-brand); }
 .k :focus-visible { outline: none; box-shadow: var(--k-focus); border-radius: var(--k-radius-sm); }

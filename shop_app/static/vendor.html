@@ -67,12 +67,12 @@
     <div class="card">
       <h2>Add a product</h2>
       <form id="newp" class="grid" style="grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap:10px; align-items:end">
-        <div class="field">Name<input name="product_name" required></div>
-        <div class="field">Category<select name="category_id" id="cats"></select></div>
-        <div class="field">Price<input name="unit_price" type="number" step="0.01" min="0.01" required></div>
-        <div class="field">Cost<input name="unit_cost" type="number" step="0.01" min="0" required></div>
-        <div class="field">Stock<input name="stock" type="number" min="0" value="50" required></div>
-        <div class="field" style="grid-column: span 4">Description<input name="description"></div>
+        <label class="field">Name<input name="product_name" required></label>
+        <label class="field">Category<select name="category_id" id="cats"></select></label>
+        <label class="field">Price (Rs)<input name="unit_price" type="number" step="1" min="1" inputmode="numeric" required></label>
+        <label class="field">Cost (Rs)<input name="unit_cost" type="number" step="1" min="0" inputmode="numeric" required></label>
+        <label class="field">Stock<input name="stock" type="number" min="0" value="50" required></label>
+        <label class="field" style="grid-column: span 4">Description<input name="description"></label>
         <button class="primary">Add product</button>
       </form>
     </div>
@@ -139,7 +139,7 @@ async function loadSummary() {
   $("#store-sub").innerHTML = `${esc(s.tagline || "")} · ${stars(s.rating)} ${s.rating} · <a href="/#/store/${s.vendor_id}" target="_blank">View your storefront →</a>`;
   $("#autopilot").checked = !!s.is_bot;
   $("#ap-text").textContent = s.is_bot ? `On - orders are accepted and packed for you (~${s.prep_seconds}s)` : "Off - you accept and pack orders yourself";
-  const tiles = [["Sales today", money(s.sales_today), `${s.orders_today} orders`], ["Sales · 30 days", money(s.sales_30d), "excluding cancelled & returned"],
+  const tiles = [["Sales today", money(Math.round(s.sales_today)), `${s.orders_today} orders`], ["Sales · 30 days", money(Math.round(s.sales_30d)), "excluding cancelled & returned"],
     ["To handle now", (s.to_accept || 0) + (s.to_pack || 0), `${s.to_accept} to accept · ${s.to_pack} to pack`],
     ["Catalog", s.products, `${s.low_stock} low on stock`]];
   setHTML($("#kpis"), tiles.map(([l, v, sub]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="small muted">${sub}</div></div>`).join(""));
@@ -166,9 +166,13 @@ function ageBadge(s) {
   return `<span class="age ${late ? "late" : "muted"}">${late ? '<svg class="ic sm" aria-hidden="true"><use href="#i-triangle-alert"/></svg> ' : ""}waiting ${ago(since).replace(" ago", "")}</span>`;
 }
 
+let queueReq = 0;
 async function loadQueue() {
-  const statuses = STAGES.find(([k]) => k === stage)[2];
-  ships = await api("/api/vendor/shipments?" + new URLSearchParams(statuses.map((s) => ["status", s])));
+  const my = ++queueReq, forStage = stage;   // only the newest request may draw (a slow older one would show the wrong tab)
+  const statuses = STAGES.find(([k]) => k === forStage)[2];
+  const got = await api("/api/vendor/shipments?" + new URLSearchParams(statuses.map((s) => ["status", s])));
+  if (my !== queueReq || forStage !== stage) return;
+  ships = got;
   $("#tab-hint").textContent = STAGES.find(([k]) => k === stage)[3];
   const actionable = ["new", "packing"].includes(stage);
   $("#select-all").parentElement.classList.toggle("hidden", !actionable);
@@ -250,10 +254,10 @@ function renderProducts() {
     <td><button class="small" data-photo="${p.product_id}" title="Upload a photo" style="padding:0; width:56px; border:0; background:none">${productArt(p, "sm")}</button></td>
     <td>${esc(p.product_name)}<div class="muted small">${esc(p.sku)} · ${esc(p.category_name)} · ${stars(p.rating)}</div></td>
     <td class="num">${int(p.sold)}</td>
-    <td><div class="row"><input type="number" step="0.01" value="${p.unit_price}" id="pr-${p.product_id}" style="width:90px"><button class="small" data-save="${p.product_id}">Save</button></div></td>
-    <td><input type="number" step="0.01" value="${p.list_price || ""}" placeholder="none" id="lp-${p.product_id}" style="width:90px"></td>
+    <td><div class="row"><input type="number" step="1" min="1" value="${p.unit_price}" id="pr-${p.product_id}" style="width:96px" aria-label="Price for ${esc(p.product_name)}"><button class="small" data-save="${p.product_id}">Save</button></div></td>
+    <td><input type="number" step="1" min="0" value="${p.list_price || ""}" placeholder="none" id="lp-${p.product_id}" style="width:96px" aria-label="Was price for ${esc(p.product_name)}"></td>
     <td class="num ${p.stock < 20 ? "stock-low" : ""}">${int(p.stock)}</td>
-    <td><div class="row"><input type="number" min="1" value="50" id="rs-${p.product_id}" style="width:70px"><button class="small" data-restock="${p.product_id}">Add</button></div></td>
+    <td><div class="row"><input type="number" min="1" value="50" id="rs-${p.product_id}" style="width:70px" aria-label="Units to add for ${esc(p.product_name)}"><button class="small" data-restock="${p.product_id}">Add</button></div></td>
     <td><label class="switch"><input type="checkbox" data-active="${p.product_id}" ${p.is_active ? "checked" : ""}><span></span></label></td></tr>`).join("");
   const patch = async (id, body, msg) => {
     try { await api(`/api/vendor/products/${id}`, { method: "PATCH", body }); toast(msg, "good"); loadProducts(); } catch (e) { toast(e.message, "error"); }

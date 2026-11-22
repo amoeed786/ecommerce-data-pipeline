@@ -30,7 +30,7 @@ body { margin: 0; min-height: 100vh; padding-bottom: calc(64px + env(safe-area-i
   color: var(--k-text) !important; background: none; border: 0; cursor: pointer; font-weight: 500; }
 .sh-act:hover { background: var(--k-hover); }
 .sh-act .lbl { display: none; font-size: var(--k-fs-14); }
-.sh-act .count { position: absolute; top: 4px; left: 24px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--k-brand);
+.sh-act .count { position: absolute; top: 3px; left: 19px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--k-brand);
   color: var(--k-on-brand); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
 .sh-act .count:empty, .bn .count:empty { display: none; }
 .sh .hide-m { display: none; }
@@ -331,3 +331,9 @@ main { min-height: 100vh; }   /* footer starts below the fold: no jump when the 
 .view-in { animation: k-in .2s ease-out; }
 @keyframes k-in { from { opacity: .4; } }
 @media (prefers-reduced-motion: reduce) { .view-in, .toast { animation: none; } }
+
+/* phones: comfortable tap targets for inline links */
+@media (max-width: 767px) {
+  .sec-head .k-link, .pi .brand, .pi .rating-line a, .crumbs a { display: inline-flex; align-items: center; min-height: 44px; }
+  .sec-head .k-link { padding: 0 4px; }
+}
