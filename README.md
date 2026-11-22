@@ -16,6 +16,7 @@ SQL Server (ShopDB)  ->  Data lake (Parquet: bronze/silver/gold)  ->  DuckDB + d
 | 2 | Ingestion: incremental extract SQL Server -> bronze Parquet | Done |
 | 3 | Silver: cleaning, dedup, data-quality checks | Done |
 | ★ | ShopLite web app (FastAPI): shop, admin, live dashboard | Done |
+| ★ | ShopLite marketplace: logins + 4 roles, vendors, riders, fulfillment flow, store UI, new marts | Done |
 | 4 | Gold: dbt + DuckDB star schema (facts/dims), tests, docs | Done |
 | 5 | Analytics: revenue, top products, CLV, RFM, cohorts | Done |
 | 6 | Orchestration with Dagster | Done |
@@ -36,12 +37,15 @@ copy .env.example .env        # then edit SQL_SERVER if needed
 ```powershell
 .\.venv\Scripts\python.exe source_app\setup_db.py              # create ShopDB + tables (--reset to wipe)
 .\.venv\Scripts\python.exe source_app\generator.py seed        # ~1 year of history
-.\.venv\Scripts\python.exe source_app\generator.py stream      # live activity, Ctrl+C to stop
+.\.venv\Scripts\python.exe source_app\migrate_marketplace.py   # vendors, riders, shipments, logins (+ backfill)
+.\.venv\Scripts\python.exe source_app\generator.py stream      # live shoppers, Ctrl+C to stop
 .\.venv\Scripts\python.exe source_app\check_db.py              # row counts + integrity checks
 ```
 
-**Tables:** `categories`, `customers`, `products`, `inventory`, `orders`, `order_items`, `payments`.
-Every table has `updated_at`, which Phase 2 uses as the watermark for incremental loads.
+**Tables:** `categories`, `customers`, `products`, `inventory`, `orders`, `order_items`, `payments`,
+plus marketplace tables (`schema_marketplace.sql`): `vendors`, `riders`, `shipments`, `users`,
+`user_sessions` and `app_settings`. Every table has `updated_at`, which Phase 2 uses as the
+watermark for incremental loads.
 
 **Built-in realism:** business growth, weekend and holiday peaks, evening shopping hours,
 Pareto best-sellers/loyal customers, order lifecycle (pending -> paid -> shipped -> delivered,
@@ -175,35 +179,77 @@ top products and most valuable customers. It's as fresh as the last pipeline run
 
 **Power BI (optional):** Get data → Parquet → point at `data_lake\gold\*.parquet`.
 
-## ShopLite web app (FastAPI)
+## ShopLite marketplace (FastAPI)
 
 ```powershell
 .\.venv\Scripts\uvicorn.exe shop_app.main:app --port 8000    # then open http://localhost:8000
 ```
 
-| URL | Who | What you can do |
-|---|---|---|
-| `/` | Customer | Sign in (pick a customer) or sign up, browse/search products, cart, coupons (`SAVE5`, `SAVE10`, `SAVE20`), pay now or later, cancel before shipping. **My orders** updates live. |
-| `/admin` | Back office | Live order board (new/changed orders flash in), order detail with pay/ship/deliver/cancel/return buttons, price changes and restocking, simulator start/stop, one-click pipeline steps, data-lake status |
-| `/dashboard` | Analytics | KPIs, orders per minute, revenue per day, status mix, revenue by category, top products, low stock, live activity feed |
-| `/docs` | Developer | FastAPI's interactive API docs: call any endpoint from the browser |
+**Demo logins** (also one-click buttons on the sign-in page):
 
-**How it's built** (`shop_app/`):
+| Role | Email | Password | Lands on |
+|---|---|---|---|
+| Customer | `customer@shoplite.test` | `Demo@123` | `/` storefront |
+| Vendor (you pack) | `vendor@shoplite.test` | `Demo@123` | `/vendor` seller center, ShopLite Demo Store |
+| Vendor (autopilot) | `techhub@`, `gadget@`, `stylestreet@`, `homenest@`, … `@shoplite.test` | `Demo@123` | `/vendor` |
+| Rider | `rider@shoplite.test` | `Demo@123` | `/rider` |
+| Admin | `admin@shoplite.test` | `Admin@123` | `/admin` |
 
-- `main.py`: FastAPI routes (JSON API + the three pages).
-- `shop_db.py`: all SQL. Order rules:
-  - prices come from the database, never from the browser
-  - stock is checked under a row lock, so two buyers can't take the last unit
-  - status moves follow the order lifecycle, and only the owner can cancel, before shipping
-  - cancelling refunds the payment and puts the stock back
-- `live.py`: the **live feed**. One background task polls ShopDB every 2 seconds for rows whose
-  `updated_at` moved (the same watermark idea as the extractor). It pushes them to every open page
-  with **Server-Sent Events**, so you see changes from the simulator, customers and admins as
-  they happen.
-- `static/`: plain HTML/CSS/JavaScript. Charts use Chart.js, loaded from a CDN.
+Customers can also create their own account. Store and rider accounts are made by `migrate_marketplace.py`.
 
-Every write is a normal ShopDB write with a fresh `updated_at`, so the next extract picks it up.
-There is no login. This is a local learning app, so don't expose it to a network.
+**How an order moves.** Each vendor's part of an order is its own **shipment** (parcel):
+
+```
+customer places order ─► pending ──(admin presses Start, or auto-approve)──► confirmed
+   ─► store accepts ─► packing ─► store marks packed ─► ready
+   ─► dispatcher assigns a free rider (online people first) ─► assigned
+   ─► rider picks up ─► picked_up ─► rider delivers ─► delivered   (cash on delivery collected here)
+order status follows its parcels: pending → processing → shipped → delivered
+```
+
+- **You're in control:** auto-approve is off by default, so every order waits for **Start** (or
+  **Start all pending**) in Admin → Order control. Turn auto-approve on to let orders flow by themselves.
+- **Autopilot vendors and riders** (`is_bot`) act by themselves after realistic delays. Admin →
+  Vendors/Riders switches any of them between autopilot and a person. The demo vendor and rider
+  are people, so their orders wait for you in `/vendor` and `/rider`.
+- **Simulation speed** (admin) speeds every autopilot delay up or down, from 0.5× to 20×.
+- **Admin can step in** for any store or rider: accept, pack, assign a rider, pick up, deliver,
+  cancel, return.
+
+| Page | What you can do |
+|---|---|
+| `/` storefront | Hero deals, categories, flash deals with countdown, best sellers, top rated, official stores; category/search pages with price, rating, sale and stock filters plus sorting; product pages; store pages; cart grouped by seller; checkout (address, payment method, coupon); **live order tracking** with a stepper per parcel; account |
+| `/vendor` | New-order queue → Accept → Mark packed; KPIs; autopilot switch; products: price, sale price, restock, hide/show, add new |
+| `/rider` | Go online/offline, current job (pickup → drop-off, cash to collect), Picked up / Delivered buttons, earnings, history |
+| `/admin` | Order control, live shipments board, vendors, riders, users (disable accounts), catalog, simulator and pipeline |
+| `/dashboard`, `/analytics` | Admin only: live operations, and gold-layer analytics including vendor leaderboard and delivery-time breakdown |
+
+**Security:**
+- **Passwords:** salted scrypt hashes.
+- **Sessions:** a random token in an httpOnly, SameSite cookie. Only its SHA-256 is stored, and the session is deleted on logout.
+- **Brute force:** an email is locked after 5 failed logins.
+- **Access checks:** every API route checks the role, and every vendor/rider action checks that the shipment is theirs. A customer asking for someone else's order gets 404, so order ids can't be probed.
+- **Live feed:** each user only receives events they're allowed to see.
+- **Lake:** `password_hash` is excluded at extraction, so it never reaches the data lake.
+
+It's still a local demo with no HTTPS or email verification, so don't put it on the internet as-is.
+
+**Code:**
+- [source_app/marketplace.py](source_app/marketplace.py): every order-flow rule, plus the autopilot
+  `engine_tick()`. It's shared by the app, the simulator, and `python source_app/fulfillment.py` (runs
+  the autopilot without the app).
+- `shop_app/auth.py`: logins and roles.
+- `shop_app/shop_db.py`: SQL per screen.
+- `shop_app/live.py`: the SSE feed.
+- `shop_app/main.py`: routes and background tasks.
+- `static/`: the pages.
+
+**Pipeline:** the marketplace flows through the whole pipeline:
+- **Extract:** pulls `vendors`, `riders`, `shipments` and `users`.
+- **Silver:** checks them, for example orphan parcels, unknown riders, and steps timestamped out of order.
+- **dbt:** adds `dim_vendor`, `dim_rider` and `fct_shipments` (minutes per fulfillment stage), plus
+  `mart_vendor_performance` and `mart_delivery_daily`.
+- **Dagster:** the graph now has 47 assets and 51 checks.
 
 ## Command cheat sheet
 
@@ -214,7 +260,9 @@ All commands are run from the project folder: `cd C:\Projects\ecommerce-data-pip
 | Setup | `.\.venv\Scripts\python.exe -m pip install -r requirements.txt` | Install libraries |
 | Source | `.\.venv\Scripts\python.exe source_app\setup_db.py` | Create ShopDB + tables (`--reset` wipes) |
 | Source | `.\.venv\Scripts\python.exe source_app\generator.py seed` | One year of fake history |
-| Source | `.\.venv\Scripts\python.exe source_app\generator.py stream` | Live shop activity (Ctrl+C stops) |
+| Source | `.\.venv\Scripts\python.exe source_app\migrate_marketplace.py` | Marketplace tables, vendors, riders, logins, backfill (safe to re-run) |
+| Source | `.\.venv\Scripts\python.exe source_app\generator.py stream` | Live shoppers placing marketplace orders (Ctrl+C stops) |
+| Source | `.\.venv\Scripts\python.exe source_app\fulfillment.py` | Autopilot vendors/riders without the web app (the app runs it already) |
 | Source | `.\.venv\Scripts\python.exe source_app\inject_bad_data.py` | Add messy rows for silver to catch |
 | Source | `.\.venv\Scripts\python.exe source_app\check_db.py` | Row counts + integrity checks |
 | Bronze | `.\.venv\Scripts\python.exe ingestion\extract.py` | Incremental extract (`--full` reloads) |

@@ -2,7 +2,8 @@
 
 Usage:
     python source_app/generator.py seed      # one-time history: customers, products, ~1 year of orders
-    python source_app/generator.py stream    # simulate live shop activity until Ctrl+C
+    python source_app/generator.py stream    # simulate live shoppers until Ctrl+C (marketplace orders;
+                                             # vendors/riders move them - see source_app/marketplace.py)
 
 The data is deliberately "realistic-messy" so later phases have something to analyse:
 business growth over the year, weekend and Black-Friday/holiday peaks, evening shopping hours,
@@ -22,6 +23,7 @@ from itertools import accumulate
 
 from faker import Faker
 
+import marketplace
 from db import get_connection
 
 fake = Faker()
@@ -278,7 +280,8 @@ def seed(args) -> None:
 
 # ---------------------------------------------------------------- stream (live)
 def advance_orders(cur, ts: datetime, limit: int) -> Counter:
-    """Move open orders along: pending -> paid -> shipped -> delivered (with some cancellations)."""
+    """(v1, pre-marketplace) Move open orders along: pending -> paid -> shipped -> delivered.
+    No longer used by `stream`: in the marketplace, vendors and riders (or their autopilot) move orders."""
     changes = Counter()
     cur.execute(
         "SELECT TOP (?) order_id, status, total_amount FROM dbo.orders "
@@ -369,23 +372,30 @@ def stream(args) -> None:
             products = load_products(cur)
             prod_weights = [popularity(p[0], 1.2) for p in products]
 
-            n_orders = random.randint(args.min_orders, args.max_orders)
+            # Marketplace orders: split per vendor into shipments, then vendors/riders (or you) take over.
+            n_orders, skipped = random.randint(args.min_orders, args.max_orders), 0
             for _ in range(n_orders):
                 customer = random.choices(customers, weights=cust_weights)[0]
-                sold = place_order(cur, customer, products, prod_weights, ts, "pending", ts)
-                cur.executemany(
-                    "UPDATE dbo.inventory SET quantity_on_hand = quantity_on_hand - ?, updated_at = ? WHERE product_id = ?",
-                    [(qty, ts, pid) for pid, qty in sold],
-                )
+                n_items = random.choices([1, 2, 3, 4], weights=[50, 28, 15, 7])[0]
+                picks = {p[0] for p in random.choices(products, weights=prod_weights, k=n_items)}
+                lines = [(pid, random.choices([1, 2, 3], weights=[80, 15, 5])[0]) for pid in picks]
+                method = random.choices(marketplace.PAYMENT_METHODS, weights=PAYMENT_WEIGHTS)[0]
+                coupon = random.choices(["", "SAVE5", "SAVE10", "SAVE20"], weights=[75, 10, 10, 5])[0]
+                try:
+                    marketplace.create_order(cur, customer[0], lines, method, coupon, ts)
+                except marketplace.MarketplaceError:
+                    skipped += 1  # e.g. out of stock - a real shopper would see an error too
 
-            changes = advance_orders(cur, ts, limit=random.randint(3, 12))
             events = random_changes(cur, ts)
+            if random.random() < 0.15:
+                returned = marketplace.random_return(cur, ts)
+                if returned:
+                    events.append(f"order #{returned} returned")
             conn.commit()
 
-            status_txt = ", ".join(f"{k}:{v}" for k, v in sorted(changes.items())) or "none"
             extra = f" | {'; '.join(events)}" if events else ""
-            print(f"[{ts:%H:%M:%S}] tick {tick}: +{new_customers} customers, +{n_orders} orders, "
-                  f"status changes [{status_txt}]{extra}")
+            print(f"[{ts:%H:%M:%S}] tick {tick}: +{new_customers} customers, +{n_orders - skipped} orders"
+                  f"{f' ({skipped} failed: out of stock)' if skipped else ''}{extra}")
             time.sleep(args.interval)
     except KeyboardInterrupt:
         conn.commit()

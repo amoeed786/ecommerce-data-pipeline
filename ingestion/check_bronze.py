@@ -30,6 +30,10 @@ PRIMARY_KEYS = {
     "orders": "order_id",
     "order_items": "order_item_id",
     "payments": "payment_id",
+    "vendors": "vendor_id",
+    "riders": "rider_id",
+    "shipments": "shipment_id",
+    "users": "user_id",
 }
 
 

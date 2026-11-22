@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · ShopLite</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <a href="/" style="font-weight:800; font-size:26px; color:var(--accent)">Shop<span style="color:var(--text)">Lite</span></a>
+    <div class="tabs" style="margin-top:14px">
+      <button data-tab="signin" class="on">Sign in</button>
+      <button data-tab="register">Create account</button>
+    </div>
+
+    <form id="signin">
+      <div class="field">Email<input name="email" type="email" autocomplete="username" required></div>
+      <div class="field">Password<input name="password" type="password" autocomplete="current-password" required></div>
+      <button class="primary" style="width:100%; padding:11px; font-weight:700">Sign in</button>
+      <div style="margin-top:18px">
+        <div class="muted small" style="margin-bottom:8px">Demo accounts - click to fill in:</div>
+        <div class="demo-grid">
+          <button type="button" data-email="customer@shoplite.test" data-pw="Demo@123">🛍️ <b>Customer</b><div class="muted small">shop &amp; track orders</div></button>
+          <button type="button" data-email="vendor@shoplite.test" data-pw="Demo@123">🏪 <b>Vendor</b><div class="muted small">accept &amp; pack orders</div></button>
+          <button type="button" data-email="rider@shoplite.test" data-pw="Demo@123">🛵 <b>Rider</b><div class="muted small">pick up &amp; deliver</div></button>
+          <button type="button" data-email="admin@shoplite.test" data-pw="Admin@123">🛠️ <b>Admin</b><div class="muted small">run the marketplace</div></button>
+        </div>
+        <p class="muted small" style="margin:10px 0 0">Every store also has its own login, e.g. <code>techhub@shoplite.test</code> / <code>Demo@123</code>.</p>
+      </div>
+    </form>
+
+    <form id="register" class="hidden">
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px">
+        <div class="field">First name<input name="first_name" required autocomplete="given-name"></div>
+        <div class="field">Last name<input name="last_name" required autocomplete="family-name"></div>
+      </div>
+      <div class="field">Email<input name="email" type="email" required autocomplete="email"></div>
+      <div class="field">Password<input name="password" type="password" required minlength="8" autocomplete="new-password">
+        <span class="muted small">At least 8 characters, mixing letters with numbers or symbols.</span></div>
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px">
+        <div class="field">City<input name="city" autocomplete="address-level2"></div>
+        <div class="field">Country<input name="country" value="Pakistan" autocomplete="country-name"></div>
+      </div>
+      <div class="field">Phone<input name="phone" autocomplete="tel"></div>
+      <button class="primary" style="width:100%; padding:11px; font-weight:700">Create account</button>
+      <p class="muted small">Want to sell or deliver? Store and rider accounts are created by the admin.</p>
+    </form>
+  </div>
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+const next = new URLSearchParams(location.search).get("next");
+const go = (user) => {
+  // only follow same-site paths, and only to pages this role can open
+  const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+  const allowed = { admin: true, vendor: safe === "/vendor", rider: safe === "/rider",
+                    customer: safe && !["/admin", "/dashboard", "/analytics", "/vendor", "/rider"].includes(safe) };
+  location.href = safe && allowed[user.role] ? safe : ROLE_HOME[user.role];
+};
+
+$$(".tabs button").forEach((b) => (b.onclick = () => {
+  $$(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
+  $("#signin").classList.toggle("hidden", b.dataset.tab !== "signin");
+  $("#register").classList.toggle("hidden", b.dataset.tab !== "register");
+}));
+$$("[data-email]").forEach((b) => (b.onclick = () => {
+  $("#signin [name=email]").value = b.dataset.email;
+  $("#signin [name=password]").value = b.dataset.pw;
+  $("#signin").requestSubmit();
+}));
+
+async function submit(form, path) {
+  const btn = $("button.primary", form);
+  btn.disabled = true;
+  try { go(await api(path, { method: "POST", body: Object.fromEntries(new FormData(form)) })); }
+  catch (e) { toast(e.message, "error", 5000); }
+  finally { btn.disabled = false; }
+}
+$("#signin").onsubmit = (e) => { e.preventDefault(); submit(e.target, "/api/auth/login"); };
+$("#register").onsubmit = (e) => { e.preventDefault(); submit(e.target, "/api/auth/register"); };
+loadMe().then((me) => { if (me && !next) go(me); });  // already signed in
+</script>
+</body>
+</html>

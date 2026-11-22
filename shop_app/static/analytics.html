@@ -14,15 +14,11 @@
   </style>
 </head>
 <body>
-<header>
-  <div class="brand">Shop<span>Lite</span> <span class="muted small">analytics</span></div>
-  <nav><a href="/">Shop</a><a href="/admin">Admin</a><a href="/dashboard">Dashboard</a><a href="/analytics">Analytics</a><a href="/docs" target="_blank">API</a></nav>
-  <div class="spacer"></div>
-  <span class="muted small" id="built"></span>
-  <button id="reload" class="small">Reload</button>
-</header>
+<header></header>
 
 <main>
+  <div class="row" style="justify-content:space-between; margin-bottom:6px"><h1>Business analytics</h1>
+    <span class="row"><span class="muted small" id="built"></span><button id="reload" class="small">Reload</button></span></div>
   <p class="muted small" style="margin-top:0">Built from the <b>gold layer</b> (<code>data_lake/gold/*.parquet</code>, made by dbt). It's as fresh as the
     last pipeline run - refresh it from Admin → Simulator &amp; pipeline (Extract → Build silver → dbt build → Export gold) or let Dagster's schedule do it.
     For second-by-second numbers, see <a href="/dashboard">Dashboard</a>.</p>
@@ -44,6 +40,12 @@
       <p class="muted small" style="margin:0 0 8px">Of the customers whose first order was in a month, the share who ordered again N months later.</p>
       <div class="table-wrap"><table class="heat" id="cohorts"></table></div>
       <p class="source">mart_cohort_retention</p></div>
+  </div>
+
+  <div class="grid cols-2" style="margin-bottom:16px">
+    <div class="card"><h2>Where delivery time goes · last 30 days</h2><div class="chart-box" style="height:280px"><canvas id="c-delivery"></canvas></div>
+      <p class="source">mart_delivery_daily · average minutes per stage, per day</p></div>
+    <div class="card"><h2>Vendor leaderboard · last 30 days</h2><div class="table-wrap" id="vendors"></div><p class="source">mart_vendor_performance</p></div>
   </div>
 
   <div class="grid cols-even">
@@ -127,9 +129,25 @@ async function load() {
     a.top_customers.map((c) => `<tr><td>${esc(c.full_name)}<div class="muted small">#${c.customer_id} · ${esc(c.country)}</div></td>
       <td><span class="badge" style="background:${SEGMENT_COLORS[c.segment] || "var(--line)"};color:#fff">${esc(c.segment || "–")}</span></td>
       <td class="num">${int(c.orders)}</td><td class="num">${money(c.historical_ltv)}</td><td class="num">${money(c.predicted_12m_revenue)}</td></tr>`).join("")}</tbody></table>`;
+  renderMarketplace(a);
 }
-$("#reload").onclick = load;
-load();
+function renderMarketplace(a) {
+  if (!a.delivery.length) { $("#vendors").innerHTML = `<p class="muted">Run the pipeline to build the marketplace marts.</p>`; return; }
+  const d = a.delivery.slice(-30);
+  const stages = [["avg_accept_minutes", "Store accepts", "#2f6fed"], ["avg_pack_minutes", "Packing", "#e0a526"],
+                  ["avg_wait_rider_minutes", "Waiting for rider", "#d64545"], ["avg_pickup_minutes", "Rider to store", "#7c5ce0"], ["avg_ride_minutes", "In transit to customer", "#1f9d55"]];
+  chart("#c-delivery", { type: "bar", data: { labels: d.map((r) => new Date(r.date_day + "T00:00").toLocaleDateString([], { month: "short", day: "numeric" })),
+    datasets: stages.map(([k, l, c]) => ({ label: l, data: d.map((r) => r[k]), backgroundColor: c })) },
+    options: { plugins: { legend: { display: true, position: "bottom", labels: { boxWidth: 12 } } },
+      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, title: { display: true, text: "minutes" } } } } });
+  $("#vendors").innerHTML = `<table><thead><tr><th>Store</th><th class="num">Revenue</th><th class="num">Parcels</th><th class="num">Avg prep</th><th class="num">Avg to door</th><th class="num">Cancel</th><th class="num">Returns</th></tr></thead><tbody>${
+    a.vendors.map((v) => `<tr><td>${esc(v.vendor_name)}<div class="muted small">${stars(v.rating)}</div></td><td class="num">${money(v.revenue_30d)}</td>
+      <td class="num">${int(v.shipments_30d)}</td><td class="num">${v.avg_prep_minutes == null ? "–" : Math.round(v.avg_prep_minutes) + " min"}</td>
+      <td class="num">${v.avg_delivery_minutes == null ? "–" : (v.avg_delivery_minutes / 60).toFixed(1) + " h"}</td>
+      <td class="num">${pct(v.cancel_rate)}</td><td class="num">${pct(v.return_rate)}</td></tr>`).join("")}</tbody></table>`;
+}
+$("#reload").onclick = () => load();
+renderPortalHeader("analytics").then(() => { $("#live")?.remove(); load(); });  // gold isn't live - no stream here
 </script>
 </body>
 </html>

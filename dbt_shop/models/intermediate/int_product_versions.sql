@@ -8,6 +8,7 @@ select
     h.unit_price,
     h.unit_cost,
     h.is_active,
+    h.vendor_id,          -- carried along, not SCD2-tracked: the sale's vendor comes from its shipment
     h.created_at,
     h.updated_at
 from {{ ref('stg_products_history') }} h

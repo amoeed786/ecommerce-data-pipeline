@@ -1,42 +1,19 @@
-"""Database layer for the shop app. Every write goes straight to ShopDB, like a real ecommerce
-backend - and every write stamps updated_at, so the data pipeline picks it up on its next extract."""
+"""Read queries and simple writes for ShopLite. Order-flow rules live in source_app/marketplace.py;
+this module is the SQL behind each screen (storefront, customer, vendor, rider, admin)."""
 from __future__ import annotations
 
 import sys
+from contextlib import contextmanager
 from datetime import date, datetime
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
+from source_app import marketplace as mp  # noqa: E402
 from source_app.db import get_connection  # noqa: E402
 
-PAYMENT_METHODS = ["credit_card", "debit_card", "paypal", "bank_transfer", "cash_on_delivery"]
-COUPONS = {"SAVE5": Decimal("0.05"), "SAVE10": Decimal("0.10"), "SAVE20": Decimal("0.20")}
-MAX_QTY_PER_LINE = 20
-
-# status -> statuses it may move to (same lifecycle the generator follows)
-NEXT_STATUS = {
-    "pending": ["paid", "cancelled"],
-    "paid": ["shipped", "cancelled"],
-    "shipped": ["delivered"],
-    "delivered": ["returned"],
-    "cancelled": [],
-    "returned": [],
-}
-CUSTOMER_CANCELLABLE = {"pending", "paid"}
-
-
-class ShopError(Exception):
-    """A business-rule violation (out of stock, bad coupon, ...). The API turns it into HTTP 400."""
-
-
-def now() -> datetime:
-    return datetime.now().replace(microsecond=0)
-
-
-def money(value) -> Decimal:
-    return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+ShopError = mp.MarketplaceError
 
 
 def _jsonable(value):
@@ -48,7 +25,6 @@ def _jsonable(value):
 
 
 def query(sql: str, *params) -> list[dict]:
-    """Run a SELECT and return rows as JSON-friendly dicts."""
     conn = get_connection()
     try:
         cur = conn.cursor().execute(sql, *params)
@@ -71,241 +47,7 @@ def scalar(sql: str, *params):
         conn.close()
 
 
-# ------------------------------------------------------------------ reads
-def categories() -> list[dict]:
-    return query("SELECT category_id, category_name FROM dbo.categories ORDER BY category_name")
-
-
-def products(category_id: int | None = None, search: str | None = None) -> list[dict]:
-    sql = """
-        SELECT p.product_id, p.product_name, p.sku, p.unit_price, c.category_id, c.category_name,
-               coalesce(i.quantity_on_hand, 0) AS stock
-        FROM dbo.products p
-        JOIN dbo.categories c ON c.category_id = p.category_id
-        LEFT JOIN dbo.inventory i ON i.product_id = p.product_id
-        WHERE p.is_active = 1
-    """
-    params: list = []
-    if category_id:
-        sql += " AND p.category_id = ?"
-        params.append(category_id)
-    if search:
-        sql += " AND (p.product_name LIKE ? OR p.sku LIKE ?)"
-        params += [f"%{search}%", f"%{search}%"]
-    return query(sql + " ORDER BY c.category_name, p.product_name", *params)
-
-
-def find_customers(search: str = "", limit: int = 20) -> list[dict]:
-    like = f"%{search}%"
-    return query(
-        """
-        SELECT TOP (?) customer_id, first_name, last_name, email, city, country
-        FROM dbo.customers
-        WHERE ? = '' OR first_name + ' ' + last_name LIKE ? OR email LIKE ? OR CAST(customer_id AS varchar) = ?
-        ORDER BY customer_id DESC
-        """,
-        limit, search, like, like, search,
-    )
-
-
-def customer(customer_id: int) -> dict | None:
-    return query_one(
-        "SELECT customer_id, first_name, last_name, email, phone, city, country, signup_date "
-        "FROM dbo.customers WHERE customer_id = ?", customer_id,
-    )
-
-
-ORDER_LIST_SQL = """
-    SELECT {top} o.order_id, o.customer_id, c.first_name + ' ' + c.last_name AS customer, o.order_date,
-           o.status, o.total_amount, o.shipping_city, o.shipping_country, o.updated_at,
-           (SELECT count(*) FROM dbo.order_items i WHERE i.order_id = o.order_id) AS items
-    FROM dbo.orders o JOIN dbo.customers c ON c.customer_id = o.customer_id
-"""
-
-
-def list_orders(statuses: list[str] | None = None, customer_id: int | None = None, limit: int = 100) -> list[dict]:
-    sql = ORDER_LIST_SQL.format(top=f"TOP ({int(limit)})") + " WHERE o.order_date <= SYSDATETIME()"
-    params: list = []
-    if statuses:
-        sql += f" AND o.status IN ({','.join('?' * len(statuses))})"
-        params += statuses
-    if customer_id:
-        sql += " AND o.customer_id = ?"
-        params.append(customer_id)
-    return query(sql + " ORDER BY o.order_date DESC, o.order_id DESC", *params)
-
-
-def order_detail(order_id: int) -> dict | None:
-    head = query_one(ORDER_LIST_SQL.format(top="") + " WHERE o.order_id = ?", order_id)
-    if head is None:
-        return None
-    head["email"] = scalar("SELECT email FROM dbo.customers WHERE customer_id = ?", head["customer_id"])
-    head["lines"] = query(
-        """
-        SELECT i.product_id, p.product_name, i.quantity, i.unit_price, i.discount, i.line_total
-        FROM dbo.order_items i JOIN dbo.products p ON p.product_id = i.product_id
-        WHERE i.order_id = ? ORDER BY i.order_item_id
-        """, order_id,
-    )
-    head["payment"] = query_one(
-        "SELECT payment_method, amount, payment_status, paid_at FROM dbo.payments WHERE order_id = ?", order_id
-    )
-    head["next_status"] = NEXT_STATUS[head["status"]]
-    return head
-
-
-# ------------------------------------------------------------------ writes
-def new_customer(first: str, last: str, email: str, city: str, country: str) -> dict:
-    first, last, email = first.strip(), last.strip(), email.strip().lower()
-    if not (first and last and "@" in email):
-        raise ShopError("First name, last name and a valid email are required")
-    if scalar("SELECT count(*) FROM dbo.customers WHERE email = ?", email):
-        raise ShopError("An account with this email already exists")
-    ts = now()
-    conn = get_connection()
-    try:
-        cid = conn.cursor().execute(
-            "INSERT INTO dbo.customers (first_name, last_name, email, city, country, signup_date, created_at, "
-            "updated_at) OUTPUT INSERTED.customer_id VALUES (?,?,?,?,?,?,?,?)",
-            first, last, email, city.strip() or None, country.strip() or None, ts.date(), ts, ts,
-        ).fetchval()
-        conn.commit()
-    finally:
-        conn.close()
-    return customer(cid)
-
-
-def place_order(customer_id: int, items: list[dict], pay_now: bool, method: str, coupon: str = "") -> dict:
-    """items: [{product_id, quantity}]. Prices come from the database, never from the browser.
-
-    Runs in one transaction. Inventory rows are locked (UPDLOCK) while we check stock, so two
-    customers can't both buy the last unit at the same moment.
-    """
-    qty_by_product: dict[int, int] = {}
-    for item in items:
-        qty_by_product[int(item["product_id"])] = qty_by_product.get(int(item["product_id"]), 0) + int(item["quantity"])
-    if not qty_by_product:
-        raise ShopError("Your cart is empty")
-    if any(q < 1 or q > MAX_QTY_PER_LINE for q in qty_by_product.values()):
-        raise ShopError(f"Quantity per product must be between 1 and {MAX_QTY_PER_LINE}")
-
-    coupon = (coupon or "").strip().upper()
-    if coupon and coupon not in COUPONS:
-        raise ShopError(f"Coupon {coupon!r} is not valid")
-    discount = COUPONS.get(coupon, Decimal("0.00"))
-    if pay_now and method not in PAYMENT_METHODS:
-        raise ShopError("Unknown payment method")
-
-    ts = now()
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        cust = cur.execute("SELECT city, country FROM dbo.customers WHERE customer_id = ?", customer_id).fetchone()
-        if cust is None:
-            raise ShopError("Customer not found")
-
-        lines, total = [], Decimal("0.00")
-        for product_id, qty in sorted(qty_by_product.items()):  # fixed lock order avoids deadlocks
-            row = cur.execute(
-                """
-                SELECT p.product_name, p.unit_price, p.is_active, i.quantity_on_hand
-                FROM dbo.products p
-                JOIN dbo.inventory i WITH (UPDLOCK, ROWLOCK) ON i.product_id = p.product_id
-                WHERE p.product_id = ?
-                """, product_id,
-            ).fetchone()
-            if row is None or not row.is_active:
-                raise ShopError(f"Product #{product_id} is not available")
-            if row.quantity_on_hand < qty:
-                raise ShopError(f"Only {max(row.quantity_on_hand, 0)} left of {row.product_name}")
-            line_total = money(row.unit_price * qty * (1 - discount))
-            lines.append((product_id, qty, row.unit_price, discount, line_total))
-            total += line_total
-
-        status = "paid" if pay_now else "pending"
-        order_id = cur.execute(
-            "INSERT INTO dbo.orders (customer_id, order_date, status, shipping_city, shipping_country, "
-            "total_amount, created_at, updated_at) OUTPUT INSERTED.order_id VALUES (?,?,?,?,?,?,?,?)",
-            customer_id, ts, status, cust.city, cust.country, total, ts, ts,
-        ).fetchval()
-        for product_id, qty, price, disc, line_total in lines:
-            cur.execute(
-                "INSERT INTO dbo.order_items (order_id, product_id, quantity, unit_price, discount, line_total, "
-                "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
-                order_id, product_id, qty, price, disc, line_total, ts, ts,
-            )
-            cur.execute(
-                "UPDATE dbo.inventory SET quantity_on_hand = quantity_on_hand - ?, updated_at = ? WHERE product_id = ?",
-                qty, ts, product_id,
-            )
-        if pay_now:
-            cur.execute(
-                "INSERT INTO dbo.payments (order_id, payment_method, amount, payment_status, paid_at, created_at, "
-                "updated_at) VALUES (?,?,?,?,?,?,?)",
-                order_id, method, total, "completed", ts, ts, ts,
-            )
-        conn.commit()
-        return {"order_id": order_id, "status": status, "total_amount": float(total)}
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-
-def change_status(order_id: int, new_status: str, method: str = "credit_card",
-                  customer_id: int | None = None) -> dict:
-    """Move an order along its lifecycle. When customer_id is given, it's the customer acting:
-    they may only cancel their own order, and only before it ships."""
-    ts = now()
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        row = cur.execute(
-            "SELECT status, total_amount, customer_id FROM dbo.orders WITH (UPDLOCK) WHERE order_id = ?", order_id
-        ).fetchone()
-        if row is None:
-            raise ShopError("Order not found")
-        status, total, owner = row
-        if customer_id is not None:
-            if owner != customer_id:
-                raise ShopError("This is not your order")
-            if new_status != "cancelled" or status not in CUSTOMER_CANCELLABLE:
-                raise ShopError("Orders can only be cancelled before they ship")
-        if new_status not in NEXT_STATUS[status]:
-            raise ShopError(f"Order #{order_id} can't go from {status} to {new_status}")
-
-        if status == "pending" and new_status == "paid":
-            if method not in PAYMENT_METHODS:
-                raise ShopError("Unknown payment method")
-            cur.execute(
-                "INSERT INTO dbo.payments (order_id, payment_method, amount, payment_status, paid_at, created_at, "
-                "updated_at) VALUES (?,?,?,?,?,?,?)",
-                order_id, method, total, "completed", ts, ts, ts,
-            )
-        if new_status in ("cancelled", "returned"):
-            cur.execute(
-                "UPDATE dbo.payments SET payment_status = 'refunded', updated_at = ? WHERE order_id = ?", ts, order_id
-            )
-        if new_status == "cancelled":  # never shipped, so the units go back on the shelf
-            cur.execute(
-                """
-                UPDATE inv SET quantity_on_hand = inv.quantity_on_hand + oi.quantity, updated_at = ?
-                FROM dbo.inventory inv JOIN dbo.order_items oi ON oi.product_id = inv.product_id
-                WHERE oi.order_id = ?
-                """, ts, order_id,
-            )
-        cur.execute("UPDATE dbo.orders SET status = ?, updated_at = ? WHERE order_id = ?", new_status, ts, order_id)
-        conn.commit()
-        return {"order_id": order_id, "from": status, "to": new_status}
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-
-def _update(sql: str, *params) -> int:
+def execute(sql: str, *params) -> int:
     conn = get_connection()
     try:
         n = conn.cursor().execute(sql, *params).rowcount
@@ -315,77 +57,441 @@ def _update(sql: str, *params) -> int:
         conn.close()
 
 
-def change_price(product_id: int, new_price: float) -> None:
-    if new_price < 0:
-        raise ShopError("Price can't be negative")
-    if not _update("UPDATE dbo.products SET unit_price = ?, updated_at = ? WHERE product_id = ?",
-                   money(new_price), now(), product_id):
-        raise ShopError("Product not found")
+@contextmanager
+def tx():
+    """A cursor inside one transaction: commit on success, roll back on any error."""
+    conn = get_connection()
+    try:
+        yield conn.cursor()
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
-def restock(product_id: int, qty: int) -> None:
-    if qty < 1:
-        raise ShopError("Restock quantity must be positive")
-    if not _update("UPDATE dbo.inventory SET quantity_on_hand = quantity_on_hand + ?, updated_at = ? "
-                   "WHERE product_id = ?", qty, now(), product_id):
-        raise ShopError("Product not found")
+# ================================================================== storefront (public)
+PRODUCT_SQL = """
+    SELECT p.product_id, p.product_name, p.sku, p.unit_price, p.list_price,
+           CASE WHEN p.list_price > p.unit_price THEN CAST(ROUND(100 * (1 - p.unit_price / p.list_price), 0) AS INT) END AS discount_pct,
+           coalesce(p.rating, 0) AS rating, p.review_count, p.description, p.created_at, p.is_active,
+           c.category_id, c.category_name, v.vendor_id, v.vendor_name, v.rating AS vendor_rating,
+           coalesce(i.quantity_on_hand, 0) AS stock, coalesce(s.sold, 0) AS sold
+    FROM dbo.products p
+    JOIN dbo.categories c ON c.category_id = p.category_id
+    JOIN dbo.vendors v ON v.vendor_id = p.vendor_id AND v.is_active = 1
+    LEFT JOIN dbo.inventory i ON i.product_id = p.product_id
+    LEFT JOIN (SELECT product_id, SUM(quantity) AS sold FROM dbo.order_items GROUP BY product_id) s ON s.product_id = p.product_id
+    WHERE p.is_active = 1
+"""
+SORTS = {
+    "popular": "sold DESC", "price_asc": "unit_price ASC", "price_desc": "unit_price DESC",
+    "rating": "rating DESC, review_count DESC", "newest": "created_at DESC", "discount": "discount_pct DESC",
+}
 
 
-# ------------------------------------------------------------------ analytics
+def categories() -> list[dict]:
+    return query("""
+        SELECT c.category_id, c.category_name, COUNT(p.product_id) AS products
+        FROM dbo.categories c LEFT JOIN dbo.products p ON p.category_id = c.category_id AND p.is_active = 1
+        GROUP BY c.category_id, c.category_name ORDER BY c.category_name
+    """)
+
+
+def search_products(category_id=None, q=None, vendor_id=None, min_price=None, max_price=None,
+                    min_rating=None, on_sale=False, in_stock=False, sort="popular", limit=40, offset=0) -> dict:
+    where, params = [], []
+    if category_id:
+        where.append("c.category_id = ?"); params.append(category_id)
+    if vendor_id:
+        where.append("v.vendor_id = ?"); params.append(vendor_id)
+    if q:
+        where.append("(p.product_name LIKE ? OR c.category_name LIKE ? OR v.vendor_name LIKE ? OR p.sku LIKE ?)")
+        params += [f"%{q}%"] * 4
+    if min_price is not None:
+        where.append("p.unit_price >= ?"); params.append(min_price)
+    if max_price is not None:
+        where.append("p.unit_price <= ?"); params.append(max_price)
+    if min_rating:
+        where.append("p.rating >= ?"); params.append(min_rating)
+    if on_sale:
+        where.append("p.list_price > p.unit_price")
+    if in_stock:
+        where.append("i.quantity_on_hand > 0")
+    base = PRODUCT_SQL + "".join(f" AND {w}" for w in where)
+    total = scalar(f"SELECT COUNT(*) FROM ({base}) x", *params)
+    rows = query(f"SELECT * FROM ({base}) x ORDER BY {SORTS.get(sort, SORTS['popular'])}, product_id "
+                 f"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY", *params, int(offset), int(limit))
+    return {"total": total, "items": rows}
+
+
+def home() -> dict:
+    def top(order: str, extra: str = "", n: int = 12):
+        return query(f"SELECT TOP {n} * FROM ({PRODUCT_SQL} {extra}) x ORDER BY {order}")
+    return {
+        "flash_deals": top("discount_pct DESC, sold DESC", "AND p.list_price > p.unit_price"),
+        "best_sellers": top("sold DESC"),
+        "top_rated": top("rating DESC, review_count DESC", "AND p.review_count >= 5"),
+        "categories": categories(),
+        "vendors": query("""
+            SELECT v.vendor_id, v.vendor_name, v.tagline, v.rating, v.city, COUNT(p.product_id) AS products
+            FROM dbo.vendors v LEFT JOIN dbo.products p ON p.vendor_id = v.vendor_id AND p.is_active = 1
+            WHERE v.is_active = 1 GROUP BY v.vendor_id, v.vendor_name, v.tagline, v.rating, v.city ORDER BY v.rating DESC
+        """),
+    }
+
+
+def product_detail(product_id: int) -> dict | None:
+    p = query_one(f"SELECT * FROM ({PRODUCT_SQL}) x WHERE product_id = ?", product_id)
+    if p:
+        p["related"] = query(f"SELECT TOP 8 * FROM ({PRODUCT_SQL}) x WHERE category_id = ? AND product_id <> ? "
+                             f"ORDER BY sold DESC", p["category_id"], product_id)
+    return p
+
+
+def vendor_public(vendor_id: int) -> dict | None:
+    return query_one("""
+        SELECT v.vendor_id, v.vendor_name, v.tagline, v.city, v.country, v.rating, v.created_at,
+               (SELECT COUNT(*) FROM dbo.products p WHERE p.vendor_id = v.vendor_id AND p.is_active = 1) AS products,
+               (SELECT COUNT(*) FROM dbo.shipments s WHERE s.vendor_id = v.vendor_id AND s.status = 'delivered') AS orders_delivered
+        FROM dbo.vendors v WHERE v.vendor_id = ? AND v.is_active = 1
+    """, vendor_id)
+
+
+# ================================================================== customer
+def customer_profile(customer_id: int) -> dict | None:
+    return query_one("SELECT customer_id, first_name, last_name, email, phone, city, country, signup_date "
+                     "FROM dbo.customers WHERE customer_id = ?", customer_id)
+
+
+def update_profile(customer_id: int, phone: str, city: str, country: str) -> None:
+    execute("UPDATE dbo.customers SET phone = ?, city = ?, country = ?, updated_at = ? WHERE customer_id = ?",
+            phone or None, city or None, country or None, mp.now(), customer_id)
+
+
+ORDER_HEAD = """
+    SELECT o.order_id, o.customer_id, c.first_name + ' ' + c.last_name AS customer, c.email, o.order_date, o.status,
+           o.total_amount, o.shipping_city, o.shipping_country, o.updated_at,
+           p.payment_method, p.payment_status,
+           (SELECT COUNT(*) FROM dbo.order_items i WHERE i.order_id = o.order_id) AS items,
+           (SELECT COUNT(*) FROM dbo.shipments s WHERE s.order_id = o.order_id) AS shipment_count
+    FROM dbo.orders o
+    JOIN dbo.customers c ON c.customer_id = o.customer_id
+    LEFT JOIN dbo.payments p ON p.order_id = o.order_id
+"""
+
+
+def customer_orders(customer_id: int, limit: int = 30) -> list[dict]:
+    orders = query(f"SELECT TOP ({int(limit)}) * FROM ({ORDER_HEAD}) x WHERE customer_id = ? "
+                   f"ORDER BY order_date DESC, order_id DESC", customer_id)
+    if orders:
+        ids = [o["order_id"] for o in orders]
+        marks = ",".join("?" * len(ids))
+        thumbs = query(f"""
+            SELECT i.order_id, p.product_id, p.product_name, c.category_name, i.quantity
+            FROM dbo.order_items i JOIN dbo.products p ON p.product_id = i.product_id
+            JOIN dbo.categories c ON c.category_id = p.category_id WHERE i.order_id IN ({marks})
+        """, *ids)
+        for o in orders:
+            o["lines"] = [t for t in thumbs if t["order_id"] == o["order_id"]]
+    return orders
+
+
+def order_detail(order_id: int) -> dict | None:
+    o = query_one(f"SELECT * FROM ({ORDER_HEAD}) x WHERE order_id = ?", order_id)
+    if o is None:
+        return None
+    o["lines"] = query("""
+        SELECT i.order_item_id, i.product_id, p.product_name, c.category_name, i.quantity, i.unit_price, i.discount,
+               i.line_total, i.shipment_id
+        FROM dbo.order_items i JOIN dbo.products p ON p.product_id = i.product_id
+        JOIN dbo.categories c ON c.category_id = p.category_id WHERE i.order_id = ? ORDER BY i.order_item_id
+    """, order_id)
+    o["shipments"] = query("""
+        SELECT s.shipment_id, s.vendor_id, v.vendor_name, v.is_bot AS vendor_autopilot, s.status, s.rider_id,
+               r.full_name AS rider_name, r.vehicle, r.phone AS rider_phone, s.delivery_fee,
+               s.created_at, s.confirmed_at, s.accepted_at, s.ready_at, s.assigned_at, s.picked_up_at,
+               s.delivered_at, s.cancelled_at, s.updated_at
+        FROM dbo.shipments s JOIN dbo.vendors v ON v.vendor_id = s.vendor_id
+        LEFT JOIN dbo.riders r ON r.rider_id = s.rider_id WHERE s.order_id = ? ORDER BY s.shipment_id
+    """, order_id)
+    o["can_cancel"] = o["status"] in ("pending", "processing") and all(
+        s["status"] in mp.CANCELLABLE_SHIPMENT for s in o["shipments"])
+    o["can_return"] = o["status"] == "delivered"
+    return o
+
+
+# ================================================================== vendor portal
+def vendor_summary(vendor_id: int) -> dict:
+    return query_one("""
+        SELECT v.vendor_id, v.vendor_name, v.tagline, v.rating, v.is_bot, v.prep_seconds, v.city,
+          (SELECT COUNT(*) FROM dbo.shipments s WHERE s.vendor_id = v.vendor_id AND s.status = 'confirmed') AS to_accept,
+          (SELECT COUNT(*) FROM dbo.shipments s WHERE s.vendor_id = v.vendor_id AND s.status = 'packing') AS to_pack,
+          (SELECT COUNT(*) FROM dbo.shipments s WHERE s.vendor_id = v.vendor_id AND s.status IN ('ready','assigned')) AS awaiting_pickup,
+          (SELECT COUNT(*) FROM dbo.shipments s WHERE s.vendor_id = v.vendor_id AND s.status = 'picked_up') AS on_the_way,
+          (SELECT COUNT(*) FROM dbo.shipments s WHERE s.vendor_id = v.vendor_id AND s.status = 'pending') AS awaiting_admin,
+          (SELECT COUNT(*) FROM dbo.shipments s WHERE s.vendor_id = v.vendor_id AND CAST(s.created_at AS date) = CAST(GETDATE() AS date)) AS orders_today,
+          (SELECT coalesce(SUM(i.line_total), 0) FROM dbo.order_items i JOIN dbo.shipments s ON s.shipment_id = i.shipment_id
+             WHERE s.vendor_id = v.vendor_id AND CAST(s.created_at AS date) = CAST(GETDATE() AS date)
+               AND s.status NOT IN ('cancelled','returned')) AS sales_today,
+          (SELECT coalesce(SUM(i.line_total), 0) FROM dbo.order_items i JOIN dbo.shipments s ON s.shipment_id = i.shipment_id
+             WHERE s.vendor_id = v.vendor_id AND s.created_at >= DATEADD(day, -30, GETDATE())
+               AND s.status NOT IN ('cancelled','returned')) AS sales_30d,
+          (SELECT COUNT(*) FROM dbo.products p WHERE p.vendor_id = v.vendor_id AND p.is_active = 1) AS products,
+          (SELECT COUNT(*) FROM dbo.products p JOIN dbo.inventory i ON i.product_id = p.product_id
+             WHERE p.vendor_id = v.vendor_id AND i.quantity_on_hand < 20) AS low_stock
+        FROM dbo.vendors v WHERE v.vendor_id = ?
+    """, vendor_id)
+
+
+def vendor_shipments(vendor_id: int, statuses: list[str], limit: int = 60) -> list[dict]:
+    marks = ",".join("?" * len(statuses))
+    ships = query(f"""
+        SELECT TOP ({int(limit)}) s.shipment_id, s.order_id, s.status, s.created_at, s.confirmed_at, s.accepted_at,
+               s.ready_at, s.picked_up_at, s.delivered_at, s.updated_at, r.full_name AS rider_name,
+               c.first_name AS customer_first_name, o.shipping_city, o.shipping_country,
+               (SELECT SUM(line_total) FROM dbo.order_items i WHERE i.shipment_id = s.shipment_id) AS amount
+        FROM dbo.shipments s JOIN dbo.orders o ON o.order_id = s.order_id
+        JOIN dbo.customers c ON c.customer_id = o.customer_id
+        LEFT JOIN dbo.riders r ON r.rider_id = s.rider_id
+        WHERE s.vendor_id = ? AND s.status IN ({marks})
+        ORDER BY CASE s.status WHEN 'confirmed' THEN 0 WHEN 'packing' THEN 1 ELSE 2 END, s.updated_at DESC
+    """, vendor_id, *statuses)
+    if ships:
+        ids = [s["shipment_id"] for s in ships]
+        lines = query(f"""
+            SELECT i.shipment_id, p.product_name, p.sku, i.quantity FROM dbo.order_items i
+            JOIN dbo.products p ON p.product_id = i.product_id WHERE i.shipment_id IN ({','.join('?' * len(ids))})
+        """, *ids)
+        for s in ships:
+            s["lines"] = [l for l in lines if l["shipment_id"] == s["shipment_id"]]
+    return ships
+
+
+def vendor_products(vendor_id: int) -> list[dict]:
+    return query(PRODUCT_SQL.replace("WHERE p.is_active = 1", "WHERE 1 = 1") +
+                 " AND v.vendor_id = ? ORDER BY p.product_name", vendor_id)
+
+
+def vendor_owns_product(vendor_id: int, product_id: int) -> bool:
+    return bool(scalar("SELECT COUNT(*) FROM dbo.products WHERE product_id = ? AND vendor_id = ?", product_id, vendor_id))
+
+
+def update_product(product_id: int, unit_price: float | None = None, list_price: float | None = None,
+                   add_stock: int | None = None, is_active: bool | None = None) -> None:
+    ts = mp.now()
+    with tx() as cur:
+        if unit_price is not None:
+            if unit_price <= 0:
+                raise ShopError("Price must be positive")
+            cur.execute("UPDATE dbo.products SET unit_price = ?, updated_at = ? WHERE product_id = ?",
+                        mp.money(unit_price), ts, product_id)
+        if list_price is not None:
+            cur.execute("UPDATE dbo.products SET list_price = ?, updated_at = ? WHERE product_id = ?",
+                        mp.money(list_price) if list_price > 0 else None, ts, product_id)
+        if is_active is not None:
+            cur.execute("UPDATE dbo.products SET is_active = ?, updated_at = ? WHERE product_id = ?",
+                        int(is_active), ts, product_id)
+        if add_stock:
+            if add_stock < 1:
+                raise ShopError("Restock quantity must be positive")
+            cur.execute("UPDATE dbo.inventory SET quantity_on_hand = quantity_on_hand + ?, updated_at = ? "
+                        "WHERE product_id = ?", add_stock, ts, product_id)
+
+
+def add_product(vendor_id: int, name: str, category_id: int, unit_price: float, unit_cost: float,
+                stock: int, description: str) -> int:
+    name = name.strip()
+    if not name or unit_price <= 0 or unit_cost < 0 or stock < 0:
+        raise ShopError("Name, a positive price, a cost and a stock level are required")
+    ts = mp.now()
+    with tx() as cur:
+        cat = cur.execute("SELECT category_name FROM dbo.categories WHERE category_id = ?", category_id).fetchval()
+        if cat is None:
+            raise ShopError("Unknown category")
+        seq = cur.execute("SELECT ISNULL(MAX(product_id), 0) + 1 FROM dbo.products").fetchval()
+        pid = cur.execute(
+            "INSERT INTO dbo.products (category_id, product_name, sku, unit_price, unit_cost, vendor_id, rating, "
+            "review_count, description, created_at, updated_at) OUTPUT INSERTED.product_id "
+            "VALUES (?,?,?,?,?,?,NULL,0,?,?,?)",
+            category_id, name, f"{cat[:3].upper()}-{seq:05d}", mp.money(unit_price), mp.money(unit_cost),
+            vendor_id, description.strip() or None, ts, ts,
+        ).fetchval()
+        cur.execute("INSERT INTO dbo.inventory (product_id, quantity_on_hand, updated_at) VALUES (?,?,?)", pid, stock, ts)
+    return pid
+
+
+# ================================================================== rider portal
+def rider_summary(rider_id: int) -> dict:
+    return query_one("""
+        SELECT r.rider_id, r.full_name, r.phone, r.city, r.vehicle, r.status, r.is_bot,
+          (SELECT COUNT(*) FROM dbo.shipments s WHERE s.rider_id = r.rider_id AND s.status = 'delivered'
+             AND CAST(s.delivered_at AS date) = CAST(GETDATE() AS date)) AS delivered_today,
+          (SELECT coalesce(SUM(delivery_fee), 0) FROM dbo.shipments s WHERE s.rider_id = r.rider_id AND s.status = 'delivered'
+             AND CAST(s.delivered_at AS date) = CAST(GETDATE() AS date)) AS earned_today,
+          (SELECT COUNT(*) FROM dbo.shipments s WHERE s.rider_id = r.rider_id AND s.status IN ('delivered','returned')) AS delivered_total,
+          (SELECT coalesce(SUM(delivery_fee), 0) FROM dbo.shipments s WHERE s.rider_id = r.rider_id AND s.status IN ('delivered','returned')) AS earned_total,
+          (SELECT AVG(DATEDIFF(second, s.picked_up_at, s.delivered_at)) FROM dbo.shipments s
+             WHERE s.rider_id = r.rider_id AND s.delivered_at >= DATEADD(day, -7, GETDATE())) AS avg_ride_seconds
+        FROM dbo.riders r WHERE r.rider_id = ?
+    """, rider_id)
+
+
+def rider_jobs(rider_id: int, active: bool = True, limit: int = 30) -> list[dict]:
+    cond = "s.status IN ('assigned','picked_up')" if active else "s.status IN ('delivered','returned')"
+    return query(f"""
+        SELECT TOP ({int(limit)}) s.shipment_id, s.order_id, s.status, s.delivery_fee, s.assigned_at, s.picked_up_at,
+               s.delivered_at, v.vendor_name, v.city AS pickup_city, c.first_name + ' ' + LEFT(c.last_name, 1) + '.' AS customer,
+               c.phone AS customer_phone, o.shipping_city, o.shipping_country, p.payment_method, p.payment_status,
+               (SELECT SUM(quantity) FROM dbo.order_items i WHERE i.shipment_id = s.shipment_id) AS units,
+               (SELECT SUM(line_total) FROM dbo.order_items i WHERE i.shipment_id = s.shipment_id) AS parcel_value
+        FROM dbo.shipments s JOIN dbo.vendors v ON v.vendor_id = s.vendor_id
+        JOIN dbo.orders o ON o.order_id = s.order_id JOIN dbo.customers c ON c.customer_id = o.customer_id
+        LEFT JOIN dbo.payments p ON p.order_id = o.order_id
+        WHERE s.rider_id = ? AND {cond} ORDER BY coalesce(s.delivered_at, s.assigned_at) DESC
+    """, rider_id)
+
+
+def set_rider_status(rider_id: int, status: str) -> None:
+    if status not in ("available", "offline"):
+        raise ShopError("Status must be available or offline")
+    active = scalar("SELECT COUNT(*) FROM dbo.shipments WHERE rider_id = ? AND status IN ('assigned','picked_up')", rider_id)
+    if active:
+        raise ShopError("Finish your current delivery first")
+    execute("UPDATE dbo.riders SET status = ?, updated_at = ? WHERE rider_id = ?", status, mp.now(), rider_id)
+
+
+# ================================================================== admin
+def admin_overview() -> dict:
+    return {
+        "settings": settings(),
+        "shipments_by_status": query("SELECT status, COUNT(*) AS n FROM dbo.shipments "
+                                     "WHERE status IN ('pending','confirmed','packing','ready','assigned','picked_up') GROUP BY status"),
+        "riders_by_status": query("SELECT status, COUNT(*) AS n FROM dbo.riders GROUP BY status"),
+        "pending_orders": scalar("SELECT COUNT(*) FROM dbo.orders WHERE status = 'pending' AND order_date <= SYSDATETIME()"),
+    }
+
+
+def order_queue(statuses: list[str], limit: int = 100) -> list[dict]:
+    marks = ",".join("?" * len(statuses))
+    return query(f"""
+        SELECT TOP ({int(limit)}) * FROM ({ORDER_HEAD}) x
+        WHERE status IN ({marks}) AND order_date <= SYSDATETIME()
+        ORDER BY CASE WHEN status = 'pending' THEN 0 ELSE 1 END, order_date DESC
+    """, *statuses)
+
+
+def shipments_board(limit_per_status: int = 25) -> list[dict]:
+    return query(f"""
+        SELECT * FROM (
+          SELECT s.shipment_id, s.order_id, s.status, s.updated_at, v.vendor_name, v.is_bot AS vendor_autopilot,
+                 r.full_name AS rider_name, r.is_bot AS rider_autopilot, o.shipping_city,
+                 ROW_NUMBER() OVER (PARTITION BY s.status ORDER BY s.updated_at DESC) AS rn
+          FROM dbo.shipments s JOIN dbo.vendors v ON v.vendor_id = s.vendor_id
+          JOIN dbo.orders o ON o.order_id = s.order_id LEFT JOIN dbo.riders r ON r.rider_id = s.rider_id
+          WHERE s.status IN ('pending','confirmed','packing','ready','assigned','picked_up')
+             OR (s.status = 'delivered' AND s.delivered_at >= DATEADD(hour, -1, SYSDATETIME()))
+        ) x WHERE rn <= {int(limit_per_status)} ORDER BY updated_at DESC
+    """)
+
+
+def vendors_admin() -> list[dict]:
+    return query("""
+        SELECT v.vendor_id, v.vendor_name, v.city, v.rating, v.is_active, v.is_bot, v.prep_seconds,
+          (SELECT COUNT(*) FROM dbo.products p WHERE p.vendor_id = v.vendor_id) AS products,
+          (SELECT COUNT(*) FROM dbo.shipments s WHERE s.vendor_id = v.vendor_id AND s.status IN ('confirmed','packing')) AS to_handle,
+          (SELECT COUNT(*) FROM dbo.shipments s WHERE s.vendor_id = v.vendor_id AND s.status = 'delivered'
+             AND s.delivered_at >= DATEADD(day, -30, GETDATE())) AS delivered_30d,
+          (SELECT AVG(DATEDIFF(second, s.confirmed_at, s.ready_at)) FROM dbo.shipments s
+             WHERE s.vendor_id = v.vendor_id AND s.ready_at >= DATEADD(day, -7, GETDATE())) AS avg_prep_seconds,
+          (SELECT TOP 1 email FROM dbo.users u WHERE u.vendor_id = v.vendor_id) AS login_email
+        FROM dbo.vendors v ORDER BY v.vendor_name
+    """)
+
+
+def riders_admin() -> list[dict]:
+    return query("""
+        SELECT r.rider_id, r.full_name, r.city, r.vehicle, r.status, r.is_bot,
+          (SELECT TOP 1 s.shipment_id FROM dbo.shipments s WHERE s.rider_id = r.rider_id AND s.status IN ('assigned','picked_up')) AS current_shipment,
+          (SELECT COUNT(*) FROM dbo.shipments s WHERE s.rider_id = r.rider_id AND s.status = 'delivered'
+             AND CAST(s.delivered_at AS date) = CAST(GETDATE() AS date)) AS delivered_today,
+          (SELECT TOP 1 email FROM dbo.users u WHERE u.rider_id = r.rider_id) AS login_email
+        FROM dbo.riders r ORDER BY r.is_bot, r.full_name
+    """)
+
+
+def users_admin(limit: int = 200) -> list[dict]:
+    return query(f"""
+        SELECT TOP ({int(limit)}) u.user_id, u.email, u.role, u.display_name, u.is_active, u.last_login_at, u.created_at,
+               u.customer_id, u.vendor_id, u.rider_id
+        FROM dbo.users u ORDER BY CASE u.role WHEN 'admin' THEN 0 WHEN 'vendor' THEN 1 WHEN 'rider' THEN 2 ELSE 3 END, u.user_id
+    """)
+
+
+def settings() -> dict:
+    with tx() as cur:
+        return mp.get_settings(cur)
+
+
+def set_flag(table: str, key_col: str, key: int, column: str, value) -> None:
+    allowed = {("vendors", "is_bot"), ("vendors", "is_active"), ("riders", "is_bot"), ("users", "is_active")}
+    if (table, column) not in allowed:
+        raise ShopError("That setting can't be changed")
+    if not execute(f"UPDATE dbo.{table} SET {column} = ?, updated_at = ? WHERE {key_col} = ?", value, mp.now(), key):
+        raise ShopError("Not found")
+
+
+# ================================================================== live operations dashboard
 def dashboard_stats() -> dict:
     kpis = query_one("""
         SELECT
-          (SELECT count(*) FROM dbo.orders WHERE CAST(order_date AS date) = CAST(GETDATE() AS date)
-                                             AND order_date <= SYSDATETIME())                   AS orders_today,
-          (SELECT coalesce(sum(total_amount), 0) FROM dbo.orders
-             WHERE CAST(order_date AS date) = CAST(GETDATE() AS date) AND order_date <= SYSDATETIME()
-               AND status NOT IN ('cancelled','returned'))                                      AS revenue_today,
-          (SELECT count(*) FROM dbo.orders WHERE order_date >= DATEADD(minute, -5, SYSDATETIME())
-                                             AND order_date <= SYSDATETIME())                   AS orders_last_5_min,
-          (SELECT count(*) FROM dbo.orders WHERE status IN ('pending','paid','shipped'))        AS open_orders,
-          (SELECT count(*) FROM dbo.customers)                                                  AS customers,
-          (SELECT count(*) FROM dbo.customers WHERE signup_date = CAST(GETDATE() AS date))      AS new_customers_today
+          (SELECT count(*) FROM dbo.orders WHERE CAST(order_date AS date) = CAST(GETDATE() AS date) AND order_date <= SYSDATETIME()) AS orders_today,
+          (SELECT coalesce(sum(total_amount), 0) FROM dbo.orders WHERE CAST(order_date AS date) = CAST(GETDATE() AS date)
+             AND order_date <= SYSDATETIME() AND status NOT IN ('cancelled','returned')) AS revenue_today,
+          (SELECT count(*) FROM dbo.orders WHERE order_date >= DATEADD(minute, -5, SYSDATETIME()) AND order_date <= SYSDATETIME()) AS orders_last_5_min,
+          (SELECT count(*) FROM dbo.orders WHERE status IN ('pending','processing','paid','shipped')) AS open_orders,
+          (SELECT count(*) FROM dbo.customers) AS customers,
+          (SELECT count(*) FROM dbo.customers WHERE signup_date = CAST(GETDATE() AS date)) AS new_customers_today,
+          (SELECT count(*) FROM dbo.shipments WHERE status = 'delivered' AND CAST(delivered_at AS date) = CAST(GETDATE() AS date)) AS delivered_today,
+          (SELECT AVG(DATEDIFF(second, confirmed_at, delivered_at)) FROM dbo.shipments
+             WHERE delivered_at >= DATEADD(hour, -24, SYSDATETIME()) AND confirmed_at IS NOT NULL) AS avg_fulfil_seconds
     """)
     kpis["avg_order_today"] = kpis["revenue_today"] / kpis["orders_today"] if kpis["orders_today"] else 0
     return {
         "kpis": kpis,
         "per_minute": query("""
-            SELECT DATEADD(minute, DATEDIFF(minute, 0, order_date), 0) AS minute, count(*) AS orders
-            FROM dbo.orders
+            SELECT DATEADD(minute, DATEDIFF(minute, 0, order_date), 0) AS minute, count(*) AS orders FROM dbo.orders
             WHERE order_date >= DATEADD(minute, -60, SYSDATETIME()) AND order_date <= SYSDATETIME()
             GROUP BY DATEADD(minute, DATEDIFF(minute, 0, order_date), 0) ORDER BY minute
         """),
         "revenue_by_day": query("""
             SELECT CAST(order_date AS date) AS day, count(*) AS orders,
                    sum(CASE WHEN status NOT IN ('cancelled','returned') THEN total_amount ELSE 0 END) AS revenue
-            FROM dbo.orders
-            WHERE order_date >= DATEADD(day, -29, CAST(GETDATE() AS date)) AND order_date <= SYSDATETIME()
+            FROM dbo.orders WHERE order_date >= DATEADD(day, -29, CAST(GETDATE() AS date)) AND order_date <= SYSDATETIME()
             GROUP BY CAST(order_date AS date) ORDER BY day
         """),
         "status_counts": query("SELECT status, count(*) AS orders FROM dbo.orders GROUP BY status ORDER BY orders DESC"),
+        "pipeline": query("SELECT status, count(*) AS n FROM dbo.shipments WHERE status IN "
+                          "('pending','confirmed','packing','ready','assigned','picked_up') GROUP BY status"),
         "category_revenue": query("""
-            SELECT c.category_name, sum(i.line_total) AS revenue
-            FROM dbo.order_items i
-            JOIN dbo.orders o ON o.order_id = i.order_id
-            JOIN dbo.products p ON p.product_id = i.product_id
+            SELECT c.category_name, sum(i.line_total) AS revenue FROM dbo.order_items i
+            JOIN dbo.orders o ON o.order_id = i.order_id JOIN dbo.products p ON p.product_id = i.product_id
             JOIN dbo.categories c ON c.category_id = p.category_id
             WHERE o.order_date >= DATEADD(day, -30, SYSDATETIME()) AND o.order_date <= SYSDATETIME()
-              AND o.status NOT IN ('cancelled','returned')
-            GROUP BY c.category_name ORDER BY revenue DESC
+              AND o.status NOT IN ('cancelled','returned') GROUP BY c.category_name ORDER BY revenue DESC
         """),
         "top_products": query("""
-            SELECT TOP 5 p.product_name, sum(i.quantity) AS units, sum(i.line_total) AS revenue
-            FROM dbo.order_items i
-            JOIN dbo.orders o ON o.order_id = i.order_id
-            JOIN dbo.products p ON p.product_id = i.product_id
+            SELECT TOP 5 p.product_name, sum(i.quantity) AS units, sum(i.line_total) AS revenue FROM dbo.order_items i
+            JOIN dbo.orders o ON o.order_id = i.order_id JOIN dbo.products p ON p.product_id = i.product_id
             WHERE o.order_date >= DATEADD(day, -7, SYSDATETIME()) AND o.order_date <= SYSDATETIME()
-              AND o.status NOT IN ('cancelled','returned')
-            GROUP BY p.product_name ORDER BY units DESC
+              AND o.status NOT IN ('cancelled','returned') GROUP BY p.product_name ORDER BY units DESC
         """),
         "low_stock": query("""
-            SELECT TOP 8 p.product_id, p.product_name, i.quantity_on_hand
-            FROM dbo.inventory i JOIN dbo.products p ON p.product_id = i.product_id
-            ORDER BY i.quantity_on_hand
+            SELECT TOP 8 p.product_id, p.product_name, v.vendor_name, i.quantity_on_hand FROM dbo.inventory i
+            JOIN dbo.products p ON p.product_id = i.product_id JOIN dbo.vendors v ON v.vendor_id = p.vendor_id
+            WHERE p.is_active = 1 ORDER BY i.quantity_on_hand
         """),
-        "recent_orders": list_orders(limit=12),
+        "recent_orders": query(f"SELECT TOP 12 * FROM ({ORDER_HEAD}) x WHERE order_date <= SYSDATETIME() "
+                               f"ORDER BY order_date DESC, order_id DESC"),
     }

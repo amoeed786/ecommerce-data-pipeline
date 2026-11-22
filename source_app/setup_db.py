@@ -10,7 +10,8 @@ from pathlib import Path
 
 from db import DATABASE, SERVER, get_connection
 
-SCHEMA_FILE = Path(__file__).with_name("schema.sql")
+SCHEMA_FILES = [Path(__file__).with_name("schema.sql"),               # v1: shop tables
+                Path(__file__).with_name("schema_marketplace.sql")]   # v2: vendors, riders, shipments, users
 
 
 def main() -> None:
@@ -30,7 +31,8 @@ def main() -> None:
     cur.execute(f"IF DB_ID(N'{DATABASE}') IS NULL CREATE DATABASE [{DATABASE}]")
     conn.close()
 
-    batches = [b for b in re.split(r"^\s*GO\s*$", SCHEMA_FILE.read_text(), flags=re.M | re.I) if b.strip()]
+    batches = [b for f in SCHEMA_FILES
+               for b in re.split(r"^\s*GO\s*$", f.read_text(encoding="utf-8"), flags=re.M | re.I) if b.strip()]
     conn = get_connection(autocommit=True)
     cur = conn.cursor()
     for batch in batches:

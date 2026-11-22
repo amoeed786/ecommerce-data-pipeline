@@ -10,6 +10,8 @@ select
     p.product_sk,
     o.customer_id,
     i.product_id,
+    i.shipment_id,
+    sh.vendor_id,          -- from the shipment: who actually sold and shipped this line
     o.status,
     o.is_revenue,
     i.quantity,
@@ -22,6 +24,7 @@ select
     i.line_total - round(i.quantity * p.unit_cost, 2)   as gross_margin
 from {{ ref('stg_order_items') }} i
 join {{ ref('stg_orders') }} o using (order_id)
+left join {{ ref('stg_shipments') }} sh on sh.shipment_id = i.shipment_id
 left join {{ ref('dim_product') }} p
        on p.product_id = i.product_id and o.order_ts >= p.valid_from and o.order_ts < p.valid_to
 left join {{ ref('dim_customer') }} c

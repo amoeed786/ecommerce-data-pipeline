@@ -76,8 +76,8 @@ def bronze_reconciles_with_shopdb() -> AssetCheckResult:
 
 # One asset per silver file. Keys match dbt's default source keys (silver/<table>), so Dagster
 # wires each dbt staging model to the exact silver table it reads.
-SILVER_TABLES = ["categories", "customers", "customers_history", "products", "products_history",
-                 "inventory", "orders", "order_items", "payments"]
+SILVER_TABLES = ["categories", "customers", "customers_history", "vendors", "riders", "products",
+                 "products_history", "inventory", "orders", "shipments", "order_items", "payments", "users"]
 
 
 @multi_asset(

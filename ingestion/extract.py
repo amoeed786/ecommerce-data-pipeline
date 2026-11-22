@@ -43,7 +43,10 @@ WATERMARK_FILE = STATE_DIR / "watermarks.json"
 RUN_LOG_FILE = STATE_DIR / "ingestion_log.jsonl"
 
 # Parents before children, so a batch never holds an order whose customer isn't extracted yet.
-TABLES = ["categories", "customers", "products", "inventory", "orders", "order_items", "payments"]
+TABLES = ["categories", "customers", "vendors", "riders", "products", "inventory",
+          "orders", "shipments", "order_items", "payments", "users"]
+# Columns that must never leave the source system. (user_sessions and app_settings aren't extracted at all.)
+EXCLUDED_COLUMNS = {"users": {"password_hash"}}
 WATERMARK_COLUMN = "updated_at"
 SAFETY_LAG_SECONDS = 5
 FETCH_SIZE = 50_000
@@ -87,7 +90,7 @@ def table_schema(cur, table: str) -> pa.Schema:
         """,
         table,
     )
-    rows = cur.fetchall()
+    rows = [r for r in cur.fetchall() if r[0] not in EXCLUDED_COLUMNS.get(table, set())]
     if not rows:
         raise RuntimeError(f"Table dbo.{table} not found")
     return pa.schema(

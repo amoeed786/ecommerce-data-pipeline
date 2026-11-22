@@ -3,65 +3,80 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ShopLite Admin</title>
+  <title>Admin · ShopLite</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header>
-  <div class="brand">Shop<span>Lite</span> <span class="muted small">admin</span></div>
-  <nav><a href="/">Shop</a><a href="/admin">Admin</a><a href="/dashboard">Dashboard</a><a href="/analytics">Analytics</a><a href="/docs" target="_blank">API</a></nav>
-  <div class="spacer"></div>
-  <span id="live" class="live">connecting…</span>
-</header>
-
+<header></header>
 <main>
   <div class="tabs">
-    <button data-tab="orders" class="on">📦 Orders</button>
+    <button data-tab="control" class="on">🎛️ Order control</button>
+    <button data-tab="board">🚚 Live shipments</button>
+    <button data-tab="vendors">🏪 Vendors</button>
+    <button data-tab="riders">🛵 Riders</button>
+    <button data-tab="users">👤 Users</button>
     <button data-tab="catalog">🏷️ Catalog</button>
     <button data-tab="pipeline">🛠️ Simulator &amp; pipeline</button>
   </div>
 
-  <!-- ============ ORDERS ============ -->
-  <section id="tab-orders" class="grid cols-2">
-    <div class="card">
-      <div class="row" style="justify-content: space-between">
-        <h1>Orders</h1>
-        <span class="muted small">New and changed orders appear live (highlighted)</span>
-      </div>
-      <div id="status-chips" class="chips" style="margin-top: 10px"></div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>#</th><th>Placed</th><th>Customer</th><th>Status</th><th class="num">Items</th><th class="num">Total</th></tr></thead>
-        <tbody id="orders"></tbody>
-      </table></div>
+  <!-- ============ ORDER CONTROL ============ -->
+  <section id="tab-control" class="grid">
+    <div class="card row" style="gap:24px; align-items:center">
+      <div class="row"><label class="switch"><input type="checkbox" id="auto"><span></span></label>
+        <div><b>Auto-approve orders</b><div class="muted small" id="auto-text"></div></div></div>
+      <div><b>Simulation speed</b> <span id="speed-val" class="badge"></span><br>
+        <input type="range" id="speed" min="0" max="5" step="1" style="width:200px"></div>
+      <div class="spacer"></div>
+      <div class="small muted" id="engine"></div>
+      <button class="primary" id="start-all">▶ Start all pending</button>
     </div>
-    <div class="card" id="detail" style="align-self: start; position: sticky; top: 70px">
-      <p class="muted">Click an order to see its details and move it along.</p>
+    <div class="portal-kpis" id="pipe-kpis" style="margin:0"></div>
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="row" style="justify-content:space-between"><h2>Orders</h2><span class="muted small">new and changed orders flash in live</span></div>
+        <div id="status-chips" class="chips"></div>
+        <div class="table-wrap" style="max-height: 640px; overflow-y: auto"><table>
+          <thead><tr><th>#</th><th>Placed</th><th>Customer</th><th>Status</th><th class="num">Parcels</th><th class="num">Total</th><th></th></tr></thead>
+          <tbody id="orders"></tbody></table></div>
+      </div>
+      <div class="card" id="detail" style="align-self:start; position:sticky; top:70px"><p class="muted">Click an order to see its parcels and step in for any vendor or rider.</p></div>
     </div>
   </section>
 
+  <!-- ============ LIVE SHIPMENTS ============ -->
+  <section id="tab-board" class="hidden">
+    <p class="muted small" style="margin-top:0">Every open parcel, moving left to right as stores and riders work. 🤖 = autopilot, 👤 = a person.</p>
+    <div class="kanban" id="kanban"></div>
+  </section>
+
+  <!-- ============ VENDORS / RIDERS / USERS ============ -->
+  <section id="tab-vendors" class="card hidden"><h2>Vendors</h2>
+    <p class="muted small">Autopilot vendors accept and pack by themselves. Turn it off to make a store wait for a person in the seller center.</p>
+    <div class="table-wrap" id="vendors"></div></section>
+  <section id="tab-riders" class="card hidden"><h2>Riders</h2>
+    <p class="muted small">Ready parcels go to available riders - online people first, then autopilot riders.</p>
+    <div class="table-wrap" id="riders"></div></section>
+  <section id="tab-users" class="card hidden"><h2>Users</h2><div class="table-wrap" id="users"></div></section>
+
   <!-- ============ CATALOG ============ -->
   <section id="tab-catalog" class="card hidden">
-    <div class="row" style="justify-content: space-between; margin-bottom: 10px">
-      <h1>Catalog</h1>
-      <input id="cat-search" type="search" placeholder="Search products…" style="width: 260px">
-    </div>
-    <p class="muted small">Price changes are kept as history in bronze — later, SCD2 uses them to know the price on any given day.</p>
+    <div class="row" style="justify-content:space-between"><h2>Catalog</h2><input id="cat-search" type="search" placeholder="Search products, stores…" style="width:280px"></div>
+    <p class="muted small">Price changes are kept as history in bronze - SCD2 in the gold layer uses them to know the price on any given day.</p>
     <div class="table-wrap"><table>
-      <thead><tr><th>#</th><th>Product</th><th>Category</th><th class="num">Stock</th><th>Price</th><th>Restock</th></tr></thead>
-      <tbody id="catalog"></tbody>
-    </table></div>
+      <thead><tr><th>Product</th><th>Store</th><th class="num">Sold</th><th class="num">Stock</th><th>Price</th><th>Was (sale)</th><th>Restock</th></tr></thead>
+      <tbody id="catalog"></tbody></table></div>
   </section>
 
   <!-- ============ PIPELINE ============ -->
   <section id="tab-pipeline" class="hidden grid">
     <div class="grid cols-even">
       <div class="card">
-        <h2>1 · Shop simulator <span id="sim-state" class="muted small"></span></h2>
-        <p class="muted small">Runs <code>python source_app/generator.py stream</code> in the background: new customers, orders and status changes every few seconds.</p>
+        <h2>1 · Shopper simulator <span id="sim-state" class="muted small"></span></h2>
+        <p class="muted small">Runs <code>python source_app/generator.py stream</code>: new customers and marketplace orders every few seconds.
+          Vendors and riders (or their autopilot) then move the orders.</p>
         <div class="row">
-          <label>Every <input id="sim-interval" type="number" min="1" max="60" value="5" style="width: 64px"> s</label>
-          <button id="sim-start" class="primary">▶ Start</button>
-          <button id="sim-stop">■ Stop</button>
+          <label>Every <input id="sim-interval" type="number" min="1" max="60" value="5" style="width:64px"> s</label>
+          <button id="sim-start" class="primary">▶ Start</button><button id="sim-stop">■ Stop</button>
         </div>
         <pre id="sim-log" class="out">(not running)</pre>
       </div>
@@ -74,22 +89,16 @@
           <button data-step="dbt_build" class="primary">③ dbt build (gold)</button>
           <button data-step="export_gold" class="primary">④ Export gold</button>
         </div>
-        <div class="row" style="margin-top: 8px">
-          <button data-step="check_bronze">Check bronze</button>
-          <button data-step="inject_bad_data">Inject messy data</button>
-          <button data-step="check_db">Check source DB</button>
-          <a class="small" href="/analytics" style="margin-left:auto">See results in Analytics →</a>
+        <div class="row" style="margin-top:8px">
+          <button data-step="check_bronze">Check bronze</button><button data-step="inject_bad_data">Inject messy data</button>
+          <button data-step="check_db">Check source DB</button><a class="small" href="/analytics" style="margin-left:auto">See results in Analytics →</a>
         </div>
         <pre id="step-out" class="out">Click a step…</pre>
       </div>
     </div>
-    <div class="card">
-      <div class="row" style="justify-content: space-between"><h2>3 · Data lake</h2><button id="lake-refresh" class="small">Refresh</button></div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Table</th><th class="num">Bronze files</th><th class="num">Bronze rows (all versions)</th><th class="num">Silver rows (latest, clean)</th><th class="num">Quarantined</th><th>Watermark</th></tr></thead>
-        <tbody id="lake"></tbody>
-      </table></div>
-    </div>
+    <div class="card"><div class="row" style="justify-content:space-between"><h2>3 · Data lake</h2><button id="lake-refresh" class="small">Refresh</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Table</th><th class="num">Bronze files</th><th class="num">Bronze rows (all versions)</th>
+        <th class="num">Silver rows (latest, clean)</th><th class="num">Quarantined</th><th>Watermark</th></tr></thead><tbody id="lake"></tbody></table></div></div>
     <div class="grid cols-even">
       <div class="card"><h2>Latest data-quality results</h2><div id="dq" class="table-wrap"></div></div>
       <div class="card"><h2>Recent extracts</h2><div id="extracts" class="table-wrap"></div></div>
@@ -99,138 +108,211 @@
 
 <script src="/static/common.js"></script>
 <script>
-const STATUSES = ["pending", "paid", "shipped", "delivered", "cancelled", "returned"];
-const PAYMENT_METHODS = ["credit_card", "debit_card", "paypal", "bank_transfer", "cash_on_delivery"];
-const ICON = { paid: "💳", shipped: "🚚", delivered: "✅", cancelled: "❌", returned: "↩️" };
-let filter = new Set(["pending", "paid", "shipped"]);
-let selected = null;
+const ORDER_STATUSES = ["pending", "processing", "shipped", "delivered", "cancelled", "returned"];
+const BOARD = ["pending", "confirmed", "packing", "ready", "assigned", "picked_up", "delivered"];
+const SPEEDS = [0.5, 1, 2, 5, 10, 20];
+let filter = new Set(["pending", "processing", "shipped"]);
+let selected = null, tab = "control";
 const flashIds = new Set();
+const table = (cols, rows) => rows.length
+  ? `<table><thead><tr>${cols.map((c) => `<th class="${c[2] || ""}">${c[0]}</th>`).join("")}</tr></thead><tbody>${rows.map((r) =>
+      `<tr>${cols.map((c) => `<td class="${c[2] || ""}">${c[1](r)}</td>`).join("")}</tr>`).join("")}</tbody></table>` : `<p class="muted">Nothing yet.</p>`;
+const sw = (attrs, on) => `<label class="switch"><input type="checkbox" ${attrs} ${on ? "checked" : ""}><span></span></label>`;
+async function act(path, body, msg, method = "POST") {
+  try { await api(path, { method, body }); if (msg) toast(msg, "good"); return true; } catch (e) { toast(e.message, "error"); return false; }
+}
 
 // ---------------- tabs
+const LOADERS = { control: () => { loadOverview(); loadOrders(); }, board: loadBoard, vendors: loadVendors, riders: loadRiders,
+  users: loadUsers, catalog: loadCatalog, pipeline: () => { loadSim(); loadLake(); } };
 $$(".tabs button").forEach((b) => (b.onclick = () => {
+  tab = b.dataset.tab;
   $$(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
-  ["orders", "catalog", "pipeline"].forEach((t) => $(`#tab-${t}`).classList.toggle("hidden", t !== b.dataset.tab));
-  if (b.dataset.tab === "catalog") loadCatalog();
-  if (b.dataset.tab === "pipeline") { loadSim(); loadLake(); }
+  Object.keys(LOADERS).forEach((t) => $(`#tab-${t}`).classList.toggle("hidden", t !== tab));
+  LOADERS[tab]();
 }));
 
-// ---------------- orders
+// ---------------- order control
+async function loadOverview() {
+  const o = await api("/api/admin/overview");
+  const auto = o.settings.auto_approve === "true";
+  $("#auto").checked = auto;
+  $("#auto-text").textContent = auto ? "On - new orders start by themselves after ~3 s" : "Off - every order waits for you to press Start";
+  const speed = +o.settings.sim_speed;
+  $("#speed").value = Math.max(0, SPEEDS.indexOf(SPEEDS.reduce((a, b) => (Math.abs(b - speed) < Math.abs(a - speed) ? b : a))));
+  $("#speed-val").textContent = speed + "×";
+  $("#start-all").textContent = `▶ Start all pending (${o.pending_orders})`;
+  $("#start-all").disabled = !o.pending_orders;
+  const e = o.engine;
+  $("#engine").innerHTML = e.error ? `<span class="stock-out">autopilot error: ${esc(e.error)}</span>`
+    : `🤖 autopilot ${e.last_tick ? "running · " + fmtTime(e.last_tick) : "starting"}${Object.keys(e.last_actions || {}).length ? "<br>last: " + Object.entries(e.last_actions).map(([k, v]) => `${label(k)} ${v}`).join(", ") : ""}`;
+  const by = Object.fromEntries(o.shipments_by_status.map((r) => [r.status, r.n]));
+  const riders = Object.fromEntries(o.riders_by_status.map((r) => [r.status, r.n]));
+  const tiles = [["Waiting for you", by.pending || 0, "parcels not started"], ["At stores", (by.confirmed || 0) + (by.packing || 0), `${by.confirmed || 0} new · ${by.packing || 0} packing`],
+    ["Ready for pickup", (by.ready || 0) + (by.assigned || 0), `${by.assigned || 0} rider assigned`], ["On the road", by.picked_up || 0, "with riders"],
+    ["Riders", `${riders.available || 0} free`, `${riders.busy || 0} busy · ${riders.offline || 0} offline`]];
+  $("#pipe-kpis").innerHTML = tiles.map(([l, v, s]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="small muted">${s}</div></div>`).join("");
+}
+$("#auto").onchange = async (e) => { await act("/api/admin/settings", { auto_approve: e.target.checked }, e.target.checked ? "Auto-approve on" : "Auto-approve off - orders wait for you", "PUT"); loadOverview(); };
+$("#speed").oninput = (e) => ($("#speed-val").textContent = SPEEDS[e.target.value] + "×");
+$("#speed").onchange = async (e) => { await act("/api/admin/settings", { sim_speed: SPEEDS[e.target.value] }, `Speed ${SPEEDS[e.target.value]}×`, "PUT"); loadOverview(); };
+$("#start-all").onclick = async () => {
+  const r = await api("/api/admin/orders/start-all", { method: "POST" });
+  toast(`Started ${r.started} orders - they're with the stores now`, "good"); loadOverview(); loadOrders();
+};
+
 function renderChips() {
-  $("#status-chips").innerHTML = STATUSES.map((s) => `<span class="chip ${filter.has(s) ? "on" : ""}" data-s="${s}">${s}</span>`).join("");
+  $("#status-chips").innerHTML = ORDER_STATUSES.map((s) => `<span class="chip ${filter.has(s) ? "on" : ""}" data-s="${s}">${s}</span>`).join("");
   $$("#status-chips .chip").forEach((c) => (c.onclick = () => { filter.has(c.dataset.s) ? filter.delete(c.dataset.s) : filter.add(c.dataset.s); renderChips(); loadOrders(); }));
 }
 async function loadOrders() {
-  const q = new URLSearchParams([...filter].map((s) => ["status", s]));
-  q.set("limit", 100);
-  const orders = filter.size ? await api("/api/orders?" + q) : [];
+  const orders = filter.size ? await api("/api/admin/orders?" + new URLSearchParams([...[...filter].map((s) => ["status", s]), ["limit", 150]])) : [];
   $("#orders").innerHTML = orders.map((o) => `
     <tr class="clickable ${o.order_id === selected ? "selected" : ""} ${flashIds.has(o.order_id) ? "flash" : ""}" data-id="${o.order_id}">
-      <td><b>${o.order_id}</b></td><td>${fmtDateTime(o.order_date)}</td><td>${esc(o.customer)}</td>
-      <td>${badge(o.status)}</td><td class="num">${o.items}</td><td class="num">${money(o.total_amount)}</td></tr>`).join("")
-    || `<tr><td colspan="6" class="muted">No orders with these statuses.</td></tr>`;
+      <td><b>${o.order_id}</b></td><td>${ago(o.order_date)}</td><td>${esc(o.customer)}</td><td>${badge(o.status)}</td>
+      <td class="num">${o.shipment_count}</td><td class="num">${money(o.total_amount)}</td>
+      <td>${o.status === "pending" ? `<button class="small primary" data-start="${o.order_id}">Start</button>` : ""}</td></tr>`).join("")
+    || `<tr><td colspan="7" class="muted">No orders with these statuses.</td></tr>`;
   flashIds.clear();
-  $$("#orders tr[data-id]").forEach((tr) => (tr.onclick = () => showOrder(+tr.dataset.id)));
+  $$("#orders tr[data-id]").forEach((tr) => (tr.onclick = (e) => { if (!e.target.dataset.start) showOrder(+tr.dataset.id); }));
+  $$("[data-start]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/orders/${b.dataset.start}/start`, null, `Order #${b.dataset.start} sent to the stores`)) { loadOrders(); loadOverview(); } }));
 }
+
 async function showOrder(id) {
   selected = id;
   $$("#orders tr").forEach((tr) => tr.classList.toggle("selected", +tr.dataset.id === id));
-  const o = await api(`/api/orders/${id}`);
-  const pay = o.payment;
+  const [o, riders] = await Promise.all([api(`/api/admin/orders/${id}`), api("/api/admin/riders")]);
+  const free = riders.filter((r) => r.status === "available");
+  const controls = (s) => ({
+    pending: `<button class="small primary" data-order-act="start">▶ Start order</button>`,
+    confirmed: `<button class="small" data-ship="${s.shipment_id}" data-act="accept">✔ Accept for store</button>`,
+    packing: `<button class="small" data-ship="${s.shipment_id}" data-act="ready">📦 Mark packed</button>`,
+    ready: free.length ? `<select id="rider-${s.shipment_id}">${free.map((r) => `<option value="${r.rider_id}">${r.is_bot ? "🤖" : "👤"} ${esc(r.full_name)}</option>`).join("")}</select>
+      <button class="small" data-assign="${s.shipment_id}">Assign rider</button>` : `<span class="muted small">no rider free - waiting</span>`,
+    assigned: `<button class="small" data-ship="${s.shipment_id}" data-act="pickup">🛵 Mark picked up</button>`,
+    picked_up: `<button class="small" data-ship="${s.shipment_id}" data-act="deliver">🏠 Mark delivered</button>`,
+  }[s.status] || "");
   $("#detail").innerHTML = `
-    <div class="row" style="justify-content: space-between"><h1>Order #${o.order_id}</h1>${badge(o.status)}</div>
-    <p class="muted">${esc(o.customer)} · ${esc(o.email)}<br>Placed ${fmtDateTime(o.order_date)} · ships to ${esc(o.shipping_city)}, ${esc(o.shipping_country)}<br>
-      Last change ${fmtDateTime(o.updated_at)}</p>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Product</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Disc.</th><th class="num">Line</th></tr></thead>
-      <tbody>${o.lines.map((l) => `<tr><td>${esc(l.product_name)}</td><td class="num">${l.quantity}</td><td class="num">${money(l.unit_price)}</td>
-        <td class="num">${Math.round(l.discount * 100)}%</td><td class="num">${money(l.line_total)}</td></tr>`).join("")}</tbody>
-      <tfoot><tr><th colspan="4">Total</th><th class="num">${money(o.total_amount)}</th></tr></tfoot>
-    </table></div>
-    <p>${pay ? `💳 ${esc(pay.payment_method)} · ${money(pay.amount)} · <b>${esc(pay.payment_status)}</b> · ${fmtDateTime(pay.paid_at)}` : `<span class="muted">No payment yet</span>`}</p>
-    ${o.next_status.length ? `
-      ${o.next_status.includes("paid") ? `<div class="row" style="margin-bottom:8px">Payment method <select id="pay-method">${PAYMENT_METHODS.map((m) => `<option>${m}</option>`).join("")}</select></div>` : ""}
-      <div class="row">${o.next_status.map((s) => `<button class="${s === "cancelled" || s === "returned" ? "danger" : "primary"}" data-to="${s}">${ICON[s] || ""} Mark ${s}</button>`).join("")}</div>`
-      : `<p class="muted">This order is final.</p>`}`;
-  $$("#detail button[data-to]").forEach((b) => (b.onclick = async () => {
-    try {
-      const r = await api(`/api/orders/${id}/status`, { method: "POST", body: { status: b.dataset.to, payment_method: $("#pay-method")?.value || "credit_card" } });
-      toast(`Order #${id}: ${r.from} → ${r.to}`, "good");
-      showOrder(id); loadOrders();
-    } catch (e) { toast(e.message, "error"); }
+    <div class="row" style="justify-content:space-between"><h1>Order #${o.order_id}</h1>${badge(o.status)}</div>
+    <p class="muted small">${esc(o.customer)} · ${esc(o.email)}<br>Placed ${fmtDateTime(o.order_date)} · to ${esc(o.shipping_city)}, ${esc(o.shipping_country)}<br>
+      ${esc(label(o.payment_method))} · ${badge(o.payment_status)} · <b>${money(o.total_amount)}</b></p>
+    ${o.shipments.map((s) => `<div class="job" style="padding:10px">
+      <div class="row" style="justify-content:space-between"><b>🏪 ${esc(s.vendor_name)} ${s.vendor_autopilot ? "🤖" : "👤"}</b>${badge(s.status)}</div>
+      ${shipmentStepper(s)}
+      ${s.rider_name ? `<div class="small">🛵 ${esc(s.rider_name)} (${esc(s.vehicle)}) · fee ${money(s.delivery_fee)}</div>` : ""}
+      <div class="small muted">${o.lines.filter((l) => l.shipment_id === s.shipment_id).map((l) => `${esc(l.product_name)} × ${l.quantity}`).join(" · ")}</div>
+      <div class="row" style="margin-top:8px">${controls(s)}</div></div>`).join("")}
+    <div class="row">${o.can_cancel ? `<button class="danger" data-order-act="cancel">Cancel order</button>` : ""}
+      ${o.can_return ? `<button data-order-act="return">Mark returned</button>` : ""}</div>`;
+  const after = () => { showOrder(id); loadOrders(); loadOverview(); };
+  $$("#detail [data-order-act]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/orders/${id}/${b.dataset.orderAct}`, null, `Order #${id}: ${b.dataset.orderAct}`)) after(); }));
+  $$("#detail [data-act]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/shipments/${b.dataset.ship}/${b.dataset.act}`, null, "Done")) after(); }));
+  $$("#detail [data-assign]").forEach((b) => (b.onclick = async () => {
+    if (await act(`/api/admin/shipments/${b.dataset.assign}/assign`, { rider_id: +$(`#rider-${b.dataset.assign}`).value }, "Rider assigned")) after();
   }));
+}
+
+// ---------------- live shipments board
+async function loadBoard() {
+  const ships = await api("/api/admin/shipments");
+  $("#kanban").innerHTML = BOARD.map((st) => {
+    const col = ships.filter((s) => s.status === st);
+    return `<div class="col"><h3>${label(st)}${st === "delivered" ? " (1h)" : ""}<span class="badge s-${st}">${col.length}</span></h3>${col.map((s) => `
+      <div class="kcard ${flashIds.has(s.order_id) ? "flash" : ""}"><b>#${s.order_id}</b> <span class="muted">· ${ago(s.updated_at)}</span>
+        <div>${s.vendor_autopilot ? "🤖" : "👤"} ${esc(s.vendor_name)}</div>
+        ${s.rider_name ? `<div>${s.rider_autopilot ? "🤖" : "👤"} 🛵 ${esc(s.rider_name)}</div>` : ""}<div class="muted">→ ${esc(s.shipping_city)}</div></div>`).join("")}</div>`;
+  }).join("");
+}
+
+// ---------------- vendors / riders / users
+async function loadVendors() {
+  const v = await api("/api/admin/vendors");
+  $("#vendors").innerHTML = table([
+    ["Store", (r) => `<b>${esc(r.vendor_name)}</b><div class="muted small">${esc(r.city || "")} · ${stars(r.rating)}</div>`],
+    ["Products", (r) => r.products, "num"], ["To handle", (r) => r.to_handle, "num"], ["Delivered 30d", (r) => int(r.delivered_30d), "num"],
+    ["Avg prep (7d)", (r) => duration(r.avg_prep_seconds), "num"], ["Login", (r) => `<code class="small">${esc(r.login_email || "–")}</code>`],
+    ["Autopilot", (r) => sw(`data-v-bot="${r.vendor_id}"`, r.is_bot)], ["Active", (r) => sw(`data-v-active="${r.vendor_id}"`, r.is_active)],
+  ], v);
+  $$("[data-v-bot]").forEach((c) => (c.onchange = () => act(`/api/admin/vendors/${c.dataset.vBot}`, { is_bot: c.checked }, c.checked ? "Autopilot on" : "Autopilot off - the store must act in the seller center", "PATCH")));
+  $$("[data-v-active]").forEach((c) => (c.onchange = () => act(`/api/admin/vendors/${c.dataset.vActive}`, { is_active: c.checked }, c.checked ? "Store visible" : "Store hidden from the storefront", "PATCH")));
+}
+async function loadRiders() {
+  const r = await api("/api/admin/riders");
+  $("#riders").innerHTML = table([
+    ["Rider", (x) => `<b>${esc(x.full_name)}</b><div class="muted small">${esc(x.city || "")} · ${esc(x.vehicle)}</div>`],
+    ["Status", (x) => badge(x.status)], ["Current parcel", (x) => (x.current_shipment ? "#" + x.current_shipment : "–")],
+    ["Delivered today", (x) => x.delivered_today, "num"], ["Login", (x) => `<code class="small">${esc(x.login_email || "–")}</code>`],
+    ["Autopilot", (x) => sw(`data-r-bot="${x.rider_id}"`, x.is_bot)],
+    ["Set", (x) => x.status === "busy" ? "" : `<button class="small" data-r-status="${x.rider_id}" data-to="${x.status === "offline" ? "available" : "offline"}">${x.status === "offline" ? "Set online" : "Set offline"}</button>`],
+  ], r);
+  $$("[data-r-bot]").forEach((c) => (c.onchange = () => act(`/api/admin/riders/${c.dataset.rBot}`, { is_bot: c.checked }, c.checked ? "Autopilot on" : "Autopilot off", "PATCH")));
+  $$("[data-r-status]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/riders/${b.dataset.rStatus}`, { status: b.dataset.to }, "Updated", "PATCH")) loadRiders(); }));
+}
+async function loadUsers() {
+  const u = await api("/api/admin/users");
+  $("#users").innerHTML = table([
+    ["Email", (x) => esc(x.email)], ["Name", (x) => esc(x.display_name)], ["Role", (x) => `<span class="badge">${x.role}</span>`],
+    ["Last sign-in", (x) => (x.last_login_at ? ago(x.last_login_at) : "never")], ["Created", (x) => fmtDateTime(x.created_at)],
+    ["Active", (x) => sw(`data-u="${x.user_id}"`, x.is_active)],
+  ], u);
+  $$("[data-u]").forEach((c) => (c.onchange = async () => { if (!(await act(`/api/admin/users/${c.dataset.u}`, { is_active: c.checked }, c.checked ? "Account enabled" : "Account disabled", "PATCH"))) c.checked = !c.checked; }));
 }
 
 // ---------------- catalog
 async function loadCatalog() {
   const q = $("#cat-search").value.trim();
-  const products = await api("/api/products" + (q ? "?q=" + encodeURIComponent(q) : ""));
-  $("#catalog").innerHTML = products.map((p) => `<tr>
-    <td>${p.product_id}</td><td>${esc(p.product_name)}<div class="muted small">${esc(p.sku)}</div></td><td>${esc(p.category_name)}</td>
-    <td class="num ${p.stock < 20 ? "stock-low" : ""}">${int(p.stock)}</td>
-    <td><div class="row"><input type="number" step="0.01" min="0" value="${p.unit_price}" id="price-${p.product_id}" style="width: 100px">
-      <button class="small" onclick="savePrice(${p.product_id})">Save</button></div></td>
-    <td><div class="row"><input type="number" min="1" value="100" id="restock-${p.product_id}" style="width: 80px">
-      <button class="small" onclick="doRestock(${p.product_id})">Add</button></div></td></tr>`).join("");
+  const res = await api("/api/products?limit=100&sort=popular" + (q ? "&q=" + encodeURIComponent(q) : ""));
+  $("#catalog").innerHTML = res.items.map((p) => `<tr>
+    <td><div class="row" style="flex-wrap:nowrap"><div style="width:40px">${productArt(p, "sm")}</div><div>${esc(p.product_name)}<div class="muted small">${esc(p.sku)} · ${esc(p.category_name)}</div></div></div></td>
+    <td>${esc(p.vendor_name)}</td><td class="num">${int(p.sold)}</td><td class="num ${p.stock < 20 ? "stock-low" : ""}">${int(p.stock)}</td>
+    <td><div class="row"><input type="number" step="0.01" value="${p.unit_price}" id="pr-${p.product_id}" style="width:90px"><button class="small" data-save="${p.product_id}">Save</button></div></td>
+    <td><input type="number" step="0.01" value="${p.list_price || ""}" placeholder="none" id="lp-${p.product_id}" style="width:90px"></td>
+    <td><div class="row"><input type="number" min="1" value="100" id="rs-${p.product_id}" style="width:70px"><button class="small" data-restock="${p.product_id}">Add</button></div></td></tr>`).join("");
+  $$("[data-save]").forEach((b) => (b.onclick = () => act(`/api/admin/products/${b.dataset.save}`, { unit_price: +$(`#pr-${b.dataset.save}`).value, list_price: +$(`#lp-${b.dataset.save}`).value || 0 }, "Price updated", "PATCH")));
+  $$("[data-restock]").forEach((b) => (b.onclick = async () => { if (await act(`/api/admin/products/${b.dataset.restock}`, { add_stock: +$(`#rs-${b.dataset.restock}`).value }, "Restocked", "PATCH")) loadCatalog(); }));
 }
 $("#cat-search").oninput = throttle(loadCatalog, 300);
-async function savePrice(id) {
-  try { await api(`/api/products/${id}/price`, { method: "POST", body: { unit_price: +$(`#price-${id}`).value } }); toast(`Price updated for #${id}`, "good"); }
-  catch (e) { toast(e.message, "error"); }
-}
-async function doRestock(id) {
-  try { await api(`/api/products/${id}/restock`, { method: "POST", body: { quantity: +$(`#restock-${id}`).value } }); toast(`Restocked #${id}`, "good"); loadCatalog(); }
-  catch (e) { toast(e.message, "error"); }
-}
 
 // ---------------- simulator + pipeline
 async function loadSim(s) {
   s = s || await api("/api/admin/simulator");
-  $("#sim-state").textContent = s.running ? `— running every ${s.interval}s 🟢` : "— stopped";
+  $("#sim-state").textContent = s.running ? `- running every ${s.interval}s 🟢` : "- stopped";
   $("#sim-start").disabled = s.running; $("#sim-stop").disabled = !s.running;
   $("#sim-log").textContent = s.log.join("\n") || "(not running)";
 }
 $("#sim-start").onclick = async () => loadSim(await api(`/api/admin/simulator/start?interval=${$("#sim-interval").value}`, { method: "POST" }));
 $("#sim-stop").onclick = async () => loadSim(await api("/api/admin/simulator/stop", { method: "POST" }));
-setInterval(() => { if (!$("#tab-pipeline").classList.contains("hidden")) loadSim(); }, 2000);
-
 $$("button[data-step]").forEach((b) => (b.onclick = async () => {
   $$("button[data-step]").forEach((x) => (x.disabled = true));
   $("#step-out").textContent = `Running ${b.textContent}…`;
-  try {
-    const r = await api(`/api/admin/pipeline/${b.dataset.step}`, { method: "POST" });
-    $("#step-out").textContent = `$ ${r.command}\n\n${r.output}\n\n(exit code ${r.exit_code})`;
-    loadLake();
-  } catch (e) { $("#step-out").textContent = e.message; }
+  try { const r = await api(`/api/admin/pipeline/${b.dataset.step}`, { method: "POST" }); $("#step-out").textContent = `$ ${r.command}\n\n${r.output}\n\n(exit code ${r.exit_code})`; loadLake(); }
+  catch (e) { $("#step-out").textContent = e.message; }
   finally { $$("button[data-step]").forEach((x) => (x.disabled = false)); }
 }));
-
-const table = (cols, rows) => rows.length
-  ? `<table><thead><tr>${cols.map((c) => `<th>${c[0]}</th>`).join("")}</tr></thead><tbody>${rows.map((r) =>
-      `<tr>${cols.map((c) => `<td>${c[1](r)}</td>`).join("")}</tr>`).join("")}</tbody></table>`
-  : `<p class="muted">Nothing yet.</p>`;
-
 async function loadLake() {
   const l = await api("/api/admin/lake");
   $("#lake").innerHTML = l.layers.map((t) => `<tr><td>${t.table}</td><td class="num">${t.bronze_files}</td><td class="num">${int(t.bronze_rows)}</td>
-    <td class="num">${int(t.silver_rows)}</td><td class="num ${t.quarantined ? "stock-out" : ""}">${int(t.quarantined)}</td>
-    <td class="muted small">${fmtDateTime(l.watermarks[t.table])}</td></tr>`).join("");
+    <td class="num">${int(t.silver_rows)}</td><td class="num ${t.quarantined ? "stock-out" : ""}">${int(t.quarantined)}</td><td class="muted small">${fmtDateTime(l.watermarks[t.table])}</td></tr>`).join("");
   const kv = (o) => Object.entries(o).map(([k, v]) => `${k}=${v}`).join(", ");
-  $("#dq").innerHTML = table([["Table", (r) => r.table], ["Silver", (r) => int(r.silver_rows)], ["Quarantined", (r) => int(r.quarantined)],
+  $("#dq").innerHTML = table([["Table", (r) => r.table], ["Silver", (r) => int(r.silver_rows), "num"], ["Quarantined", (r) => int(r.quarantined), "num"],
     ["Errors", (r) => `<span class="stock-out">${kv(r.errors)}</span>`], ["Warnings", (r) => `<span class="stock-low">${kv(r.warnings)}</span>`]], l.dq_latest);
-  $("#extracts").innerHTML = table([["Batch", (r) => r.batch_id], ["Table", (r) => r.table], ["Mode", (r) => r.mode], ["Rows", (r) => int(r.rows)]], l.recent_extracts);
+  $("#extracts").innerHTML = table([["Batch", (r) => r.batch_id], ["Table", (r) => r.table], ["Mode", (r) => r.mode], ["Rows", (r) => int(r.rows), "num"]], l.recent_extracts);
 }
 $("#lake-refresh").onclick = loadLake;
 
 // ---------------- live
-const refreshOrders = throttle(loadOrders, 1000);
-liveEvents((ev) => {
-  if (ev.kind !== "order") return;
-  flashIds.add(ev.id);
-  refreshOrders();
-  if (ev.id === selected) showOrder(selected);
-});
-
-renderChips(); loadOrders();
+const refresh = throttle(() => {
+  if (tab === "control") { loadOrders(); loadOverview(); if (selected) showOrder(selected); }
+  if (tab === "board") loadBoard();
+}, 1200);
+(async () => {
+  await renderPortalHeader("admin");
+  renderChips(); loadOverview(); loadOrders();
+  liveEvents((ev) => {
+    if (ev.kind === "order" || ev.kind === "shipment") { flashIds.add(ev.order_id); refresh(); }
+  });
+  setInterval(() => { if (tab === "pipeline") loadSim(); if (tab === "control") loadOverview(); }, 3000);
+})();
 </script>
 </body>
 </html>

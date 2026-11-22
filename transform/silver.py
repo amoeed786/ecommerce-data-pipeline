@@ -82,13 +82,34 @@ TABLES: list[dict] = [
         },
     },
     {
+        "name": "vendors", "pk": "vendor_id",
+        "clean": f"""
+            SELECT v.* REPLACE ({tidy('v.vendor_name')} AS vendor_name, {tidy('v.city')} AS city,
+                                coalesce(m.country, {tidy('v.country')}) AS country)
+            FROM src v LEFT JOIN country_map m ON m.key = {COUNTRY_KEY.format(col='v.country')}
+        """,
+        "errors": {"name_missing": "vendor_name IS NULL"},
+        "warnings": {"rating_out_of_range": "rating NOT BETWEEN 0 AND 5"},
+    },
+    {
+        "name": "riders", "pk": "rider_id",
+        "clean": f"SELECT * REPLACE ({tidy('full_name')} AS full_name, {tidy('city')} AS city, lower(vehicle) AS vehicle) FROM src",
+        "errors": {"name_missing": "full_name IS NULL"},
+        "warnings": {},
+    },
+    {
         "name": "products", "pk": "product_id", "history": True,
         "clean": f"SELECT * REPLACE ({tidy('product_name')} AS product_name, upper(trim(sku)) AS sku) FROM src",
         "errors": {
             "negative_price": "unit_price < 0 OR unit_cost < 0",
             "category_missing": "category_id NOT IN (SELECT category_id FROM silver_categories)",
+            "vendor_missing": "vendor_id IS NOT NULL AND vendor_id NOT IN (SELECT vendor_id FROM silver_vendors)",
         },
-        "warnings": {"sold_below_cost": "unit_cost > unit_price"},
+        "warnings": {
+            "sold_below_cost": "unit_cost > unit_price",
+            "no_vendor": "vendor_id IS NULL",
+            "list_price_below_price": "list_price IS NOT NULL AND list_price < unit_price",
+        },
     },
     {
         "name": "inventory", "pk": "product_id",
@@ -110,7 +131,7 @@ TABLES: list[dict] = [
         "errors": {
             "customer_missing": "customer_id NOT IN (SELECT customer_id FROM silver_customers)",
             "order_in_future": "order_date > _ingested_at",
-            "bad_status": "status NOT IN ('pending','paid','shipped','delivered','cancelled','returned')",
+            "bad_status": "status NOT IN ('pending','processing','paid','shipped','delivered','cancelled','returned')",
         },
         "warnings": {
             "total_mismatch_items": """
@@ -120,11 +141,27 @@ TABLES: list[dict] = [
         },
     },
     {
+        "name": "shipments", "pk": "shipment_id",
+        "clean": "SELECT * REPLACE (lower(trim(status)) AS status) FROM src",
+        "errors": {
+            "order_missing": "order_id NOT IN (SELECT order_id FROM silver_orders)",
+            "vendor_missing": "vendor_id NOT IN (SELECT vendor_id FROM silver_vendors)",
+            "rider_missing": "rider_id IS NOT NULL AND rider_id NOT IN (SELECT rider_id FROM silver_riders)",
+            "bad_status": "status NOT IN ('pending','confirmed','packing','ready','assigned','picked_up','delivered','cancelled','returned')",
+        },
+        "warnings": {
+            "timeline_out_of_order": """accepted_at < confirmed_at OR ready_at < accepted_at OR assigned_at < ready_at
+                                        OR picked_up_at < assigned_at OR delivered_at < picked_up_at""",
+            "delivered_without_rider": "status IN ('picked_up','delivered') AND rider_id IS NULL",
+        },
+    },
+    {
         "name": "order_items", "pk": "order_item_id",
         "clean": "SELECT * FROM src",
         "errors": {
             "order_missing": "order_id NOT IN (SELECT order_id FROM silver_orders)",
             "product_missing": "product_id NOT IN (SELECT product_id FROM silver_products)",
+            "shipment_missing": "shipment_id IS NOT NULL AND shipment_id NOT IN (SELECT shipment_id FROM silver_shipments)",
             "bad_quantity": "quantity <= 0",
         },
         "warnings": {
@@ -143,6 +180,16 @@ TABLES: list[dict] = [
             "paid_before_order": """
                 paid_at < (SELECT order_date FROM silver_orders o WHERE o.order_id = checked.order_id)
             """,
+        },
+    },
+    {
+        # The source has a password_hash column - extract.py never pulls it, so it can't reach the lake.
+        "name": "users", "pk": "user_id",
+        "clean": f"SELECT * REPLACE (lower(trim(email)) AS email, {tidy('display_name')} AS display_name) FROM src",
+        "errors": {"bad_role": "role NOT IN ('customer','vendor','rider','admin')"},
+        "warnings": {
+            "customer_link_missing": "role = 'customer' AND customer_id NOT IN (SELECT customer_id FROM silver_customers)",
+            "vendor_link_missing": "role = 'vendor' AND vendor_id NOT IN (SELECT vendor_id FROM silver_vendors)",
         },
     },
 ]

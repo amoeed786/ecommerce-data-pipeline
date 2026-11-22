@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShopLite · Online shopping</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="topstrip"><div class="inner">
+  <span>🚚 Free delivery on every order</span><span>💵 Cash on delivery</span><span>↩️ 7-day easy returns</span>
+  <span class="spacer"></span><span id="live" class="live">connecting…</span>
+  <a href="/vendor">Sell on ShopLite</a><a href="/rider">Deliver with us</a>
+</div></div>
+<div class="storehead"><div class="inner">
+  <a class="logo" href="#/">Shop<span>Lite</span></a>
+  <form class="searchbar" id="search"><input id="q" type="search" placeholder="Search products, brands and stores" autocomplete="off"><button>Search</button></form>
+  <div id="account"></div>
+  <a class="headlink" href="#/cart">🛒 Cart <span class="cart-badge" id="cartcount">0</span></a>
+</div></div>
+<nav class="catbar"><div class="inner" id="catbar"></div></nav>
+<main class="page" id="view"></main>
+
+<script src="/static/common.js"></script>
+<script>
+// ===================================================================== state
+const S = { categories: [], products: {}, cart: JSON.parse(localStorage.getItem("shoplite.cart") || "[]") };
+const view = $("#view");
+const saveCart = () => { localStorage.setItem("shoplite.cart", JSON.stringify(S.cart)); $("#cartcount").textContent = S.cart.reduce((a, l) => a + l.quantity, 0); };
+const remember = (list) => list.forEach((p) => (S.products[p.product_id] = p));
+const PAYMENT_LABELS = { cash_on_delivery: ["💵", "Cash on delivery", "Pay the rider when it arrives"], credit_card: ["💳", "Credit card", "Visa, Mastercard"],
+  debit_card: ["💳", "Debit card", "Pay from your bank card"], paypal: ["🅿️", "PayPal", "Pay with your PayPal balance"], bank_transfer: ["🏦", "Bank transfer", "Direct transfer"] };
+const SHIP_MSG = { confirmed: "was confirmed by the store", packing: "is being packed", ready: "is packed and waiting for a rider",
+  assigned: "has a rider on the way to the store", picked_up: "is on the way to you 🛵", delivered: "was delivered 🎉", cancelled: "was cancelled" };
+
+function card(p) {
+  remember([p]);
+  return `<a class="pcard" href="#/p/${p.product_id}">${productArt(p)}
+    <div class="name">${esc(p.product_name)}</div>
+    <div><span class="price">${money(p.unit_price)}</span>${p.list_price > p.unit_price ? `<span class="was">${money(p.list_price)}</span>` : ""}</div>
+    <div class="meta">${stars(p.rating)} <span>(${int(p.review_count)})</span> · ${int(p.sold)} sold</div>
+    <div class="soldby">🏪 ${esc(p.vendor_name)}${p.stock <= 0 ? ' · <span style="color:var(--bad)">out of stock</span>' : p.stock < 10 ? ` · <span style="color:var(--warn)">only ${p.stock} left</span>` : ""}</div></a>`;
+}
+function addToCart(id, qty = 1, silent = false) {
+  const p = S.products[id];
+  const line = S.cart.find((l) => l.product_id === id);
+  const want = Math.min(20, (line ? line.quantity : 0) + qty);
+  if (p && want > p.stock) return toast(`Only ${p.stock} in stock`, "error");
+  line ? (line.quantity = want) : S.cart.push({ product_id: id, quantity: want });
+  saveCart();
+  if (!silent) toast(`Added to cart${p ? ": " + p.product_name : ""}`, "good");
+}
+function hashQuery() { return new URLSearchParams(location.hash.split("?")[1] || ""); }
+
+// ===================================================================== header
+async function renderAccount() {
+  const me = await loadMe();
+  const box = $("#account");
+  if (!me) { box.innerHTML = `<a class="headlink" href="/login?next=${encodeURIComponent("/" + location.hash)}">👤 Sign in / Register</a>`; return; }
+  const items = me.role === "customer"
+    ? `<a href="#/orders">📦 My orders</a><a href="#/account">👤 My account</a>`
+    : `<a href="${ROLE_HOME[me.role]}">➡️ Go to ${me.role === "admin" ? "admin" : me.role === "vendor" ? "seller center" : "rider app"}</a>`;
+  box.innerHTML = `<div class="menu"><button class="headlink" onclick="this.parentElement.classList.toggle('open')">👤 ${esc(me.display_name.split(" ")[0])} ▾</button>
+    <div class="drop"><div class="muted small" style="padding:6px 10px">${esc(me.email)}</div>${items}<button onclick="logout()">↪ Sign out</button></div></div>`;
+}
+$("#search").onsubmit = (e) => { e.preventDefault(); location.hash = `#/search?q=${encodeURIComponent($("#q").value.trim())}`; };
+
+// ===================================================================== pages
+let heroTimer;
+async function pageHome() {
+  const h = await api("/api/home");
+  const slides = [
+    ["linear-gradient(120deg,#ef5a24,#f59e0b)", "Mega Sale - up to 40% off", "Flash deals across every category, today only.", "🛍️", "#/search?on_sale=1&sort=discount"],
+    ["linear-gradient(120deg,#4f46e5,#06b6d4)", "New in Electronics", "Phones, laptops and audio from trusted stores.", "🎧", `#/c/${(h.categories.find((c) => c.category_name === "Electronics") || {}).category_id}`],
+    ["linear-gradient(120deg,#16a34a,#84cc16)", "Free delivery, every order", "Pay cash on delivery - track your rider live.", "🛵", "#/search?sort=popular"],
+  ];
+  view.innerHTML = `
+    <div class="hero">${slides.map(([bg, t, d, e, href], i) => `<div class="slide ${i ? "" : "on"}" style="background:${bg}">
+      <div><h2>${t}</h2><p>${d}</p><button onclick="location.hash='${href}'">Shop now</button></div><div class="big">${e}</div></div>`).join("")}
+      <div class="dots">${slides.map((_, i) => `<span class="${i ? "" : "on"}" data-i="${i}"></span>`).join("")}</div></div>
+    <div class="section"><div class="section-head"><h2>Shop by category</h2></div>
+      <div class="cat-tiles">${h.categories.map((c) => `<a class="cat-tile" href="#/c/${c.category_id}">${categoryArt(c.category_name)}<b>${esc(c.category_name)}</b><span class="muted small">${c.products} items</span></a>`).join("")}</div></div>
+    <div class="section"><div class="section-head"><h2>⚡ Flash deals</h2><span class="countdown">Ends in <b id="cd-h">00</b>:<b id="cd-m">00</b>:<b id="cd-s">00</b></span>
+      <a href="#/search?on_sale=1&sort=discount">See all →</a></div><div class="hscroll">${h.flash_deals.map(card).join("")}</div></div>
+    <div class="section"><div class="section-head"><h2>🔥 Best sellers</h2><a href="#/search?sort=popular">See all →</a></div><div class="pgrid">${h.best_sellers.map(card).join("")}</div></div>
+    <div class="section"><div class="section-head"><h2>⭐ Top rated</h2><a href="#/search?sort=rating">See all →</a></div><div class="hscroll">${h.top_rated.map(card).join("")}</div></div>
+    <div class="section"><div class="section-head"><h2>🏪 Official stores</h2></div>
+      <div class="cat-tiles" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr))">${h.vendors.map((v) => `
+        <a class="cat-tile" style="align-items:flex-start; text-align:left; padding:14px" href="#/store/${v.vendor_id}">
+          <b style="font-size:15px">${esc(v.vendor_name)}</b><span class="muted small">${esc(v.tagline || "")}</span>
+          <span class="small">${stars(v.rating)} ${v.rating} · ${v.products} products · ${esc(v.city || "")}</span></a>`).join("")}</div></div>`;
+  let i = 0;
+  const show = (n) => { i = n; $$(".slide").forEach((s, k) => s.classList.toggle("on", k === i)); $$(".dots span").forEach((d, k) => d.classList.toggle("on", k === i)); };
+  $$(".dots span").forEach((d) => (d.onclick = () => show(+d.dataset.i)));
+  clearInterval(heroTimer);
+  heroTimer = setInterval(() => { if (!$(".slide")) return clearInterval(heroTimer); show((i + 1) % slides.length); }, 5000);
+  const tick = () => {
+    if (!$("#cd-h")) return;
+    const end = new Date(); end.setHours(24, 0, 0, 0);
+    const s = Math.floor((end - new Date()) / 1000);
+    [["#cd-h", s / 3600], ["#cd-m", (s % 3600) / 60], ["#cd-s", s % 60]].forEach(([id, v]) => ($(id).textContent = String(Math.floor(v)).padStart(2, "0")));
+    setTimeout(tick, 1000);
+  };
+  tick();
+}
+
+async function pageListing(base = {}) {
+  const q = hashQuery();
+  const f = { ...base, q: q.get("q") || base.q || "", sort: q.get("sort") || "popular", min_price: q.get("min_price") || "",
+    max_price: q.get("max_price") || "", min_rating: q.get("min_rating") || "", on_sale: q.get("on_sale") === "1", in_stock: q.get("in_stock") === "1" };
+  const vendor = base.vendor_id ? await api(`/api/vendors/${base.vendor_id}`) : null;
+  const cat = base.category_id ? S.categories.find((c) => c.category_id === +base.category_id) : null;
+  const title = vendor ? vendor.vendor_name : cat ? cat.category_name : f.q ? `Results for “${f.q}”` : f.on_sale ? "Flash deals" : "All products";
+  $("#q").value = f.q;
+  const params = new URLSearchParams({ sort: f.sort, limit: 40 });
+  ["q", "min_price", "max_price", "min_rating", "category_id", "vendor_id"].forEach((k) => f[k] && params.set(k, f[k]));
+  if (f.on_sale) params.set("on_sale", "true");
+  if (f.in_stock) params.set("in_stock", "true");
+  let offset = 0;
+  const res = await api("/api/products?" + params);
+  const setQ = (changes) => {
+    const n = hashQuery();
+    Object.entries(changes).forEach(([k, v]) => (v === "" || v === false || v == null ? n.delete(k) : n.set(k, v === true ? "1" : v)));
+    location.hash = location.hash.split("?")[0] + (n.toString() ? "?" + n : "");
+  };
+  view.innerHTML = `
+    ${vendor ? `<div class="section" style="background: linear-gradient(120deg, var(--accent-soft), var(--panel))">
+      <h1>🏪 ${esc(vendor.vendor_name)}</h1><p class="muted" style="margin:4px 0 8px">${esc(vendor.tagline || "")}</p>
+      <div class="row small">${stars(vendor.rating)} <b>${vendor.rating}</b> · ${vendor.products} products · ${int(vendor.orders_delivered)} orders delivered · ${esc(vendor.city || "")}, ${esc(vendor.country || "")}</div></div>` : ""}
+    <div class="listing">
+      <aside class="filters">
+        <h3>Category</h3>
+        <label><input type="radio" name="cat" ${!base.category_id ? "checked" : ""} onclick="location.hash='${vendor ? `#/store/${vendor.vendor_id}` : "#/search"}'"> All</label>
+        ${vendor ? "" : S.categories.map((c) => `<label><input type="radio" name="cat" ${+base.category_id === c.category_id ? "checked" : ""} onclick="location.hash='#/c/${c.category_id}'"> ${esc(c.category_name)}</label>`).join("")}
+        <h3>Price</h3>
+        <div class="row"><input id="minp" type="number" min="0" placeholder="Min" value="${f.min_price}" style="width:80px"> – <input id="maxp" type="number" min="0" placeholder="Max" value="${f.max_price}" style="width:80px">
+          <button class="small" id="applyp">Go</button></div>
+        <h3>Rating</h3>
+        ${[4, 3].map((r) => `<label><input type="radio" name="rating" ${+f.min_rating === r ? "checked" : ""} data-r="${r}"> ${stars(r)} &amp; up</label>`).join("")}
+        <label><input type="radio" name="rating" ${!f.min_rating ? "checked" : ""} data-r=""> Any</label>
+        <h3>Offers</h3>
+        <label><input type="checkbox" id="onsale" ${f.on_sale ? "checked" : ""}> On sale</label>
+        <label><input type="checkbox" id="instock" ${f.in_stock ? "checked" : ""}> In stock only</label>
+      </aside>
+      <section>
+        <div class="listbar"><div><h1 style="display:inline">${esc(title)}</h1> <span class="muted">${int(res.total)} items</span></div>
+          <label class="row small">Sort by <select id="sort">${[["popular", "Best selling"], ["price_asc", "Price: low to high"], ["price_desc", "Price: high to low"],
+            ["rating", "Top rated"], ["discount", "Biggest discount"], ["newest", "Newest"]].map(([v, t]) => `<option value="${v}" ${f.sort === v ? "selected" : ""}>${t}</option>`).join("")}</select></label></div>
+        <div class="pgrid" id="grid">${res.items.map(card).join("") || `<div class="section muted">No products match these filters.</div>`}</div>
+        <div style="text-align:center; margin-top:16px">${res.total > 40 ? `<button id="more">Load more</button>` : ""}</div>
+      </section>
+    </div>`;
+  $("#sort").onchange = (e) => setQ({ sort: e.target.value });
+  $("#applyp").onclick = () => setQ({ min_price: $("#minp").value, max_price: $("#maxp").value });
+  $$("[data-r]").forEach((el) => (el.onchange = () => setQ({ min_rating: el.dataset.r })));
+  $("#onsale").onchange = (e) => setQ({ on_sale: e.target.checked });
+  $("#instock").onchange = (e) => setQ({ in_stock: e.target.checked });
+  $("#more")?.addEventListener("click", async () => {
+    offset += 40; params.set("offset", offset);
+    const more = await api("/api/products?" + params);
+    $("#grid").insertAdjacentHTML("beforeend", more.items.map(card).join(""));
+    if (offset + 40 >= res.total) $("#more").remove();
+  });
+}
+
+async function pageProduct(id) {
+  const p = await api(`/api/products/${id}`);
+  remember([p, ...p.related]);
+  let qty = 1;
+  view.innerHTML = `
+    <div class="meta" style="margin-bottom:10px"><a href="#/">Home</a> › <a href="#/c/${p.category_id}">${esc(p.category_name)}</a> › ${esc(p.product_name)}</div>
+    <div class="pdp section">
+      <div>${productArt(p, "xl")}</div>
+      <div>
+        <h1>${esc(p.product_name)}</h1>
+        <div class="meta" style="margin:6px 0 12px">${stars(p.rating)} ${p.rating || "No ratings yet"} · ${int(p.review_count)} ratings · ${int(p.sold)} sold · SKU ${esc(p.sku)}</div>
+        <div style="border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:12px 0">
+          <span class="price">${money(p.unit_price)}</span>
+          ${p.list_price > p.unit_price ? `<span class="was" style="font-size:15px">${money(p.list_price)}</span> <span class="badge s-cancelled">-${p.discount_pct}%</span>` : ""}
+        </div>
+        <p>${esc(p.description || "")}</p>
+        <div class="row" style="margin-top:12px">Quantity
+          <div class="qty"><button id="minus">−</button><span id="qty">1</span><button id="plus">+</button></div>
+          <span class="${p.stock <= 0 ? "stock-out" : p.stock < 10 ? "stock-low" : "muted"} small">${p.stock <= 0 ? "Out of stock" : p.stock < 10 ? `Only ${p.stock} left - order soon` : `${int(p.stock)} available`}</span></div>
+        <div class="big-btns"><button class="buy" id="buy" ${p.stock <= 0 ? "disabled" : ""}>Buy now</button>
+          <button class="primary" id="add" ${p.stock <= 0 ? "disabled" : ""}>Add to cart</button></div>
+      </div>
+      <aside class="side-box">
+        <div class="line"><span>📍</span><div><b>Delivery</b><div class="muted">${esc(ME?.role === "customer" ? "To your address" : "Pakistan, UK, US, UAE, Germany, Canada")}</div></div></div>
+        <div class="line"><span>🚚</span><div><b>Standard delivery · Free</b><div class="muted">Usually 1–3 days, tracked live</div></div></div>
+        <div class="line"><span>💵</span><div><b>Cash on delivery available</b></div></div>
+        <div class="line"><span>↩️</span><div><b>7-day easy returns</b><div class="muted">Change of mind is OK</div></div></div>
+        <div class="line" style="display:block"><div class="muted small">Sold by</div><b>🏪 ${esc(p.vendor_name)}</b>
+          <div class="small">${stars(p.vendor_rating)} ${p.vendor_rating} seller rating</div>
+          <a class="small" href="#/store/${p.vendor_id}">Visit store →</a></div>
+      </aside>
+    </div>
+    ${p.related.length ? `<div class="section"><div class="section-head"><h2>More from ${esc(p.category_name)}</h2></div><div class="hscroll">${p.related.map(card).join("")}</div></div>` : ""}`;
+  const setQty = (d) => { qty = Math.max(1, Math.min(20, Math.min(p.stock, qty + d))); $("#qty").textContent = qty; };
+  $("#minus").onclick = () => setQty(-1);
+  $("#plus").onclick = () => setQty(1);
+  $("#add").onclick = () => addToCart(p.product_id, qty);
+  $("#buy").onclick = () => { addToCart(p.product_id, qty, true); location.hash = "#/checkout"; };
+}
+
+async function cartProducts() {
+  const missing = S.cart.filter((l) => !S.products[l.product_id]);
+  await Promise.all(missing.map((l) => api(`/api/products/${l.product_id}`).then((p) => remember([p])).catch(() => {})));
+  S.cart = S.cart.filter((l) => S.products[l.product_id]);  // drop products that no longer exist
+  saveCart();
+  return S.cart.map((l) => ({ ...l, p: S.products[l.product_id] }));
+}
+function setCartQty(id, qty) {
+  const line = S.cart.find((l) => l.product_id === id);
+  if (!line) return;
+  line.quantity = Math.max(0, Math.min(20, Math.min(S.products[id]?.stock ?? 20, qty)));
+  S.cart = S.cart.filter((l) => l.quantity > 0);
+  saveCart(); render();
+}
+function byVendor(lines) {
+  const groups = {};
+  lines.forEach((l) => (groups[l.p.vendor_name] ||= []).push(l));
+  return groups;
+}
+
+async function pageCart() {
+  const lines = await cartProducts();
+  if (!lines.length) {
+    view.innerHTML = `<div class="section" style="text-align:center; padding:48px"><div style="font-size:64px">🛒</div><h1>Your cart is empty</h1>
+      <p class="muted">Browse the deals and add something you love.</p><button class="primary" onclick="location.hash='#/'">Continue shopping</button></div>`;
+    return;
+  }
+  const subtotal = lines.reduce((a, l) => a + l.p.unit_price * l.quantity, 0);
+  const groups = byVendor(lines);
+  view.innerHTML = `<div class="two-col"><div>
+    <div class="section"><h1>Cart (${lines.reduce((a, l) => a + l.quantity, 0)} items)</h1>
+      <p class="muted small">Items from different stores ship separately - each store packs its own parcel.</p></div>
+    ${Object.entries(groups).map(([vendor, ls]) => `<div class="section"><div class="section-head"><h2>🏪 ${esc(vendor)}</h2><span class="muted small">ships separately</span></div>
+      ${ls.map((l) => `<div class="cart-line"><a href="#/p/${l.product_id}" style="width:72px">${productArt(l.p, "sm")}</a>
+        <div><a href="#/p/${l.product_id}" style="color:var(--text)">${esc(l.p.product_name)}</a>
+          <div class="meta">${money(l.p.unit_price)} each ${l.p.stock < l.quantity ? '<span class="stock-out">· not enough stock</span>' : ""}</div>
+          <button class="small danger" onclick="setCartQty(${l.product_id}, 0)" style="margin-top:4px">Remove</button></div>
+        <div class="qty"><button onclick="setCartQty(${l.product_id}, ${l.quantity - 1})">−</button><span>${l.quantity}</span><button onclick="setCartQty(${l.product_id}, ${l.quantity + 1})">+</button></div>
+        <b class="num">${money(l.p.unit_price * l.quantity)}</b></div>`).join("")}</div>`).join("")}
+    </div>
+    <aside class="section summary" style="position:sticky; top:130px">
+      <h2>Order summary</h2>
+      <div class="row2"><span>Subtotal</span><span>${money(subtotal)}</span></div>
+      <div class="row2"><span>Delivery (${Object.keys(groups).length} parcel${Object.keys(groups).length > 1 ? "s" : ""})</span><span style="color:var(--good)">Free</span></div>
+      <div class="row2 total"><span>Total</span><span>${money(subtotal)}</span></div>
+      <p class="muted small">Have a coupon? Enter it at checkout (try <b>SAVE10</b>).</p>
+      <button class="buy" style="width:100%; padding:12px; font-weight:700" onclick="location.hash='#/checkout'">Proceed to checkout</button>
+    </aside></div>`;
+}
+
+async function pageCheckout() {
+  const me = await loadMe();
+  if (!me) { location.href = `/login?next=${encodeURIComponent("/#/checkout")}`; return; }
+  if (me.role !== "customer") { view.innerHTML = `<div class="section"><h1>Checkout is for customers</h1><p class="muted">You're signed in as <b>${me.role}</b>. Sign in with a customer account to place orders.</p><button onclick="logout()">Sign out</button></div>`; return; }
+  const lines = await cartProducts();
+  if (!lines.length) { location.hash = "#/cart"; return; }
+  const prof = await api("/api/me/profile");
+  const subtotal = lines.reduce((a, l) => a + l.p.unit_price * l.quantity, 0);
+  view.innerHTML = `<div class="two-col"><div>
+    <div class="section"><h2>1 · Delivery address</h2>
+      <div class="grid" style="grid-template-columns:1fr 1fr; gap:10px">
+        <div class="field">Full name<input value="${esc(prof.first_name + " " + prof.last_name)}" disabled></div>
+        <div class="field">Phone<input id="phone" value="${esc(prof.phone || "")}"></div>
+        <div class="field">City<input id="city" value="${esc(prof.city || "")}" required></div>
+        <div class="field">Country<input id="country" value="${esc(prof.country || "")}" required></div>
+      </div></div>
+    <div class="section"><h2>2 · Payment</h2><div class="pay-opts">${Object.entries(PAYMENT_LABELS).map(([k, [icon, name, sub]], i) => `
+      <label class="pay-opt"><input type="radio" name="pay" value="${k}" ${i ? "" : "checked"}> <span style="font-size:22px">${icon}</span>
+        <span><b>${name}</b><div class="muted small">${sub}</div></span></label>`).join("")}</div>
+      <p class="muted small">Demo store - no real payment is taken. Online methods are marked paid immediately; cash is collected by the rider.</p></div>
+    <div class="section"><h2>3 · Review items</h2>${Object.entries(byVendor(lines)).map(([vendor, ls]) => `
+      <div style="margin-bottom:10px"><b>🏪 ${esc(vendor)}</b> <span class="muted small">· parcel ${Object.keys(byVendor(lines)).indexOf(vendor) + 1}</span>
+      ${ls.map((l) => `<div class="cart-line" style="grid-template-columns:48px 1fr auto"><div style="width:48px">${productArt(l.p, "sm")}</div><div>${esc(l.p.product_name)} <span class="muted">× ${l.quantity}</span></div><b>${money(l.p.unit_price * l.quantity)}</b></div>`).join("")}</div>`).join("")}</div>
+  </div>
+  <aside class="section summary" style="position:sticky; top:130px">
+    <h2>Order summary</h2>
+    <div class="row"><input id="coupon" placeholder="Coupon code" style="flex:1"><span class="muted small">SAVE5 · SAVE10 · SAVE20</span></div>
+    <div class="row2" style="margin-top:10px"><span>Subtotal</span><span>${money(subtotal)}</span></div>
+    <div class="row2"><span>Delivery</span><span style="color:var(--good)">Free</span></div>
+    <div class="row2 total"><span>Total</span><span id="total">${money(subtotal)}</span></div>
+    <button class="buy" id="place" style="width:100%; padding:12px; font-weight:700; margin-top:8px">Place order</button>
+    <p class="muted small">By placing your order you agree to our demo terms. Prices and stock are re-checked when you order.</p>
+  </aside></div>`;
+  $("#coupon").oninput = (e) => {
+    const pct = { SAVE5: 0.05, SAVE10: 0.1, SAVE20: 0.2 }[e.target.value.trim().toUpperCase()] || 0;
+    $("#total").innerHTML = pct ? `<span class="was">${money(subtotal)}</span> ${money(subtotal * (1 - pct))}` : money(subtotal);
+  };
+  $("#place").onclick = async () => {
+    $("#place").disabled = true;
+    try {
+      const res = await api("/api/orders", { method: "POST", body: {
+        items: S.cart, payment_method: $("input[name=pay]:checked").value, coupon: $("#coupon").value,
+        ship_city: $("#city").value, ship_country: $("#country").value } });
+      S.cart = []; saveCart();
+      if ($("#phone").value !== (prof.phone || "")) api("/api/me/profile", { method: "PUT", body: { phone: $("#phone").value, city: prof.city || "", country: prof.country || "" } });
+      toast(`Order #${res.order_id} placed!`, "good", 5000);
+      location.hash = `#/orders/${res.order_id}?placed=1`;
+    } catch (e) { toast(e.message, "error", 6000); $("#place").disabled = false; }
+  };
+}
+
+async function needCustomer() {
+  const me = await loadMe();
+  if (!me) { location.href = `/login?next=${encodeURIComponent("/" + location.hash)}`; return null; }
+  if (me.role !== "customer") { view.innerHTML = `<div class="section"><h1>Customer area</h1><p class="muted">Sign in with a customer account to see orders.</p></div>`; return null; }
+  return me;
+}
+
+async function pageOrders() {
+  if (!(await needCustomer())) return;
+  const orders = await api("/api/me/orders");
+  view.innerHTML = `<div class="section"><h1>My orders</h1><p class="muted small">Status updates arrive live.</p></div>
+    ${orders.map((o) => `<a class="section" style="display:block; color:var(--text)" href="#/orders/${o.order_id}">
+      <div class="row" style="justify-content:space-between"><div><b>Order #${o.order_id}</b> <span class="muted small">placed ${fmtDateTime(o.order_date)} · ${o.items} item(s) · ${o.shipment_count} parcel(s)</span></div>
+        <div>${badge(o.status)} <b>${money(o.total_amount)}</b></div></div>
+      <div class="row" style="margin-top:10px">${o.lines.slice(0, 6).map((l) => `<div style="width:56px" title="${esc(l.product_name)} × ${l.quantity}">${productArt(l, "sm")}</div>`).join("")}
+        <span class="spacer"></span><span class="small" style="color:var(--accent)">Track order →</span></div></a>`).join("")
+      || `<div class="section muted">No orders yet. <a href="#/">Start shopping</a></div>`}`;
+}
+
+async function pageOrder(id) {
+  if (!(await needCustomer())) return;
+  const o = await api(`/api/me/orders/${id}`);
+  const placed = hashQuery().get("placed");
+  view.innerHTML = `
+    ${placed ? `<div class="section" style="border-color:var(--good); background:color-mix(in srgb, var(--good) 8%, var(--panel))">
+      <h1>🎉 Thank you! Your order is placed.</h1><p class="muted" style="margin:0">We'll update this page live as stores pack your parcels and riders bring them to you.</p></div>` : ""}
+    <div class="section"><div class="row" style="justify-content:space-between">
+      <div><h1>Order #${o.order_id}</h1><div class="muted small">Placed ${fmtDateTime(o.order_date)} · ships to ${esc(o.shipping_city)}, ${esc(o.shipping_country)}</div></div>
+      <div style="text-align:right">${badge(o.status)}<div class="small" style="margin-top:4px">${PAYMENT_LABELS[o.payment_method]?.[1] || esc(o.payment_method)} · ${badge(o.payment_status)}</div></div></div>
+      <div class="row" style="margin-top:10px">${o.can_cancel ? `<button class="danger" id="cancel">Cancel order</button>` : ""}${o.can_return ? `<button id="return">Return order</button>` : ""}
+        <span class="spacer"></span><b>Total ${money(o.total_amount)}</b></div></div>
+    ${o.shipments.map((s, i) => `<div class="section" id="ship-${s.shipment_id}">
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">Parcel ${i + 1} of ${o.shipments.length} · 🏪 ${esc(s.vendor_name)}</h2>${badge(s.status)}</div>
+      ${shipmentStepper(s)}
+      ${s.rider_name ? `<p class="small">🛵 Rider <b>${esc(s.rider_name)}</b> (${esc(s.vehicle)})${s.status === "assigned" ? " is heading to the store" : s.status === "picked_up" ? " is on the way to you" : ""}</p>` : ""}
+      ${o.lines.filter((l) => l.shipment_id === s.shipment_id).map((l) => `<div class="cart-line" style="grid-template-columns:56px 1fr auto">
+        <a href="#/p/${l.product_id}" style="width:56px">${productArt(l, "sm")}</a><div>${esc(l.product_name)} <span class="muted">× ${l.quantity}</span>
+        ${l.discount > 0 ? `<span class="badge s-delivered">${Math.round(l.discount * 100)}% coupon</span>` : ""}</div><b>${money(l.line_total)}</b></div>`).join("")}</div>`).join("")}`;
+  $("#cancel")?.addEventListener("click", async () => {
+    if (!confirm("Cancel this order? Online payments are refunded.")) return;
+    try { await api(`/api/me/orders/${id}/cancel`, { method: "POST" }); toast("Order cancelled"); render(); } catch (e) { toast(e.message, "error"); }
+  });
+  $("#return")?.addEventListener("click", async () => {
+    if (!confirm("Return this order? You'll get a refund once it's back.")) return;
+    try { await api(`/api/me/orders/${id}/return`, { method: "POST" }); toast("Return requested"); render(); } catch (e) { toast(e.message, "error"); }
+  });
+}
+
+async function pageAccount() {
+  const me = await needCustomer();
+  if (!me) return;
+  const p = await api("/api/me/profile");
+  view.innerHTML = `<div class="two-col"><div class="section"><h1>My account</h1>
+    <p class="muted">${esc(p.first_name)} ${esc(p.last_name)} · ${esc(p.email)} · customer since ${esc(p.signup_date)}</p>
+    <form id="prof" class="grid" style="grid-template-columns:1fr 1fr; gap:10px; max-width:520px">
+      <div class="field">Phone<input name="phone" value="${esc(p.phone || "")}"></div><div></div>
+      <div class="field">City<input name="city" value="${esc(p.city || "")}"></div>
+      <div class="field">Country<input name="country" value="${esc(p.country || "")}"></div>
+      <div><button class="primary">Save</button></div></form></div>
+    <aside class="section"><h2>Quick links</h2><p><a href="#/orders">📦 My orders</a></p><p><a href="#/cart">🛒 My cart</a></p><button onclick="logout()">Sign out</button></aside></div>`;
+  $("#prof").onsubmit = async (e) => {
+    e.preventDefault();
+    try { await api("/api/me/profile", { method: "PUT", body: Object.fromEntries(new FormData(e.target)) }); toast("Saved", "good"); }
+    catch (err) { toast(err.message, "error"); }
+  };
+}
+
+// ===================================================================== router
+const ROUTES = [
+  [/^#\/c\/(\d+)/, (m) => pageListing({ category_id: +m[1] })],
+  [/^#\/store\/(\d+)/, (m) => pageListing({ vendor_id: +m[1] })],
+  [/^#\/search/, () => pageListing()],
+  [/^#\/p\/(\d+)/, (m) => pageProduct(+m[1])],
+  [/^#\/cart/, pageCart], [/^#\/checkout/, pageCheckout],
+  [/^#\/orders\/(\d+)/, (m) => pageOrder(+m[1])], [/^#\/orders/, pageOrders], [/^#\/account/, pageAccount],
+  [/.*/, pageHome],
+];
+async function render() {
+  const h = location.hash || "#/";
+  const [re, fn] = ROUTES.find(([r]) => r.test(h));
+  const catMatch = h.match(/^#\/c\/(\d+)/);
+  $$("#catbar a").forEach((a) => a.classList.toggle("on", catMatch && a.dataset.id === catMatch[1]));
+  try { await fn(h.match(re)); } catch (e) { view.innerHTML = `<div class="section"><h1>Something went wrong</h1><p class="muted">${esc(e.message)}</p></div>`; }
+  if (!h.includes("?")) window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", render);
+
+// ===================================================================== live updates
+const rerender = throttle(render, 1500);
+liveEvents((ev) => {
+  if (ev.kind === "shipment" && SHIP_MSG[ev.status] && ev.action === "updated") toast(`Order #${ev.order_id}: your parcel from ${ev.name} ${SHIP_MSG[ev.status]}`, "good", 5000);
+  if ((ev.kind === "order" || ev.kind === "shipment") && /^#\/orders/.test(location.hash)) rerender();
+});
+
+(async () => {
+  saveCart();
+  S.categories = await api("/api/categories");
+  $("#catbar").innerHTML = `<a href="#/search">All categories</a>` +
+    S.categories.map((c) => `<a href="#/c/${c.category_id}" data-id="${c.category_id}">${esc(c.category_name)}</a>`).join("") +
+    `<a href="#/search?on_sale=1&sort=discount">⚡ Flash deals</a>`;
+  await renderAccount();
+  render();
+})();
+</script>
+</body>
+</html>

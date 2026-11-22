@@ -19,3 +19,11 @@ sources:
       - name: orders
       - name: order_items
       - name: payments
+      - name: vendors
+        description: Marketplace stores. is_bot = autopilot (accepts and packs by itself).
+      - name: riders
+        description: Delivery riders. is_bot = autopilot rider.
+      - name: shipments
+        description: One parcel per vendor per order, with a timestamp for every fulfilment step.
+      - name: users
+        description: Login accounts (no password data - excluded at extraction).

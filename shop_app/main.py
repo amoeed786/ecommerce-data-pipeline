@@ -1,20 +1,27 @@
-r"""ShopLite - FastAPI web app for the fake shop and the pipeline behind it.
+r"""ShopLite - a small marketplace on ShopDB, with customers, vendors, riders and admins.
 
 Run from the project folder:
     .\.venv\Scripts\uvicorn.exe shop_app.main:app --port 8000
-Then open http://localhost:8000
+Then open http://localhost:8000  (demo logins are on the sign-in page)
 
-Pages (plain HTML + JavaScript in shop_app/static, data comes from the JSON API below)
-    /            Shop        - customers sign in, browse, checkout, watch their orders update live
-    /admin       Admin       - live order board with actions, catalog, simulator + pipeline controls
-    /dashboard   Dashboard   - live operational view (reads ShopDB directly)
-    /analytics   Analytics   - business analytics from the gold layer (forecast, RFM, cohorts, LTV)
-    /docs        API docs    - FastAPI's automatic interactive documentation (try any endpoint)
+Pages
+    /            Storefront     browse by category, search, product pages, cart, checkout, order tracking
+    /login       Sign in / create an account (customers)
+    /vendor      Vendor portal  accept and pack orders, manage products and stock, autopilot switch
+    /rider       Rider portal   go online, pick up and deliver, earnings
+    /admin       Admin          order control (start orders / auto-approve), live shipment board,
+                                vendors, riders, users, catalog, simulator + pipeline
+    /dashboard   Admin          live operations (reads ShopDB directly)
+    /analytics   Admin          business analytics from the gold layer
+    /docs        Interactive API documentation
+
+Background tasks: the live change feed (SSE) and the fulfillment autopilot (source_app/marketplace.py).
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -23,24 +30,27 @@ from datetime import datetime
 from pathlib import Path
 
 import duckdb
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import auth
 from . import shop_db as db
 from .live import feed
 
+mp = db.mp
+log = logging.getLogger("shop")
 ROOT = db.PROJECT_ROOT
 STATIC = Path(__file__).parent / "static"
 LAKE = ROOT / "data_lake"
 STATE = LAKE / "_state"
-SIM_LOG = STATE / "simulator.log"
-TABLES = ["categories", "customers", "products", "inventory", "orders", "order_items", "payments"]
 GOLD = LAKE / "gold"
+SIM_LOG = STATE / "simulator.log"
 VENV_BIN = Path(sys.executable).parent
-# step -> (command shown to the user, actual argv)
-PIPELINE_STEPS = {
+TABLES = ["categories", "customers", "products", "inventory", "orders", "order_items", "payments",
+          "vendors", "riders", "shipments", "users"]
+PIPELINE_STEPS = {  # step -> (command shown to the user, argv)
     "extract": ("python ingestion/extract.py", [sys.executable, "ingestion/extract.py"]),
     "check_bronze": ("python ingestion/check_bronze.py", [sys.executable, "ingestion/check_bronze.py"]),
     "silver": ("python transform/silver.py", [sys.executable, "transform/silver.py"]),
@@ -51,174 +61,485 @@ PIPELINE_STEPS = {
     "check_db": ("python source_app/check_db.py", [sys.executable, "source_app/check_db.py"]),
 }
 simulator: dict = {"proc": None, "interval": None}
+engine_state: dict = {"last_tick": None, "last_actions": {}, "error": None}
+
+
+async def run_engine() -> None:
+    """Fulfillment autopilot: every 2 seconds, let bot vendors/riders (and auto-approve) move orders."""
+    def tick():
+        conn = db.get_connection()
+        try:
+            return mp.engine_tick(conn)
+        finally:
+            conn.close()
+    while True:
+        try:
+            done = await asyncio.to_thread(tick)
+            engine_state.update(last_tick=mp.now().isoformat(), error=None)
+            if done:
+                engine_state["last_actions"] = done
+        except Exception as exc:  # keep running through e.g. a DB restart
+            engine_state["error"] = str(exc)
+            log.exception("fulfillment engine tick failed")
+        await asyncio.sleep(2)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(feed.run())  # start the live change feed
+    tasks = [asyncio.create_task(feed.run()), asyncio.create_task(run_engine())]
     yield
-    task.cancel()
+    for t in tasks:
+        t.cancel()
     if simulator["proc"] and simulator["proc"].poll() is None:
-        simulator["proc"].terminate()  # don't leave the simulator running after the app stops
+        simulator["proc"].terminate()
 
 
-app = FastAPI(title="ShopLite", description="Fake ecommerce shop on ShopDB", lifespan=lifespan)
+app = FastAPI(title="ShopLite", description="Marketplace on ShopDB: customers, vendors, riders, admins",
+              lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
-@app.exception_handler(db.ShopError)
-async def shop_error(_: Request, exc: db.ShopError):
+@app.exception_handler(mp.MarketplaceError)
+async def shop_error(_: Request, exc: mp.MarketplaceError):
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
-# ------------------------------------------------------------------ pages
-@app.get("/", include_in_schema=False)
-def page_shop():
-    return FileResponse(STATIC / "shop.html")
+# ================================================================== pages
+def page(file: str, *roles: str):
+    """Serve a page; if it needs a role the visitor doesn't have, send them to sign in."""
+    def handler(request: Request, user: dict | None = Depends(auth.current_user)):
+        if roles and (user is None or user["role"] not in roles):
+            return RedirectResponse(f"/login?next={request.url.path}", status_code=303)
+        return FileResponse(STATIC / file)
+    return handler
 
 
-@app.get("/admin", include_in_schema=False)
-def page_admin():
-    return FileResponse(STATIC / "admin.html")
+for path, file, roles in [
+    ("/", "store.html", ()), ("/login", "login.html", ()),
+    ("/vendor", "vendor.html", ("vendor",)), ("/rider", "rider.html", ("rider",)),
+    ("/admin", "admin.html", ("admin",)), ("/dashboard", "dashboard.html", ("admin",)),
+    ("/analytics", "analytics.html", ("admin",)),
+]:
+    app.add_api_route(path, page(file, *roles), methods=["GET"], include_in_schema=False)
 
 
-@app.get("/dashboard", include_in_schema=False)
-def page_dashboard():
-    return FileResponse(STATIC / "dashboard.html")
+# ================================================================== auth
+class Login(BaseModel):
+    email: str
+    password: str
 
 
-@app.get("/analytics", include_in_schema=False)
-def page_analytics():
-    return FileResponse(STATIC / "analytics.html")
-
-
-# ------------------------------------------------------------------ catalog + customers
-class NewCustomer(BaseModel):
+class Register(BaseModel):
     first_name: str
     last_name: str
     email: str
+    password: str
+    phone: str = ""
     city: str = ""
     country: str = ""
 
 
-@app.get("/api/categories", tags=["catalog"])
-def list_categories():
+@app.post("/api/auth/login", tags=["auth"])
+def login(body: Login, response: Response):
+    return auth.login(body.email, body.password, response)
+
+
+@app.post("/api/auth/register", tags=["auth"])
+def register(body: Register, response: Response):
+    return auth.register_customer(body.first_name, body.last_name, body.email, body.password,
+                                  body.city, body.country, body.phone, response)
+
+
+@app.post("/api/auth/logout", tags=["auth"])
+def logout(request: Request, response: Response):
+    auth.logout(request, response)
+    return {"ok": True}
+
+
+@app.get("/api/auth/me", tags=["auth"])
+def me(user: dict | None = Depends(auth.current_user)):
+    return user  # null when signed out
+
+
+# ================================================================== storefront (public)
+@app.get("/api/home", tags=["store"])
+def home():
+    return db.home()
+
+
+@app.get("/api/categories", tags=["store"])
+def categories():
     return db.categories()
 
 
-@app.get("/api/products", tags=["catalog"])
-def list_products(category_id: int | None = None, q: str | None = None):
-    return db.products(category_id, q)
+@app.get("/api/products", tags=["store"])
+def products(category_id: int | None = None, q: str | None = None, vendor_id: int | None = None,
+             min_price: float | None = None, max_price: float | None = None, min_rating: float | None = None,
+             on_sale: bool = False, in_stock: bool = False, sort: str = "popular",
+             limit: int = Query(40, le=100), offset: int = Query(0, ge=0)):
+    return db.search_products(category_id, (q or "").strip() or None, vendor_id, min_price, max_price,
+                              min_rating, on_sale, in_stock, sort, limit, offset)
 
 
-@app.get("/api/customers", tags=["customers"])
-def search_customers(q: str = "", limit: int = Query(20, le=100)):
-    return db.find_customers(q.strip(), limit)
+@app.get("/api/products/{product_id}", tags=["store"])
+def product(product_id: int):
+    p = db.product_detail(product_id)
+    if p is None:
+        raise HTTPException(404, "Product not found")
+    return p
 
 
-@app.post("/api/customers", tags=["customers"])
-def sign_up(body: NewCustomer):
-    return db.new_customer(body.first_name, body.last_name, body.email, body.city, body.country)
+@app.get("/api/vendors/{vendor_id}", tags=["store"])
+def vendor_store(vendor_id: int):
+    v = db.vendor_public(vendor_id)
+    if v is None:
+        raise HTTPException(404, "Store not found")
+    return v
 
 
-@app.get("/api/customers/{customer_id}", tags=["customers"])
-def get_customer(customer_id: int):
-    c = db.customer(customer_id)
-    if c is None:
-        raise HTTPException(404, "Customer not found")
-    return c
+# ================================================================== customer
+customer = auth.require("customer")
 
 
-@app.get("/api/customers/{customer_id}/orders", tags=["customers"])
-def customer_orders(customer_id: int):
-    return db.list_orders(customer_id=customer_id, limit=50)
-
-
-# ------------------------------------------------------------------ orders
 class CartLine(BaseModel):
     product_id: int
-    quantity: int = Field(ge=1, le=db.MAX_QTY_PER_LINE)
+    quantity: int = Field(ge=1, le=mp.MAX_QTY_PER_LINE)
 
 
-class NewOrder(BaseModel):
-    customer_id: int
+class Checkout(BaseModel):
     items: list[CartLine]
-    pay_now: bool = True
-    payment_method: str = "credit_card"
+    payment_method: str = "cash_on_delivery"
     coupon: str = ""
+    ship_city: str = ""
+    ship_country: str = ""
 
 
-class StatusChange(BaseModel):
+class Profile(BaseModel):
+    phone: str = ""
+    city: str = ""
+    country: str = ""
+
+
+@app.get("/api/me/profile", tags=["customer"])
+def my_profile(user: dict = Depends(customer)):
+    return db.customer_profile(user["customer_id"])
+
+
+@app.put("/api/me/profile", tags=["customer"])
+def update_my_profile(body: Profile, user: dict = Depends(customer)):
+    db.update_profile(user["customer_id"], body.phone.strip(), body.city.strip(), body.country.strip())
+    return db.customer_profile(user["customer_id"])
+
+
+@app.post("/api/orders", tags=["customer"])
+def checkout(body: Checkout, user: dict = Depends(customer)):
+    with db.tx() as cur:
+        return mp.create_order(cur, user["customer_id"], [(i.product_id, i.quantity) for i in body.items],
+                               body.payment_method, body.coupon, ship_city=body.ship_city.strip() or None,
+                               ship_country=body.ship_country.strip() or None)
+
+
+@app.get("/api/me/orders", tags=["customer"])
+def my_orders(user: dict = Depends(customer)):
+    return db.customer_orders(user["customer_id"])
+
+
+def _my_order(order_id: int, user: dict) -> dict:
+    o = db.order_detail(order_id)
+    if o is None or o["customer_id"] != user["customer_id"]:
+        raise HTTPException(404, "Order not found")  # 404, not 403: don't confirm other people's order ids
+    return o
+
+
+@app.get("/api/me/orders/{order_id}", tags=["customer"])
+def my_order(order_id: int, user: dict = Depends(customer)):
+    o = _my_order(order_id, user)
+    for s in o["shipments"]:  # customers see the rider's first name only
+        s.pop("rider_phone", None)
+        s["rider_name"] = (s["rider_name"] or "").split(" ")[0] or None
+    return o
+
+
+@app.post("/api/me/orders/{order_id}/cancel", tags=["customer"])
+def cancel_my_order(order_id: int, user: dict = Depends(customer)):
+    with db.tx() as cur:
+        mp.cancel_order(cur, order_id, customer_id=user["customer_id"])
+    return {"ok": True}
+
+
+@app.post("/api/me/orders/{order_id}/return", tags=["customer"])
+def return_my_order(order_id: int, user: dict = Depends(customer)):
+    with db.tx() as cur:
+        mp.return_order(cur, order_id, customer_id=user["customer_id"])
+    return {"ok": True}
+
+
+# ================================================================== vendor portal
+vendor = auth.require("vendor")
+
+
+class ProductPatch(BaseModel):
+    unit_price: float | None = None
+    list_price: float | None = None
+    add_stock: int | None = None
+    is_active: bool | None = None
+
+
+class NewProduct(BaseModel):
+    product_name: str
+    category_id: int
+    unit_price: float = Field(gt=0)
+    unit_cost: float = Field(ge=0)
+    stock: int = Field(ge=0, le=100_000)
+    description: str = ""
+
+
+class Toggle(BaseModel):
+    on: bool
+
+
+@app.get("/api/vendor/summary", tags=["vendor"])
+def vendor_summary(user: dict = Depends(vendor)):
+    return db.vendor_summary(user["vendor_id"])
+
+
+@app.get("/api/vendor/shipments", tags=["vendor"])
+def vendor_shipments(status: list[str] = Query(default=["confirmed", "packing", "ready", "assigned"]),
+                     user: dict = Depends(vendor)):
+    return db.vendor_shipments(user["vendor_id"], status)
+
+
+@app.post("/api/vendor/shipments/{shipment_id}/{action}", tags=["vendor"])
+def vendor_action(shipment_id: int, action: str, user: dict = Depends(vendor)):
+    fn = {"accept": mp.vendor_accept, "ready": mp.vendor_ready}.get(action)
+    if fn is None:
+        raise HTTPException(404, "Unknown action")
+    with db.tx() as cur:
+        fn(cur, shipment_id, vendor_id=user["vendor_id"])
+    return {"ok": True}
+
+
+@app.get("/api/vendor/products", tags=["vendor"])
+def vendor_products(user: dict = Depends(vendor)):
+    return db.vendor_products(user["vendor_id"])
+
+
+@app.patch("/api/vendor/products/{product_id}", tags=["vendor"])
+def vendor_update_product(product_id: int, body: ProductPatch, user: dict = Depends(vendor)):
+    if not db.vendor_owns_product(user["vendor_id"], product_id):
+        raise HTTPException(404, "Product not found in your store")
+    db.update_product(product_id, body.unit_price, body.list_price, body.add_stock, body.is_active)
+    return {"ok": True}
+
+
+@app.post("/api/vendor/products", tags=["vendor"])
+def vendor_add_product(body: NewProduct, user: dict = Depends(vendor)):
+    pid = db.add_product(user["vendor_id"], body.product_name, body.category_id, body.unit_price,
+                         body.unit_cost, body.stock, body.description)
+    return {"product_id": pid}
+
+
+@app.post("/api/vendor/autopilot", tags=["vendor"])
+def vendor_autopilot(body: Toggle, user: dict = Depends(vendor)):
+    db.set_flag("vendors", "vendor_id", user["vendor_id"], "is_bot", int(body.on))
+    return db.vendor_summary(user["vendor_id"])
+
+
+# ================================================================== rider portal
+rider = auth.require("rider")
+
+
+class RiderStatus(BaseModel):
     status: str
-    payment_method: str = "credit_card"
 
 
-@app.post("/api/orders", tags=["orders"])
-def place_order(body: NewOrder):
-    return db.place_order(body.customer_id, [i.model_dump() for i in body.items],
-                          body.pay_now, body.payment_method, body.coupon)
+@app.get("/api/rider/summary", tags=["rider"])
+def rider_summary(user: dict = Depends(rider)):
+    return db.rider_summary(user["rider_id"])
 
 
-@app.get("/api/orders", tags=["orders"])
-def list_orders(status: list[str] = Query(default=[]), limit: int = Query(100, le=500)):
-    return db.list_orders(statuses=status or None, limit=limit)
+@app.get("/api/rider/jobs", tags=["rider"])
+def rider_jobs(active: bool = True, user: dict = Depends(rider)):
+    return db.rider_jobs(user["rider_id"], active)
 
 
-@app.get("/api/orders/{order_id}", tags=["orders"])
-def get_order(order_id: int):
-    order = db.order_detail(order_id)
-    if order is None:
+@app.post("/api/rider/status", tags=["rider"])
+def rider_status(body: RiderStatus, user: dict = Depends(rider)):
+    db.set_rider_status(user["rider_id"], body.status)
+    return db.rider_summary(user["rider_id"])
+
+
+@app.post("/api/rider/jobs/{shipment_id}/{action}", tags=["rider"])
+def rider_action(shipment_id: int, action: str, user: dict = Depends(rider)):
+    fn = {"pickup": mp.rider_pickup, "deliver": mp.rider_deliver}.get(action)
+    if fn is None:
+        raise HTTPException(404, "Unknown action")
+    with db.tx() as cur:
+        fn(cur, shipment_id, rider_id=user["rider_id"])
+    return {"ok": True}
+
+
+# ================================================================== admin
+admin = auth.require("admin")
+
+
+class SettingsBody(BaseModel):
+    auto_approve: bool | None = None
+    sim_speed: float | None = Field(default=None, ge=0.1, le=100)
+
+
+class Flags(BaseModel):
+    is_bot: bool | None = None
+    is_active: bool | None = None
+    status: str | None = None
+
+
+class Assign(BaseModel):
+    rider_id: int
+
+
+@app.get("/api/admin/overview", tags=["admin"])
+def admin_overview(_: dict = Depends(admin)):
+    return {**db.admin_overview(), "engine": engine_state}
+
+
+@app.put("/api/admin/settings", tags=["admin"])
+def admin_settings(body: SettingsBody, _: dict = Depends(admin)):
+    with db.tx() as cur:
+        if body.auto_approve is not None:
+            mp.set_setting(cur, "auto_approve", "true" if body.auto_approve else "false")
+        if body.sim_speed is not None:
+            mp.set_setting(cur, "sim_speed", str(body.sim_speed))
+    return db.settings()
+
+
+@app.get("/api/admin/orders", tags=["admin"])
+def admin_orders(status: list[str] = Query(default=["pending", "processing", "shipped"]),
+                 limit: int = Query(100, le=500), _: dict = Depends(admin)):
+    return db.order_queue(status, limit)
+
+
+@app.get("/api/admin/orders/{order_id}", tags=["admin"])
+def admin_order(order_id: int, _: dict = Depends(admin)):
+    o = db.order_detail(order_id)
+    if o is None:
         raise HTTPException(404, "Order not found")
-    return order
+    return o
 
 
-@app.post("/api/orders/{order_id}/status", tags=["admin"])
-def admin_change_status(order_id: int, body: StatusChange):
-    return db.change_status(order_id, body.status, body.payment_method)
+@app.post("/api/admin/orders/start-all", tags=["admin"])
+def admin_start_all(_: dict = Depends(admin)):
+    ids = [r["order_id"] for r in db.query(
+        "SELECT order_id FROM dbo.orders WHERE status = 'pending' AND order_date <= SYSDATETIME()")]
+    started = 0
+    for oid in ids:
+        try:
+            with db.tx() as cur:
+                mp.start_order(cur, oid)
+            started += 1
+        except mp.MarketplaceError:
+            pass
+    return {"started": started}
 
 
-@app.post("/api/customers/{customer_id}/orders/{order_id}/cancel", tags=["customers"])
-def customer_cancel(customer_id: int, order_id: int):
-    return db.change_status(order_id, "cancelled", customer_id=customer_id)
-
-
-class PriceChange(BaseModel):
-    unit_price: float = Field(ge=0)
-
-
-class Restock(BaseModel):
-    quantity: int = Field(ge=1, le=10_000)
-
-
-@app.post("/api/products/{product_id}/price", tags=["admin"])
-def change_price(product_id: int, body: PriceChange):
-    db.change_price(product_id, body.unit_price)
+@app.post("/api/admin/orders/{order_id}/{action}", tags=["admin"])
+def admin_order_action(order_id: int, action: str, _: dict = Depends(admin)):
+    fn = {"start": mp.start_order, "cancel": mp.cancel_order, "return": mp.return_order}.get(action)
+    if fn is None:
+        raise HTTPException(404, "Unknown action")
+    with db.tx() as cur:
+        fn(cur, order_id)
     return {"ok": True}
 
 
-@app.post("/api/products/{product_id}/restock", tags=["admin"])
-def restock(product_id: int, body: Restock):
-    db.restock(product_id, body.quantity)
+@app.post("/api/admin/shipments/{shipment_id}/assign", tags=["admin"])
+def admin_assign(shipment_id: int, body: Assign, _: dict = Depends(admin)):
+    with db.tx() as cur:
+        mp.assign_rider(cur, shipment_id, body.rider_id)
     return {"ok": True}
 
 
-# ------------------------------------------------------------------ analytics + live
+@app.post("/api/admin/shipments/{shipment_id}/{action}", tags=["admin"])
+def admin_shipment_action(shipment_id: int, action: str, _: dict = Depends(admin)):
+    """Admin can step in for any vendor or rider."""
+    fn = {"accept": mp.vendor_accept, "ready": mp.vendor_ready,
+          "pickup": mp.rider_pickup, "deliver": mp.rider_deliver}.get(action)
+    if fn is None:
+        raise HTTPException(404, "Unknown action")
+    with db.tx() as cur:
+        fn(cur, shipment_id)
+    return {"ok": True}
+
+
+@app.get("/api/admin/shipments", tags=["admin"])
+def admin_shipments(_: dict = Depends(admin)):
+    return db.shipments_board()
+
+
+@app.get("/api/admin/vendors", tags=["admin"])
+def admin_vendors(_: dict = Depends(admin)):
+    return db.vendors_admin()
+
+
+@app.patch("/api/admin/vendors/{vendor_id}", tags=["admin"])
+def admin_vendor_flags(vendor_id: int, body: Flags, _: dict = Depends(admin)):
+    if body.is_bot is not None:
+        db.set_flag("vendors", "vendor_id", vendor_id, "is_bot", int(body.is_bot))
+    if body.is_active is not None:
+        db.set_flag("vendors", "vendor_id", vendor_id, "is_active", int(body.is_active))
+    return {"ok": True}
+
+
+@app.get("/api/admin/riders", tags=["admin"])
+def admin_riders(_: dict = Depends(admin)):
+    return db.riders_admin()
+
+
+@app.patch("/api/admin/riders/{rider_id}", tags=["admin"])
+def admin_rider_flags(rider_id: int, body: Flags, _: dict = Depends(admin)):
+    if body.is_bot is not None:
+        db.set_flag("riders", "rider_id", rider_id, "is_bot", int(body.is_bot))
+    if body.status is not None:
+        db.set_rider_status(rider_id, body.status)
+    return {"ok": True}
+
+
+@app.get("/api/admin/users", tags=["admin"])
+def admin_users(_: dict = Depends(admin)):
+    return db.users_admin()
+
+
+@app.patch("/api/admin/users/{user_id}", tags=["admin"])
+def admin_user_flags(user_id: int, body: Flags, me: dict = Depends(admin)):
+    if body.is_active is not None:
+        if user_id == me["user_id"] and not body.is_active:
+            raise HTTPException(400, "You can't disable your own account")
+        db.set_flag("users", "user_id", user_id, "is_active", int(body.is_active))
+    return {"ok": True}
+
+
+@app.patch("/api/admin/products/{product_id}", tags=["admin"])
+def admin_update_product(product_id: int, body: ProductPatch, _: dict = Depends(admin)):
+    db.update_product(product_id, body.unit_price, body.list_price, body.add_stock, body.is_active)
+    return {"ok": True}
+
+
+# ================================================================== analytics + live
 @app.get("/api/stats", tags=["analytics"])
-def stats():
+def stats(_: dict = Depends(admin)):
     return db.dashboard_stats()
 
 
 @app.get("/api/events", tags=["analytics"])
-async def events():
-    """Server-Sent Events stream of every change in ShopDB (orders, customers, products)."""
-    return StreamingResponse(feed.stream(feed.subscribe()), media_type="text/event-stream",
+async def events(user: dict | None = Depends(auth.current_user)):
+    """Server-Sent Events: live changes, filtered to what the signed-in user may see."""
+    return StreamingResponse(feed.stream(feed.subscribe(user)), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/api/analytics", tags=["analytics"])
-def gold_analytics():
-    """Business analytics from the GOLD layer (data_lake/gold/*.parquet, built by dbt + export_gold).
-    Unlike /api/stats (live ShopDB), this is as fresh as the last pipeline run."""
+def gold_analytics(_: dict = Depends(admin)):
+    """Business analytics from the GOLD layer (data_lake/gold/*.parquet, built by dbt + export_gold)."""
     if not (GOLD / "mart_daily_sales.parquet").exists():
         raise HTTPException(404, "No gold data yet - run the pipeline: extract, silver, dbt build, export gold.")
     con = duckdb.connect()
@@ -230,6 +551,9 @@ def gold_analytics():
         cur = con.execute(sql)
         cols = [d[0] for d in cur.description]
         return [dict(zip(cols, map(db._jsonable, row))) for row in cur.fetchall()]
+
+    def has(table: str) -> bool:
+        return (GOLD / f"{table}.parquet").exists()
 
     kpis = q(f"""
         WITH d AS (SELECT * FROM {g('mart_daily_sales')} WHERE date_day < current_date)
@@ -249,64 +573,58 @@ def gold_analytics():
         "forecast": q(f"SELECT date_day, kind, revenue, forecast FROM {g('mart_revenue_forecast')} ORDER BY date_day"),
         "category_monthly": q(f"""
             SELECT category_name, year_month, revenue FROM {g('mart_category_monthly')}
-            WHERE year_month >= strftime(current_date - INTERVAL 6 MONTH, '%Y-%m') ORDER BY year_month, category_name
-        """),
-        "rfm": q(f"""
-            SELECT segment, count(*) AS customers, round(avg(monetary), 2) AS avg_spend, round(avg(recency_days)) AS avg_recency
-            FROM {g('mart_customer_rfm')} GROUP BY segment ORDER BY customers DESC
-        """),
+            WHERE year_month >= strftime(current_date - INTERVAL 6 MONTH, '%Y-%m') ORDER BY year_month, category_name"""),
+        "rfm": q(f"""SELECT segment, count(*) AS customers, round(avg(monetary), 2) AS avg_spend,
+                     round(avg(recency_days)) AS avg_recency FROM {g('mart_customer_rfm')} GROUP BY segment ORDER BY customers DESC"""),
         "cohorts": q(f"""
             SELECT cohort, months_since_first, cohort_size, retention_pct FROM {g('mart_cohort_retention')}
             WHERE cohort >= strftime(current_date - INTERVAL 9 MONTH, '%Y-%m') AND months_since_first <= 6
-            ORDER BY cohort, months_since_first
-        """),
-        "top_products": q(f"""
-            SELECT revenue_rank, product_name, category_name, current_price, units_sold, revenue, margin_pct, return_rate, stock
-            FROM {g('mart_product_performance')} ORDER BY revenue_rank LIMIT 10
-        """),
+            ORDER BY cohort, months_since_first"""),
+        "top_products": q(f"""SELECT revenue_rank, product_name, category_name, current_price, units_sold, revenue,
+                              margin_pct, return_rate, stock FROM {g('mart_product_performance')} ORDER BY revenue_rank LIMIT 10"""),
         "top_customers": q(f"""
             SELECT l.customer_id, l.full_name, l.country, l.orders, l.historical_ltv, l.predicted_12m_revenue, r.segment
             FROM {g('mart_customer_ltv')} l LEFT JOIN {g('mart_customer_rfm')} r USING (customer_id)
-            ORDER BY l.historical_ltv DESC LIMIT 10
-        """),
+            ORDER BY l.historical_ltv DESC LIMIT 10"""),
+        "vendors": q(f"SELECT * FROM {g('mart_vendor_performance')} ORDER BY revenue_30d DESC") if has("mart_vendor_performance") else [],
+        "delivery": q(f"SELECT * FROM {g('mart_delivery_daily')} ORDER BY date_day") if has("mart_delivery_daily") else [],
     }
 
 
-# ------------------------------------------------------------------ simulator + pipeline
+# ================================================================== simulator + pipeline (admin)
 def _sim_running() -> bool:
     return simulator["proc"] is not None and simulator["proc"].poll() is None
 
 
 @app.get("/api/admin/simulator", tags=["admin"])
-def simulator_status():
+def simulator_status(_: dict = Depends(admin)):
     tail = SIM_LOG.read_text(errors="replace").splitlines()[-10:] if SIM_LOG.exists() else []
     return {"running": _sim_running(), "interval": simulator["interval"], "log": tail}
 
 
 @app.post("/api/admin/simulator/start", tags=["admin"])
-def simulator_start(interval: float = Query(5, ge=1, le=60)):
+def simulator_start(interval: float = Query(5, ge=1, le=60), user: dict = Depends(admin)):
     if not _sim_running():
         STATE.mkdir(parents=True, exist_ok=True)
-        log = SIM_LOG.open("w")
         simulator["proc"] = subprocess.Popen(
             [sys.executable, "-u", "source_app/generator.py", "stream", "--interval", str(interval)],
-            cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
+            cwd=ROOT, stdout=SIM_LOG.open("w"), stderr=subprocess.STDOUT,
         )
         simulator["interval"] = interval
-    return simulator_status()
+    return simulator_status(user)
 
 
 @app.post("/api/admin/simulator/stop", tags=["admin"])
-def simulator_stop():
+def simulator_stop(user: dict = Depends(admin)):
     if _sim_running():
         simulator["proc"].terminate()
         simulator["proc"].wait(timeout=10)
     simulator["proc"] = None
-    return simulator_status()
+    return simulator_status(user)
 
 
 @app.post("/api/admin/pipeline/{step}", tags=["admin"])
-def run_pipeline_step(step: str):
+def run_pipeline_step(step: str, _: dict = Depends(admin)):
     if step not in PIPELINE_STEPS:
         raise HTTPException(404, f"Unknown step. Choose from: {', '.join(PIPELINE_STEPS)}")
     shown, argv = PIPELINE_STEPS[step]
@@ -316,10 +634,10 @@ def run_pipeline_step(step: str):
 
 
 @app.get("/api/admin/lake", tags=["admin"])
-def lake_status():
+def lake_status(_: dict = Depends(admin)):
     con = duckdb.connect()
 
-    def count(path: Path | str) -> int:
+    def count(path) -> int:
         return con.execute(f"SELECT count(*) FROM read_parquet('{Path(path).as_posix()}')").fetchone()[0]
 
     layers = []
@@ -333,13 +651,12 @@ def lake_status():
             "silver_rows": count(silver) if silver.exists() else 0,
             "quarantined": count(quarantine) if quarantine.exists() else 0,
         })
-
-    wm_file, dq_file, log_file = STATE / "watermarks.json", STATE / "dq_log.jsonl", STATE / "ingestion_log.jsonl"
+    wm, dq_file, log_file = STATE / "watermarks.json", STATE / "dq_log.jsonl", STATE / "ingestion_log.jsonl"
     dq = [json.loads(x) for x in dq_file.read_text().splitlines() if x.strip()] if dq_file.exists() else []
     runs = [json.loads(x) for x in log_file.read_text().splitlines()[-14:]] if log_file.exists() else []
     return {
         "layers": layers,
-        "watermarks": json.loads(wm_file.read_text()) if wm_file.exists() else {},
+        "watermarks": json.loads(wm.read_text()) if wm.exists() else {},
         "dq_latest": [r for r in dq if dq and r["run_at"] == dq[-1]["run_at"]],
         "recent_extracts": runs[::-1],
     }

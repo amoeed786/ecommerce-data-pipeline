@@ -6,6 +6,7 @@ select
     unit_price,
     discount,
     line_total,
+    shipment_id,
     created_at,
     updated_at
 from {{ source('silver', 'order_items') }}

@@ -68,7 +68,12 @@ models:
       - name: status
         data_tests:
           - accepted_values:
-              arguments: {values: ['pending', 'paid', 'shipped', 'delivered', 'cancelled', 'returned']}
+              arguments: {values: ['pending', 'processing', 'paid', 'shipped', 'delivered', 'cancelled', 'returned']}
+      - name: vendor_id
+        description: Store that sold and shipped this line (from its shipment).
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_vendor'), field: vendor_id}}
       - name: net_amount
         description: What the customer paid for this line (after discount).
       - name: gross_margin
@@ -83,3 +88,39 @@ models:
         data_tests: [not_null]
       - name: net_revenue
         description: total_amount for orders that count as revenue (not cancelled/returned), else 0.
+
+  - name: dim_vendor
+    description: Marketplace stores (current values). is_autopilot = the store accepts and packs by itself.
+    columns:
+      - name: vendor_id
+        data_tests: [unique, not_null]
+
+  - name: dim_rider
+    description: Delivery riders (current values).
+    columns:
+      - name: rider_id
+        data_tests: [unique, not_null]
+
+  - name: fct_shipments
+    description: >
+      **Fulfilment fact** - grain: one parcel (one vendor's part of an order). Has a timestamp for every step
+      and the minutes each stage took: confirm, accept, pack, wait for rider, pickup, ride.
+    columns:
+      - name: shipment_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - relationships: {arguments: {to: ref('fct_orders'), field: order_id}}
+      - name: vendor_id
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_vendor'), field: vendor_id}}
+      - name: rider_id
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_rider'), field: rider_id}}
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments: {values: ['pending', 'confirmed', 'packing', 'ready', 'assigned', 'picked_up', 'delivered', 'cancelled', 'returned']}
+      - name: minutes_confirm_to_door
+        description: Minutes from confirmation to delivery - the customer-facing delivery time.
