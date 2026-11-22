@@ -43,7 +43,7 @@
 <script>
 // ===================================================================== shared UI kit
 const NAV = [
-  ["Operations", [["orders", "Orders", "inbox"], ["shipments", "Live shipments", "kanban"], ["riders", "Riders", "bike"]]],
+  ["Operations", [["orders", "Orders", "inbox"], ["shipments", "Live shipments", "kanban"], ["riders", "Riders", "bike"], ["@live", "Live ops", "activity"]]],
   ["Marketplace", [["vendors", "Vendors", "store"], ["catalog", "Catalog", "boxes"], ["users", "Users", "users"]]],
   ["Money", [["finance", "Finance", "landmark"], ["payouts", "Payouts", "send"]]],
   ["Data", [["pipeline", "Pipeline", "workflow"], ["@analytics", "Analytics", "chart-column"], ["@docs", "API docs", "file-code"]]],
@@ -714,7 +714,7 @@ async function loadSim(s) {
 // ===================================================================== shell: nav, router, palette, notifications
 function renderNav() {
   $("#sidenav").innerHTML = NAV.map(([g, items], gi) => `${gi ? '<div class="grp-sep"></div>' : ""}<div class="grp">${g}</div>${items.map(([k, l, ic]) => {
-    const ext = k.startsWith("@"), href = k === "@analytics" ? `${adminBase()}/analytics` : k === "@docs" ? "/docs" : `#/${k}`;
+    const ext = k === "@docs", href = k === "@live" ? `${adminBase()}/dashboard` : k === "@analytics" ? `${adminBase()}/analytics` : k === "@docs" ? "/docs" : `#/${k}`;
     return `<a class="nav" href="${href}" data-page="${k}" ${k === "@docs" ? 'target="_blank" rel="noopener"' : ""} title="${l}">${icon(ic)}<span class="lbl">${l}</span>${ext ? icon("external-link", "ext") : `<span class="badge-n" id="nb-${k}" hidden></span>`}</a>`;
   }).join("")}`).join("");
 }
@@ -734,7 +734,7 @@ window.addEventListener("hashchange", route);
 
 // command palette (Ctrl+K)
 const COMMANDS = () => [
-  ...NAV.flatMap(([g, items]) => items.map(([k, l, ic]) => ({ g: "Go to", l, ic, run: () => (k === "@analytics" ? (location.href = `${adminBase()}/analytics`) : k === "@docs" ? open("/docs", "_blank") : (location.hash = `#/${k}`)) }))),
+  ...NAV.flatMap(([g, items]) => items.map(([k, l, ic]) => ({ g: "Go to", l, ic, run: () => (k === "@live" ? (location.href = `${adminBase()}/dashboard`) : k === "@analytics" ? (location.href = `${adminBase()}/analytics`) : k === "@docs" ? open("/docs", "_blank") : (location.hash = `#/${k}`)) }))),
   { g: "Actions", l: "Start all pending orders", ic: "play", run: async () => { const r = await act("/api/admin/orders/start-all"); if (r) toast(`Started ${r.started} orders`, "good"); } },
   { g: "Actions", l: "Run seller payouts…", ic: "send", run: () => { location.hash = "#/finance"; setTimeout(() => $("#run-payouts")?.click(), 600); } },
   { g: "Actions", l: "Toggle dark mode", ic: "moon", run: () => setTheme(effectiveTheme() === "dark" ? "light" : "dark") },

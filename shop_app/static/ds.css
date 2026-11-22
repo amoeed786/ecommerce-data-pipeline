@@ -40,6 +40,31 @@
   }
 }
 
+/* ---------------------------------------------------------------- explicit theme + status colours (every page)
+   A page can force light/dark with <html data-theme=...>; the choice is shared (localStorage ka.theme, see common.js). */
+:root[data-theme="light"] {
+  --k-bg: #f9fafb; --k-surface: #ffffff; --k-text: #111827; --k-text-2: #4b5563; --k-text-3: #6b7280; --k-border: #e5e7eb;
+  --k-skeleton: #f3f4f6; --k-hover: #f3f4f6; --k-brand: #5b3df5; --k-brand-hover: #4322d4; --k-brand-50: #f1edff; --k-on-brand: #fff;
+  --k-sale: #c8361a; --k-success: #15803d; --k-warning: #b45309; --k-danger: #b91c1c; --k-shadow-hover: 0 8px 24px rgba(17,24,39,.10), 0 2px 6px rgba(17,24,39,.06);
+}
+:root[data-theme="dark"] {
+  --k-bg: #0d0f14; --k-surface: #161922; --k-text: #f3f4f6; --k-text-2: #c4c8d2; --k-text-3: #9aa1af; --k-border: #272b36;
+  --k-skeleton: #1f232d; --k-hover: #1f232d; --k-brand: #9d8cff; --k-brand-hover: #b4a7ff; --k-brand-50: #221d3f; --k-on-brand: #120a33;
+  --k-sale: #ff7a5c; --k-success: #4ade80; --k-warning: #fbbf24; --k-danger: #f87171; --k-shadow-hover: 0 8px 24px rgba(0,0,0,.5);
+}
+:root {
+  /* status palette (pill bg / fg) */
+  --st-gray-bg: #f3f4f6; --st-gray: #4b5563;  --st-blue-bg: #e0ecff; --st-blue: #1d4ed8;  --st-purple-bg: #efe9ff; --st-purple: #6d28d9;
+  --st-green-bg: #dcfce7; --st-green: #15803d; --st-red-bg: #fee2e2; --st-red: #b91c1c;   --st-amber-bg: #fef3c7; --st-amber: #b45309;
+}
+:root[data-theme="dark"] {
+  --st-gray-bg: #262a35; --st-gray: #c4c8d2;  --st-blue-bg: #172554; --st-blue: #93c5fd;  --st-purple-bg: #2e1065; --st-purple: #c4b5fd;
+  --st-green-bg: #052e16; --st-green: #86efac; --st-red-bg: #450a0a; --st-red: #fca5a5;   --st-amber-bg: #451a03; --st-amber: #fcd34d;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --st-gray-bg: #262a35; --st-gray: #c4c8d2;  --st-blue-bg: #172554; --st-blue: #93c5fd;  --st-purple-bg: #2e1065; --st-purple: #c4b5fd;
+  --st-green-bg: #052e16; --st-green: #86efac; --st-red-bg: #450a0a; --st-red: #fca5a5;   --st-amber-bg: #451a03; --st-amber: #fcd34d; } }
+
 /* ---------------------------------------------------------------- base (opt-in with .k) */
 .k { font-family: var(--k-font); color: var(--k-text); background: var(--k-bg); font-size: var(--k-fs-14); line-height: 1.5;
   -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01"; }

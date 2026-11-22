@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Seller center · Kartora</title>
+  <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/ds.css">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -19,9 +21,9 @@
   <div class="portal-kpis" id="kpis"></div>
 
   <div class="tabs">
-    <button data-tab="orders" class="on">📦 Orders</button>
-    <button data-tab="products">🏷️ Products &amp; photos</button>
-    <button data-tab="earnings">💰 Earnings</button>
+    <button data-tab="orders" class="on"><svg class="ic sm" aria-hidden="true"><use href="#i-package"/></svg> Orders</button>
+    <button data-tab="products"><svg class="ic sm" aria-hidden="true"><use href="#i-tag"/></svg> Products &amp; photos</button>
+    <button data-tab="earnings"><svg class="ic sm" aria-hidden="true"><use href="#i-wallet"/></svg> Earnings</button>
   </div>
 
   <section id="tab-earnings" class="hidden grid">
@@ -40,10 +42,10 @@
     <div class="stage-tabs" id="stages"></div>
     <div class="bulkbar hidden" id="bulkbar">
       <span class="count" id="sel-count"></span><span class="spacer"></span>
-      <button class="primary" data-bulk="accept_ready">⚡ Accept + pack &amp; hand to rider</button>
-      <button data-bulk="accept">✔ Accept</button>
-      <button data-bulk="ready">📦 Mark packed</button>
-      <button id="slips">🖨 Packing slips</button>
+      <button class="primary" data-bulk="accept_ready"><svg class="ic sm" aria-hidden="true"><use href="#i-zap"/></svg> Accept + pack &amp; hand to rider</button>
+      <button data-bulk="accept"><svg class="ic sm" aria-hidden="true"><use href="#i-check"/></svg> Accept</button>
+      <button data-bulk="ready"><svg class="ic sm" aria-hidden="true"><use href="#i-package"/></svg> Mark packed</button>
+      <button id="slips"><svg class="ic sm" aria-hidden="true"><use href="#i-printer"/></svg> Packing slips</button>
       <button id="clear">Clear</button>
     </div>
     <div class="row" style="margin-bottom:10px">
@@ -78,14 +80,15 @@
 </main>
 
 <script src="/static/common.js"></script>
+<script src="/static/ds.js"></script>
 <script>
 const STAGES = [
-  ["new", "🔔 New", ["confirmed"], "Accept to start packing - or accept + pack in one go"],
-  ["packing", "📦 Packing", ["packing"], "Mark packed when the parcel is sealed - a rider is assigned automatically"],
-  ["pickup", "🛵 Awaiting pickup", ["ready", "assigned"], "Packed. A rider is on the way to collect"],
-  ["transit", "🚚 On the way", ["picked_up"], "With the rider, heading to the customer"],
-  ["done", "✅ Delivered", ["delivered"], "Recently delivered parcels"],
-  ["waiting", "⏳ Awaiting approval", ["pending"], "Placed by customers, waiting for the marketplace to confirm"],
+  ["new", '<svg class="ic sm" aria-hidden="true"><use href="#i-bell"/></svg> New', ["confirmed"], "Accept to start packing - or accept + pack in one go"],
+  ["packing", '<svg class="ic sm" aria-hidden="true"><use href="#i-package"/></svg> Packing', ["packing"], "Mark packed when the parcel is sealed - a rider is assigned automatically"],
+  ["pickup", '<svg class="ic sm" aria-hidden="true"><use href="#i-bike"/></svg> Awaiting pickup', ["ready", "assigned"], "Packed. A rider is on the way to collect"],
+  ["transit", '<svg class="ic sm" aria-hidden="true"><use href="#i-truck"/></svg> On the way', ["picked_up"], "With the rider, heading to the customer"],
+  ["done", '<svg class="ic sm" aria-hidden="true"><use href="#i-circle-check"/></svg> Delivered', ["delivered"], "Recently delivered parcels"],
+  ["waiting", '<svg class="ic sm" aria-hidden="true"><use href="#i-clock"/></svg> Awaiting approval', ["pending"], "Placed by customers, waiting for the marketplace to confirm"],
 ];
 let stage = "new", ships = [], products = [], store = null, uploadFor = null;
 const selected = new Set();
@@ -113,8 +116,8 @@ async function loadEarnings() {
   setHTML($("#earn-chart"), e.sales_by_day.length ? `<div style="display:flex; gap:3px; align-items:flex-end; height:140px">${e.sales_by_day.map((d) => `
     <div title="${d.day}: sales ${money(d.sales)}, commission ${money(d.commission)}" style="flex:1; display:flex; flex-direction:column-reverse; height:100%">
       <div style="height:${Math.max(0, (d.sales - d.commission) / maxDay * 100)}%; background:var(--accent); border-radius:3px 3px 0 0; min-height:${d.sales > 0 ? 2 : 0}px"></div>
-      <div style="height:${Math.max(0, d.commission / maxDay * 100)}%; background:var(--deal); opacity:.75"></div></div>`).join("")}</div>
-    <div class="row small muted" style="margin-top:6px"><span style="color:var(--accent)">■</span> your earnings <span style="color:var(--deal)">■</span> commission <span class="spacer"></span> last 30 days, by delivery date</div>`
+      <div style="height:${Math.max(0, d.commission / maxDay * 100)}%; background:var(--muted); opacity:.6"></div></div>`).join("")}</div>
+    <div class="row small muted" style="margin-top:6px"><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--accent); vertical-align:-1px"></span> your earnings <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--muted); vertical-align:-1px"></span> commission <span class="spacer"></span> last 30 days, by delivery date</div>`
     : `<p class="muted">No deliveries in the last 30 days.</p>`);
   setHTML($("#earn-rates"), `<table><thead><tr><th>Category</th><th class="num">Commission</th><th>Set by</th></tr></thead><tbody>${
     e.rates.map((r) => `<tr><td>${esc(r.category_name)}</td><td class="num"><b>${(r.rate * 100).toFixed(1)}%</b></td><td class="muted small">${esc(r.source)}</td></tr>`).join("")}</tbody></table>`);
@@ -132,7 +135,7 @@ async function loadEarnings() {
 
 async function loadSummary() {
   const s = store = await api("/api/vendor/summary");
-  $("#store-name").textContent = "🏪 " + s.vendor_name;
+  $("#store-name").textContent = s.vendor_name;
   $("#store-sub").innerHTML = `${esc(s.tagline || "")} · ${stars(s.rating)} ${s.rating} · <a href="/#/store/${s.vendor_id}" target="_blank">View your storefront →</a>`;
   $("#autopilot").checked = !!s.is_bot;
   $("#ap-text").textContent = s.is_bot ? `On - orders are accepted and packed for you (~${s.prep_seconds}s)` : "Off - you accept and pack orders yourself";
@@ -160,7 +163,7 @@ function ageBadge(s) {
   const since = s.confirmed_at || s.created_at;
   const min = (Date.now() - new Date(since)) / 60000;
   const late = ["confirmed", "packing"].includes(s.status) && min > 15;
-  return `<span class="age ${late ? "late" : "muted"}">${late ? "⚠ " : ""}waiting ${ago(since).replace(" ago", "")}</span>`;
+  return `<span class="age ${late ? "late" : "muted"}">${late ? '<svg class="ic sm" aria-hidden="true"><use href="#i-triangle-alert"/></svg> ' : ""}waiting ${ago(since).replace(" ago", "")}</span>`;
 }
 
 async function loadQueue() {
@@ -174,18 +177,18 @@ async function loadQueue() {
       ${actionable ? `<input type="checkbox" data-sel="${s.shipment_id}" ${selected.has(s.shipment_id) ? "checked" : ""}>` : "<span></span>"}
       <div>
         <div class="row"><b>Order #${s.order_id}</b> <span class="muted small">parcel ${s.shipment_id}</span> ${badge(s.status)} ${ageBadge(s)}</div>
-        <div class="muted small" style="margin-top:2px">Ship to ${esc(s.customer_first_name)} · ${esc(s.shipping_city)}, ${esc(s.shipping_country)}${s.rider_name ? ` · 🛵 ${esc(s.rider_name)}` : ""}</div>
+        <div class="muted small" style="margin-top:2px">Ship to ${esc(s.customer_first_name)} · ${esc(s.shipping_city)}, ${esc(s.shipping_country)}${s.rider_name ? ` · <svg class="ic sm" aria-hidden="true"><use href="#i-bike"/></svg> ${esc(s.rider_name)}` : ""}</div>
         <div class="thumbs">${s.lines.map((l) => `<div class="thumb">${productArt(l, "sm")}<div><b>× ${l.quantity}</b> ${esc(l.product_name)}<div class="muted">${esc(l.sku)}</div></div></div>`).join("")}</div>
       </div>
       <div style="text-align:right; min-width:170px">
         <div style="font-size:18px; font-weight:800">${money(s.amount)}</div>
         <div class="grid" style="gap:6px; margin-top:8px">
-          ${s.status === "confirmed" ? `<button class="primary small" data-one="accept_ready" data-id="${s.shipment_id}">⚡ Accept + pack</button>
-            <button class="small" data-one="accept" data-id="${s.shipment_id}">✔ Accept only</button>` : ""}
-          ${s.status === "packing" ? `<button class="primary small" data-one="ready" data-id="${s.shipment_id}">📦 Mark packed</button>` : ""}
+          ${s.status === "confirmed" ? `<button class="primary small" data-one="accept_ready" data-id="${s.shipment_id}"><svg class="ic sm" aria-hidden="true"><use href="#i-zap"/></svg> Accept + pack</button>
+            <button class="small" data-one="accept" data-id="${s.shipment_id}"><svg class="ic sm" aria-hidden="true"><use href="#i-check"/></svg> Accept only</button>` : ""}
+          ${s.status === "packing" ? `<button class="primary small" data-one="ready" data-id="${s.shipment_id}"><svg class="ic sm" aria-hidden="true"><use href="#i-package"/></svg> Mark packed</button>` : ""}
         </div>
       </div>
-    </div>`).join("") || `<div class="card muted" style="text-align:center; padding:30px">🎉 Nothing here - you're all caught up.</div>`);
+    </div>`).join("") || `<div class="card muted" style="text-align:center; padding:30px"><svg class="ic sm" aria-hidden="true"><use href="#i-circle-check"/></svg> Nothing here - you're all caught up.</div>`);
   fresh.clear();
   if (changed) {  // only re-wire controls when the list was actually redrawn
     $$("[data-sel]").forEach((c) => (c.onchange = () => { c.checked ? selected.add(+c.dataset.sel) : selected.delete(+c.dataset.sel); c.closest(".ocard").classList.toggle("selected", c.checked); updateBar(); }));
@@ -234,7 +237,7 @@ $("#slips").onclick = () => {
     h2{margin:0 0 4px} table{width:100%;border-collapse:collapse;margin-top:10px} td,th{border-bottom:1px solid #ddd;padding:6px;text-align:left} .r{text-align:right}</style>
     ${picked.map((s) => `<div class="slip"><h2>${BRAND.name} · Order #${s.order_id}</h2><div>Parcel ${s.shipment_id} · from <b>${esc(store.vendor_name)}</b></div>
       <div>Ship to: <b>${esc(s.customer_first_name)}</b>, ${esc(s.shipping_city)}, ${esc(s.shipping_country)}</div>
-      <table><tr><th>SKU</th><th>Item</th><th class="r">Qty</th><th>Packed ☐</th></tr>${s.lines.map((l) => `<tr><td>${esc(l.sku)}</td><td>${esc(l.product_name)}</td><td class="r"><b>${l.quantity}</b></td><td>☐</td></tr>`).join("")}</table></div>`).join("")}
+      <table><tr><th>SKU</th><th>Item</th><th class="r">Qty</th><th>Packed </th></tr>${s.lines.map((l) => `<tr><td>${esc(l.sku)}</td><td>${esc(l.product_name)}</td><td class="r"><b>${l.quantity}</b></td><td></td></tr>`).join("")}</table></div>`).join("")}
     <script>print()<\/script>`);
   w.document.close();
 };
@@ -287,8 +290,8 @@ const refresh = throttle(() => { loadSummary(); loadQueue(); }, 1000);
   await Promise.all([loadSummary(), loadQueue()]);                                      // both at once, not one after the other
   liveEvents((ev) => {
     if (ev.kind !== "shipment") return;
-    if (ev.status === "confirmed") { fresh.add(ev.id); toast(`🔔 New order #${ev.order_id} - accept it to start packing`, "good", 5000); }
-    if (ev.status === "assigned") toast(`🛵 A rider is coming for order #${ev.order_id}`);
+    if (ev.status === "confirmed") { fresh.add(ev.id); toast(`New order #${ev.order_id} - accept it to start packing`, "good", 5000); }
+    if (ev.status === "assigned") toast(`A rider is coming for order #${ev.order_id}`);
     refresh();
   });
   setInterval(refresh, 30000);

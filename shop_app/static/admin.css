@@ -1,28 +1,6 @@
 /* Kartora admin console - operations UI on the ds.css tokens.
    Compact by default (36px rows), light/dark/system theme via [data-theme] on <html>. */
-:root[data-theme="light"] {
-  --k-bg: #f9fafb; --k-surface: #ffffff; --k-text: #111827; --k-text-2: #4b5563; --k-text-3: #6b7280; --k-border: #e5e7eb;
-  --k-skeleton: #f3f4f6; --k-hover: #f3f4f6; --k-brand: #5b3df5; --k-brand-hover: #4322d4; --k-brand-50: #f1edff; --k-on-brand: #fff;
-  --k-sale: #c8361a; --k-success: #15803d; --k-warning: #b45309; --k-danger: #b91c1c; --k-shadow-hover: 0 8px 24px rgba(17,24,39,.10), 0 2px 6px rgba(17,24,39,.06);
-}
-:root[data-theme="dark"] {
-  --k-bg: #0d0f14; --k-surface: #161922; --k-text: #f3f4f6; --k-text-2: #c4c8d2; --k-text-3: #9aa1af; --k-border: #272b36;
-  --k-skeleton: #1f232d; --k-hover: #1f232d; --k-brand: #9d8cff; --k-brand-hover: #b4a7ff; --k-brand-50: #221d3f; --k-on-brand: #120a33;
-  --k-sale: #ff7a5c; --k-success: #4ade80; --k-warning: #fbbf24; --k-danger: #f87171; --k-shadow-hover: 0 8px 24px rgba(0,0,0,.5);
-}
-:root {
-  --a-side: 232px; --a-side-c: 60px; --a-top: 52px; --a-row: 36px; --a-max: 1480px;
-  /* status palette (pill bg / fg) */
-  --st-gray-bg: #f3f4f6; --st-gray: #4b5563;  --st-blue-bg: #e0ecff; --st-blue: #1d4ed8;  --st-purple-bg: #efe9ff; --st-purple: #6d28d9;
-  --st-green-bg: #dcfce7; --st-green: #15803d; --st-red-bg: #fee2e2; --st-red: #b91c1c;   --st-amber-bg: #fef3c7; --st-amber: #b45309;
-}
-:root[data-theme="dark"] {
-  --st-gray-bg: #262a35; --st-gray: #c4c8d2;  --st-blue-bg: #172554; --st-blue: #93c5fd;  --st-purple-bg: #2e1065; --st-purple: #c4b5fd;
-  --st-green-bg: #052e16; --st-green: #86efac; --st-red-bg: #450a0a; --st-red: #fca5a5;   --st-amber-bg: #451a03; --st-amber: #fcd34d;
-}
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --st-gray-bg: #262a35; --st-gray: #c4c8d2;  --st-blue-bg: #172554; --st-blue: #93c5fd;  --st-purple-bg: #2e1065; --st-purple: #c4b5fd;
-  --st-green-bg: #052e16; --st-green: #86efac; --st-red-bg: #450a0a; --st-red: #fca5a5;   --st-amber-bg: #451a03; --st-amber: #fcd34d; } }
+:root { --a-side: 232px; --a-side-c: 60px; --a-top: 52px; --a-row: 36px; --a-max: 1480px; }  /* theme + status colours live in ds.css */
 html.comfortable { --a-row: 44px; }
 
 * { box-sizing: border-box; }
@@ -314,3 +292,11 @@ pre.out { margin: 0; padding: 12px; background: var(--k-bg); border: 1px solid v
   .cmdk-btn .lbl, .cmdk-btn kbd { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* pages that also load the portal stylesheet (live ops, analytics) inside the console shell */
+.app main.page { padding: 0; max-width: none; margin: 0; }
+.app header.top { height: auto; position: static; gap: 8px; padding: 0 16px; }
+.app .ibtn { padding: 0; height: 32px; border: 0; background: none; }
+.app .seg button { height: auto; border: 0; font-weight: 500; }
+.app .pop .mi { height: auto; justify-content: flex-start; border: 0; font-weight: 500; }
+.app a.cmdk-btn { text-decoration: none; }

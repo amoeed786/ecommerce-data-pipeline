@@ -5,16 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <title>Secure payment · Kartora Pay</title>
+  <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/ds.css">
   <link rel="stylesheet" href="/static/style.css">
   <style>
     body { background: var(--bg); }
     .wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
     .paybox { width: min(440px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-lift); overflow: hidden; }
-    .paybox header { all: unset; display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: var(--brand-grad); color: #fff; }
-    .paybox header .brandmark { color: #fff; font-size: 18px; }
-    .test-pill { background: #facc15; color: #1d2330; font-weight: 800; font-size: 11px; letter-spacing: .06em; padding: 3px 9px; border-radius: 999px; }
+    .paybox header { all: unset; display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: var(--panel); color: var(--text); border-bottom: 1px solid var(--line); }
+    .paybox header .brandmark { font-size: 16px; }
+    .test-pill { background: var(--st-amber-bg); color: var(--st-amber); font-weight: 800; font-size: 11px; letter-spacing: .06em; padding: 3px 9px; border-radius: 999px; }
     .paybox .body { padding: 20px; }
-    .amount { font-size: 34px; font-weight: 800; margin: 2px 0 2px; }
+    .amount { font-size: 32px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; font-weight: 800; margin: 2px 0 2px; }
     .field input { width: 100%; padding: 12px; font-size: 16px; letter-spacing: .04em; }
     .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .paybtn { width: 100%; padding: 14px; font-size: 16px; font-weight: 800; margin-top: 6px; }
@@ -25,7 +27,7 @@
     .testcards button { padding: 2px 8px; font-size: 12px; margin: 2px 4px 2px 0; }
     .lock { font-size: 12px; color: var(--muted); text-align: center; margin-top: 12px; }
     .done { text-align: center; padding: 30px 10px; }
-    .done .big { font-size: 56px; }
+    .done .big { color: var(--st-green); } .done .big .ic { width: 48px; height: 48px; }
   </style>
 </head>
 <body>
@@ -36,6 +38,7 @@
   </div>
 </div>
 <script src="/static/common.js"></script>
+<script src="/static/ds.js"></script>
 <script>
 const ref = location.pathname.split("/").pop();
 const back = (id, extra = "") => (location.href = `/#/orders/${id}${extra}`);
@@ -43,10 +46,10 @@ let info;
 
 async function load() {
   try { info = await api(`/api/pay/${encodeURIComponent(ref)}`); }
-  catch (e) { $("#body").innerHTML = `<div class="done"><div class="big">🔗</div><h2>Payment link not found</h2><p class="muted">${esc(e.message)}</p><a href="/">Back to the store</a></div>`; return; }
+  catch (e) { $("#body").innerHTML = `<div class="done"><div class="big"><svg class="ic xl" aria-hidden="true"><use href="#i-link"/></svg></div><h2>Payment link not found</h2><p class="muted">${esc(e.message)}</p><a href="/">Back to the store</a></div>`; return; }
   if (info.payment_status === "completed") return showPaid();
   if (info.order_status !== "pending") {
-    $("#body").innerHTML = `<div class="done"><div class="big">⌛</div><h2>This payment has expired</h2>
+    $("#body").innerHTML = `<div class="done"><div class="big" style="color:var(--st-amber)"><svg class="ic xl" aria-hidden="true"><use href="#i-clock"/></svg></div><h2>This payment has expired</h2>
       <p class="muted">Order #${info.order_id} is ${esc(info.order_status)}. Unpaid orders are cancelled after a while and the items go back on sale.</p>
       <button class="primary" onclick="back(${info.order_id})">View the order</button></div>`;
     return;
@@ -66,10 +69,10 @@ async function load() {
       <button class="buy paybtn" id="paybtn">Pay ${money(info.amount)}</button>
     </form>
     <div class="testcards">Sandbox test cards (any future expiry, any CVC):<br>
-      <button type="button" data-card="4242 4242 4242 4242">✅ 4242 4242 4242 4242 - succeeds</button>
-      <button type="button" data-card="4000 0000 0000 0002">❌ 4000 0000 0000 0002 - declined</button>
-      <button type="button" data-card="4000 0000 0000 9995">💸 4000 0000 0000 9995 - insufficient funds</button></div>
-    <div class="lock">🔒 Card details go only to the payment gateway - the store never sees or stores them.
+      <button type="button" data-card="4242 4242 4242 4242"><svg class="ic sm" aria-hidden="true"><use href="#i-circle-check"/></svg> 4242 4242 4242 4242 - succeeds</button>
+      <button type="button" data-card="4000 0000 0000 0002"><svg class="ic sm" aria-hidden="true"><use href="#i-circle-alert"/></svg> 4000 0000 0000 0002 - declined</button>
+      <button type="button" data-card="4000 0000 0000 9995"><svg class="ic sm" aria-hidden="true"><use href="#i-wallet"/></svg> 4000 0000 0000 9995 - insufficient funds</button></div>
+    <div class="lock"><svg class="ic sm" aria-hidden="true"><use href="#i-lock"/></svg> Card details go only to the payment gateway - the store never sees or stores them.
       <br><a href="#" id="cancel">Cancel and return to the order</a></div>`;
   const num = $("[name=card_number]"), exp = $("[name=expiry]");
   num.oninput = () => (num.value = num.value.replace(/\D/g, "").slice(0, 19).replace(/(\d{4})(?=\d)/g, "$1 "));
@@ -87,13 +90,13 @@ async function load() {
     try {
       const r = await api(`/api/pay/${encodeURIComponent(ref)}/sandbox`, { method: "POST", body });
       if (r.ok) return showPaid();
-      $("#msg").innerHTML = `<div class="msg err">❌ ${esc(r.reason || "Payment failed")} - try another card.</div>`;
+      $("#msg").innerHTML = `<div class="msg err"><svg class="ic sm" aria-hidden="true"><use href="#i-circle-alert"/></svg> ${esc(r.reason || "Payment failed")} - try another card.</div>`;
     } catch (err) { $("#msg").innerHTML = `<div class="msg err">${esc(err.message)}</div>`; }
     btn.disabled = false; btn.textContent = `Pay ${money(info.amount)}`;
   };
 }
 function showPaid() {
-  $("#body").innerHTML = `<div class="done"><div class="big">✅</div><h2>Payment successful</h2>
+  $("#body").innerHTML = `<div class="done"><div class="big"><svg class="ic xl" aria-hidden="true"><use href="#i-circle-check"/></svg></div><h2>Payment successful</h2>
     <p class="muted">${money(info.amount)} paid for order #${info.order_id}. Taking you back to your order…</p></div>`;
   setTimeout(() => back(info.order_id, "?paid=1"), 1600);
 }

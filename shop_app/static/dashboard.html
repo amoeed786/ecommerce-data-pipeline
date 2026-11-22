@@ -4,14 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kartora Dashboard</title>
+  <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/ds.css">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/admin.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <header></header>
 
 <main>
-  <div class="row" style="justify-content:space-between; margin-bottom:10px"><h1>Live operations</h1><span class="muted small" id="updated"></span></div>
+  <div class="row" style="justify-content:space-between; margin-bottom:16px"><h1>Live operations</h1><span class="muted small" id="updated"></span></div>
   <div class="kpis" id="kpis"></div>
 
   <div class="grid cols-2" style="margin-bottom: 16px">
@@ -32,7 +35,7 @@
       </table></div>
     </div>
     <div class="grid" style="align-content: start">
-      <div class="card"><h2>⚡ Live activity</h2><ul id="feed" class="plain feed"><li class="muted">Waiting for activity… start the simulator in Admin → Simulator &amp; pipeline.</li></ul></div>
+      <div class="card"><h2><svg class="ic sm" aria-hidden="true"><use href="#i-zap"/></svg> Live activity</h2><ul id="feed" class="plain feed"><li class="muted">Waiting for activity… start the simulator in Admin → Simulator &amp; pipeline.</li></ul></div>
       <div class="card"><h2>Top products · last 7 days</h2><div id="top" class="table-wrap"></div></div>
       <div class="card"><h2>Lowest stock</h2><div id="low" class="table-wrap"></div></div>
     </div>
@@ -40,6 +43,7 @@
 </main>
 
 <script src="/static/common.js"></script>
+<script src="/static/ds.js"></script>
 <script>
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 Chart.defaults.color = css("--muted");
@@ -48,7 +52,8 @@ Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
 Chart.defaults.maintainAspectRatio = false;
 Chart.defaults.plugins.legend.display = false;
 const ACCENT = css("--accent");
-const STATUS_COLORS = { pending: "#e0a526", paid: "#2f6fed", shipped: "#7c5ce0", delivered: "#1f9d55", cancelled: "#d64545", returned: "#8a93a6" };
+// same status palette as every pill in the app: gray waiting, blue in progress, purple moving, green done, red stopped, amber returned
+const STATUS_COLORS = { pending: css("--st-gray"), processing: css("--st-blue"), paid: css("--st-blue"), shipped: css("--st-purple"), delivered: css("--st-green"), cancelled: css("--st-red"), returned: css("--st-amber") };
 
 const charts = {
   minute: new Chart($("#c-minute"), { type: "bar", data: { labels: [], datasets: [{ data: [], backgroundColor: ACCENT, borderRadius: 3 }] },
@@ -75,7 +80,7 @@ async function loadStats() {
   const s = await api("/api/stats");
   const k = s.kpis;
   const tiles = [
-    ["Orders today", int(k.orders_today)], ["Revenue today", money(k.revenue_today)], ["Avg order today", money(k.avg_order_today)],
+    ["Orders today", int(k.orders_today)], ["Revenue today", moneyShort(k.revenue_today)], ["Avg order today", money(Math.round(k.avg_order_today))],
     ["Orders · last 5 min", int(k.orders_last_5_min)], ["Open orders", int(k.open_orders)],
     ["Parcels delivered today", int(k.delivered_today)], ["Avg confirm → delivered (24h)", duration(k.avg_fulfil_seconds)],
     ["Customers", int(k.customers)], ["New customers today", int(k.new_customers_today)],
@@ -122,7 +127,7 @@ liveEvents((ev) => {
   refresh();
 });
 setInterval(loadStats, 30000);   // safety net: the minute chart still moves even when nothing happens
-renderPortalHeader("live dashboard").then(() => { loadStats(); });
+mountAdminShell("@live", "Live ops").then((me) => { if (me) loadStats(); });
 </script>
 </body>
 </html>

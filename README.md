@@ -28,7 +28,9 @@ SQL Server (ShopDB)  ->  Data lake (Parquet: bronze/silver/gold)  ->  DuckDB + d
 
 The shop app is branded **Kartora** ("cart" + "aura"; tagline *Everything you love, delivered.*). The name and
 logo live in one place, `BRAND` and `LOGO_SVG` in `shop_app/static/common.js`, so a rename is a one-line change.
-Colors are in `style.css` (violet `--accent`, coral `--deal`).
+One design system for every page: tokens, Inter, Lucide icons and the light/dark theme live in `shop_app/static/ds.css` + `ds.js` (gallery at `/static/design.html`). Purple is for actions only, orange-red for sale prices only, and status pills use one palette everywhere (gray waiting, blue in progress, purple on the move, green done, red stopped, amber returned). `store.css` = storefront, `admin.css` = admin console, `style.css` = seller center, rider app, sign-in and payment page. No emoji anywhere.
+
+**Market:** one country and currency - **Pakistan, PKR** (`MARKET_COUNTRY` in `.env`). Prices use local price points (Rs 349, Rs 1,499, Rs 24,999); customers, stores and riders are in Pakistani cities with +92 numbers.
 
 - **Sign in:** http://localhost:8000/login. Choose Shopper, Seller or Rider first, then sign in or create an
   account. All demo logins are in [TEST_ACCOUNTS.md](TEST_ACCOUNTS.md).
@@ -45,9 +47,14 @@ Colors are in `style.css` (violet `--accent`, coral `--deal`).
     - Invalid values (`/`, spaces, `/login`, `/api/…` and so on) stop the app at startup with a clear message.
     - A hidden path only reduces casual probing. The real protection is the admin-only sign-in, role checks on
       every admin API (`/api/admin/*` needs an admin session) and the failed-login lockout.
-- **Product photos:** 37 openly licensed photos from Openverse, **reviewed by hand** (off-topic and unsuitable
-  images were removed), with credits shown on each product page. Products without an approved photo show
-  generated art.
+- **Product photos:** 108 openly licensed photos (Openverse: Flickr / Rawpixel / StockSnap), **reviewed by hand** - photos with
+  visible real brands, people's faces or the wrong product were rejected. Each product gets a gallery of its type's photos as
+  square WebP in 240/480/960 px (responsive `srcset`), credited under the gallery. 6 types had no usable photo yet (dress,
+  jacket, moisturizer, serum, sunglasses, RC car) and show their category icon. Pipeline: `tools/product_photos.py`
+  (`fetch` -> `sheets` -> review -> `approve type:1,3` -> `assign`).
+- **Admin console:** sidebar (Operations, Marketplace, Money, Data), Ctrl+K command palette, light/dark/system theme,
+  compact/comfortable density. Orders table with bulk actions and an order drawer (act as vendor/rider, audit log),
+  Live shipments kanban with SLA colours, Riders by city, Vendors prep-time trend, Finance and Payouts, Pipeline run history.
 - **Your own brand photos:** either click a product photo in the seller center to upload one, or do it in bulk:
   ```powershell
   # put files named by SKU (ELE-00012.jpg) or product id (12.png) in .\brand_photos\, then:
@@ -366,6 +373,11 @@ All commands are run from the project folder: `cd C:\Projects\ecommerce-data-pip
 | Source | `.\.venv\Scripts\python.exe source_app\fulfillment.py` | Autopilot vendors/riders without the web app (the app runs it already) |
 | Source | `.\.venv\Scripts\python.exe source_app\inject_bad_data.py` | Add messy rows for silver to catch |
 | Source | `.\.venv\Scripts\python.exe source_app\check_db.py` | Row counts + integrity checks |
+| Realism | `.\.venv\Scripts\python.exe tools\realistic_catalog.py` | Invented brands, specs, ratings, written reviews (one-time) |
+| Realism | `.\.venv\Scripts\python.exe tools\switch_market.py` | Whole marketplace to Pakistan / PKR, totals re-derived (one-time) |
+| Realism | `.\.venv\Scripts\python.exe tools\realistic_ops.py` | 45 riders, realistic prep/ride times and deliveries per rider (one-time) |
+| Photos | `.\.venv\Scripts\python.exe tools\product_photos.py fetch` / `sheets` / `approve ...` / `assign` | Find, review, publish and assign product photos |
+| Assets | `.\.venv\Scripts\python.exe tools\build_assets.py` | Rebuild the local Inter font + Lucide icon sprite |
 | Bronze | `.\.venv\Scripts\python.exe ingestion\extract.py` | Incremental extract (`--full` reloads) |
 | Bronze | `.\.venv\Scripts\python.exe ingestion\check_bronze.py` | Reconcile bronze vs ShopDB |
 | Silver | `.\.venv\Scripts\python.exe transform\silver.py` | Dedup + clean + quality checks |

@@ -4,7 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Business intelligence · Kartora</title>
+  <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/ds.css">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/admin.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     .bi-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -129,9 +132,10 @@
 </main>
 
 <script src="/static/common.js"></script>
+<script src="/static/ds.js"></script>
 <script>
 // ---- chart theme: reference palette (colorblind-validated), selected per light/dark mode ----
-const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const SERIES = dark ? ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#0ca30c", "#9085e9", "#e66767"]
                     : ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
@@ -169,7 +173,7 @@ async function load() {
   const topSeller = a.vendors[0];
   const recentDeliv = a.delivery.slice(-7).filter((d) => d.avg_total_minutes != null);
   const medDoor = recentDeliv.length ? recentDeliv.reduce((s, d) => s + d.avg_total_minutes, 0) / recentDeliv.length : null;
-  const arrow = (d) => (d == null ? "" : `<span class="delta ${d >= 0 ? "up" : "down"}">${d >= 0 ? "▲" : "▼"} ${pct(Math.abs(d))} vs previous 30 days</span>`);
+  const arrow = (d) => (d == null ? "" : `<span class="delta ${d >= 0 ? "up" : "down"}">${icon(d >= 0 ? "arrow-up-right" : "arrow-down-right", "xs")} ${pct(Math.abs(d))} vs previous 30 days</span>`);
 
   // ---- overview
   $("#ins-overview").innerHTML = `Revenue was <b>${money(k.revenue_30d)}</b> in the last 30 days${revDelta != null ? `, <b>${revDelta >= 0 ? "up" : "down"} ${pct(Math.abs(revDelta))}</b> on the month before` : ""}.
@@ -239,7 +243,7 @@ async function load() {
       scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, ticks: { callback: kMoney } } } } });
   const maxPR = Math.max(...a.top_products.map((p) => p.revenue));
   $("#products-table").innerHTML = `<table><thead><tr><th>#</th><th>Product</th><th>Revenue</th><th class="num">Units</th><th class="num">Margin</th><th class="num">Returns</th><th class="num">Stock</th></tr></thead><tbody>${
-    a.top_products.map((p) => `<tr><td>${p.revenue_rank}</td><td><b>${esc(p.product_name)}</b><div class="small"><span style="color:${catColor(p.category_name)}">●</span> ${esc(p.category_name)} · ${money(p.current_price)}</div></td>
+    a.top_products.map((p) => `<tr><td>${p.revenue_rank}</td><td><b>${esc(p.product_name)}</b><div class="small"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${catColor(p.category_name)}"></span> ${esc(p.category_name)} · ${money(p.current_price)}</div></td>
       <td class="bar-cell"><i style="width:${(p.revenue / maxPR) * 100}%"></i><span>${money(p.revenue)}</span></td><td class="num">${int(p.units_sold)}</td>
       <td class="num">${pct(p.margin_pct, 0)}</td><td class="num">${pct(p.return_rate)}</td><td class="num ${p.stock < 20 ? "stock-low" : ""}">${int(p.stock)}</td></tr>`).join("")}</tbody></table>`;
 
@@ -291,7 +295,7 @@ const obs = new IntersectionObserver((entries) => entries.forEach((e) => {
 }), { rootMargin: "-40% 0px -55% 0px" });
 $$(".bi-section").forEach((s) => obs.observe(s));
 
-renderPortalHeader("business intelligence").then(() => { $("#live")?.remove(); load(); });
+mountAdminShell("@analytics", "Analytics").then((me) => { if (!me) return; $("#live")?.remove(); load(); });
 // gold is rebuilt automatically after new orders: reload when it changes
 let lastBuilt = null;
 setInterval(async () => {

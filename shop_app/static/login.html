@@ -4,12 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Welcome · Kartora</title>
+  <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/ds.css">
   <link rel="stylesheet" href="/static/style.css">
   <style>
     body { background: var(--bg); }
     .welcome { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
-    .hero-side { background: var(--brand-grad); color: #fff; padding: 48px 44px; display: flex; flex-direction: column; justify-content: space-between; }
-    .hero-side h1 { font-size: 38px; line-height: 1.1; margin: 40px 0 12px; }
+    .hero-side { background: #111827; color: #fff; padding: 48px 44px; display: flex; flex-direction: column; justify-content: space-between; }
+    .hero-side h1 { font-size: 32px; letter-spacing: -.02em; line-height: 1.1; margin: 40px 0 12px; }
     .hero-side p { opacity: .9; font-size: 16px; max-width: 420px; }
     .hero-side ul { list-style: none; padding: 0; margin: 26px 0 0; display: grid; gap: 12px; }
     .hero-side li { display: flex; gap: 10px; align-items: center; font-size: 15px; }
@@ -20,7 +22,7 @@
     .panel { max-width: 460px; }
     .panel .field input, .panel .field select { width: 100%; padding: 11px 12px; }
     .role-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-    .role-head .big { font-size: 34px; width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; background: var(--accent-soft); }
+    .role-head .big { color: var(--accent); width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; background: var(--accent-soft); }
     .demo-btn { width: 100%; text-align: left; margin-top: 12px; padding: 11px 12px; border-style: dashed; }
     .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     @media (max-width: 900px) { .welcome { grid-template-columns: 1fr; } .hero-side { padding: 28px 20px; } .hero-side h1 { margin-top: 16px; font-size: 28px; } .pick-side { padding: 28px 20px; } }
@@ -34,10 +36,10 @@
       <h1>Everything you love,<br>delivered.</h1>
       <p>One marketplace for shoppers, sellers and riders - every order tracked live from checkout to doorstep.</p>
       <ul>
-        <li><span>🛍️</span> 300+ products from 11 trusted stores</li>
-        <li><span>🛵</span> Live tracking, cash on delivery, 7-day returns</li>
-        <li><span>🏪</span> Sellers pack orders in one click</li>
-        <li><span>📊</span> Every sale flows into live business intelligence</li>
+        <li><span><svg class="ic sm" aria-hidden="true"><use href="#i-shopping-bag"/></svg></span> 300+ products from 11 trusted stores</li>
+        <li><span><svg class="ic sm" aria-hidden="true"><use href="#i-bike"/></svg></span> Live tracking, cash on delivery, 7-day returns</li>
+        <li><span><svg class="ic sm" aria-hidden="true"><use href="#i-store"/></svg></span> Sellers pack orders in one click</li>
+        <li><span><svg class="ic sm" aria-hidden="true"><use href="#i-chart-column"/></svg></span> Every sale flows into live business intelligence</li>
       </ul>
     </div>
     <div class="small" style="opacity:.75">Demo marketplace · no real payments</div>
@@ -49,9 +51,9 @@
       <h2>How do you want to use Kartora?</h2>
       <p class="muted" style="margin:0 0 20px">Choose your account type to sign in or create an account.</p>
       <div class="portal-pick" style="grid-template-columns: repeat(3, 1fr)">
-        <button data-role="customer"><span class="big">🛍️</span><b>Shopper</b><span class="muted small">Browse stores, check out, track every parcel live</span></button>
-        <button data-role="vendor"><span class="big">🏪</span><b>Seller</b><span class="muted small">Open a store, accept orders, pack and hand over in one click</span></button>
-        <button data-role="rider"><span class="big">🛵</span><b>Rider</b><span class="muted small">Go online, pick up parcels, deliver and earn</span></button>
+        <button data-role="customer"><span class="big"><svg class="ic lg" aria-hidden="true"><use href="#i-shopping-bag"/></svg></span><b>Shopper</b><span class="muted small">Browse stores, check out, track every parcel live</span></button>
+        <button data-role="vendor"><span class="big"><svg class="ic lg" aria-hidden="true"><use href="#i-store"/></svg></span><b>Seller</b><span class="muted small">Open a store, accept orders, pack and hand over in one click</span></button>
+        <button data-role="rider"><span class="big"><svg class="ic lg" aria-hidden="true"><use href="#i-bike"/></svg></span><b>Rider</b><span class="muted small">Go online, pick up parcels, deliver and earn</span></button>
       </div>
       <p class="muted small" style="margin-top:22px">Just looking? <a href="/">Browse the store without an account →</a></p>
     </section>
@@ -93,7 +95,7 @@
       <form id="signup-rider" class="hidden">
         <div class="field">Full name<input name="full_name" required autocomplete="name"></div>
         <div class="two"><div class="field">Phone<input name="phone" autocomplete="tel"></div><div class="field">City<input name="city"></div></div>
-        <div class="field">Vehicle<select name="vehicle"><option value="bike">🛵 Bike</option><option value="car">🚗 Car</option><option value="van">🚐 Van</option></select></div>
+        <div class="field">Vehicle<select name="vehicle"><option value="bike">Motorbike</option><option value="car">Car</option><option value="van">Van</option></select></div>
         <div class="field">Email<input name="email" type="email" required autocomplete="email"></div>
         <div class="field">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></div>
         <button class="primary" style="width:100%; padding:12px; font-weight:700">Join as a rider</button>
@@ -104,11 +106,12 @@
 </div>
 
 <script src="/static/common.js"></script>
+<script src="/static/ds.js"></script>
 <script>
 const ROLES = {
-  customer: { icon: "🛍️", title: "Shopper", sub: "Shop from every store on Kartora", demo: ["customer@kartora.test", "Demo@123"], signup: "/api/auth/register" },
-  vendor: { icon: "🏪", title: "Seller", sub: "Manage your store and pack orders", demo: ["vendor@kartora.test", "Demo@123"], signup: "/api/auth/register/vendor" },
-  rider: { icon: "🛵", title: "Rider", sub: "Deliver parcels and track earnings", demo: ["rider@kartora.test", "Demo@123"], signup: "/api/auth/register/rider" },
+  customer: { icon: '<svg class="ic sm" aria-hidden="true"><use href="#i-shopping-bag"/></svg>', title: "Shopper", sub: "Shop from every store on Kartora", demo: ["customer@kartora.test", "Demo@123"], signup: "/api/auth/register" },
+  vendor: { icon: '<svg class="ic sm" aria-hidden="true"><use href="#i-store"/></svg>', title: "Seller", sub: "Manage your store and pack orders", demo: ["vendor@kartora.test", "Demo@123"], signup: "/api/auth/register/vendor" },
+  rider: { icon: '<svg class="ic sm" aria-hidden="true"><use href="#i-bike"/></svg>', title: "Rider", sub: "Deliver parcels and track earnings", demo: ["rider@kartora.test", "Demo@123"], signup: "/api/auth/register/rider" },
 };  // admins have their own sign-in page, not linked from here
 const params = new URLSearchParams(location.search);
 const next = params.get("next");
@@ -128,7 +131,7 @@ function choose(r) {
   $("#step-auth").classList.remove("hidden");
   $("#r-icon").textContent = R.icon; $("#r-title").textContent = R.title; $("#r-sub").textContent = R.sub;
   $("#auth-tabs").classList.toggle("hidden", !R.signup);
-  $("#demo").innerHTML = `⚡ Use the demo ${R.title.toLowerCase()} account <span class="muted small">(${R.demo[0]})</span>`;
+  $("#demo").innerHTML = `<svg class="ic sm" aria-hidden="true"><use href="#i-zap"/></svg> Use the demo ${R.title.toLowerCase()} account <span class="muted small">(${R.demo[0]})</span>`;
   history.replaceState(null, "", `/login?as=${r}${next ? "&next=" + encodeURIComponent(next) : ""}`);
   setTab("signin");
 }

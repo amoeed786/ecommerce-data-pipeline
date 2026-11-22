@@ -33,7 +33,7 @@ ICONS = [
     "file-code", "sun", "moon", "monitor", "panel-left", "external-link", "refresh-cw", "play", "square", "arrow-up-right",
     "arrow-down-right", "arrow-up", "arrow-down", "chevrons-up-down", "filter", "ellipsis", "route", "landmark", "percent",
     "git-branch", "bot", "list-checks", "triangle-alert", "inbox", "kanban", "user-check", "user-x", "rows-3", "rows-4",
-    "pencil", "save", "send", "workflow", "warehouse", "boxes", "power",
+    "pencil", "save", "send", "workflow", "warehouse", "boxes", "power", "printer", "link", "car",
 ]
 SHAPES = {"path", "circle", "line", "polyline", "polygon", "rect", "ellipse"}
 SAFE_ATTR = re.compile(r"^(d|cx|cy|r|rx|ry|x|y|x1|x2|y1|y2|width|height|points)$")

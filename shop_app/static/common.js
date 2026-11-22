@@ -1,4 +1,5 @@
 // Shared helpers for every Kartora page.
+try { const t = localStorage.getItem("ka.theme"); if (t && t !== "system") document.documentElement.dataset.theme = t; } catch {}
 // ---- Brand: change the name here and every page follows. ----
 const BRAND = { name: "Kartora", tagline: "Everything you love, delivered." };
 const LOGO_SVG = (size = 30) => `<svg width="${size}" height="${size}" viewBox="0 0 40 40" aria-hidden="true">
@@ -107,54 +108,34 @@ function throttle(fn, ms) {
   };
 }
 
-// ------------------------------------------------------------------ product art (no photos needed)
-const PRODUCT_EMOJI = {
-  Headphones: "🎧", Smartphone: "📱", Laptop: "💻", Smartwatch: "⌚", Speaker: "🔊", Tablet: "📲", Camera: "📷", Keyboard: "⌨️",
-  "T-Shirt": "👕", Jeans: "👖", Sneakers: "👟", Jacket: "🧥", Dress: "👗", Handbag: "👜", Sunglasses: "🕶️",
-  Blender: "🥤", "Coffee Maker": "☕", "Cookware Set": "🍳", "Desk Lamp": "💡", Pillow: "🛏️", Vacuum: "🧹",
-  Novel: "📖", Cookbook: "📕", Biography: "📘", Textbook: "📚", Comic: "📙",
-  "Yoga Mat": "🧘", Dumbbells: "🏋️", Football: "⚽", "Tennis Racket": "🎾", "Bike Helmet": "🚴", "Running Shoes": "👟",
-  Moisturizer: "🧴", Perfume: "🌸", Lipstick: "💄", Shampoo: "🧴", "Face Serum": "💧",
-  Puzzle: "🧩", "Building Blocks": "🧱", Doll: "🪆", "RC Car": "🏎️", "Board Game": "🎲",
-  "Coffee Beans": "☕", "Green Tea": "🍵", "Olive Oil": "🫒", Honey: "🍯", "Dark Chocolate": "🍫",
-};
-const CATEGORY_STYLE = {
-  "Electronics": ["#4f7cff", "#22d3ee", "🔌"], "Fashion": ["#f472b6", "#fb923c", "👗"], "Home & Kitchen": ["#34d399", "#a3e635", "🏠"],
-  "Books": ["#a78bfa", "#f0abfc", "📚"], "Sports": ["#22c55e", "#06b6d4", "🏅"], "Beauty": ["#fb7185", "#fbbf24", "💄"],
-  "Toys": ["#facc15", "#f97316", "🧸"], "Grocery": ["#84cc16", "#f59e0b", "🛒"],
-};
-function productEmoji(name, category) {
-  const hit = Object.keys(PRODUCT_EMOJI).sort((a, b) => b.length - a.length).find((k) => (name || "").includes(k));
-  return hit ? PRODUCT_EMOJI[hit] : (CATEGORY_STYLE[category] || [, , "🛍️"])[2];
-}
-// Product picture: the real photo when there is one, with generated art underneath as a fallback
-// (if the photo can't load, it removes itself and the art shows).
+// ------------------------------------------------------------------ product art (photo, or a category icon)
+// icon(), CATEGORY_ICON and starRating() come from ds.js (loaded on every page after this file).
+const _icon = (name, cls = "") => (typeof icon === "function" ? icon(name, cls) : "");
+const _catIcon = (cat) => (typeof CATEGORY_ICON === "object" && CATEGORY_ICON[cat]) || "shopping-bag";
+// Product picture: the real photo when there is one, with the category icon underneath as a fallback
+// (if the photo can't load, it removes itself and the icon shows).
 function productArt(p, size = "") {
-  const [a, b] = CATEGORY_STYLE[p.category_name] || ["#94a3b8", "#cbd5e1"];
-  const angle = 120 + ((p.product_id || 0) * 37) % 120;
-  return `<div class="art ${size} ${p.image_url ? "photo" : ""}" style="background: linear-gradient(${angle}deg, ${a}33, ${b}55)">
+  const src = p.image_url || (p.images && p.images[0] && (p.images[0].src || p.images[0]));
+  return `<div class="art ${size} ${src ? "photo" : ""}">
     ${p.discount_pct ? `<span class="off">-${p.discount_pct}%</span>` : ""}
-    ${p.image_url ? `<img src="${esc(p.image_url)}" alt="${esc(p.product_name)}" loading="lazy" decoding="async"
+    ${src ? `<img src="${esc(src)}" alt="${esc(p.product_name)}" loading="lazy" decoding="async"
       onload="this.classList.add('in')" onerror="this.parentElement.classList.remove('photo'); this.remove()">` : ""}
-    <span class="emoji">${productEmoji(p.product_name, p.category_name)}</span></div>`;
+    ${_icon(_catIcon(p.category_name))}</div>`;
 }
 // Photo credits for the openly licensed stock photos (CC licenses require attribution)
 let CREDITS;
 async function photoCredit(p) {
   if (!p.image_url || !p.image_url.startsWith("/static/img/products/")) return "";
   CREDITS ||= await fetch("/static/img/products/credits.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
-  const c = CREDITS[p.image_url.split("/").pop()];
+  const file = p.image_url.split("/").pop(), c = CREDITS[file.replace(/-(240|480|960)\.webp$/, "")] || CREDITS[file];
   if (!c) return "";
   return `<div class="credit">Photo: <a href="${esc(c.source)}" target="_blank" rel="noopener">${esc(c.title || "untitled")}</a>
-    by ${esc(c.creator || "unknown")} · <a href="${esc(c.license_url)}" target="_blank" rel="noopener">CC ${esc((c.license || "").toUpperCase())} ${esc(c.license_version || "")}</a></div>`;
+    by ${esc(c.creator || "unknown")} · ${esc((c.license || "").toUpperCase())} ${esc(c.license_version || "")}</div>`;
 }
-function categoryArt(name) {
-  const [a, b, e] = CATEGORY_STYLE[name] || ["#94a3b8", "#cbd5e1", "🛍️"];
-  return `<div class="art" style="background: linear-gradient(135deg, ${a}44, ${b}66)"><span class="emoji">${e}</span></div>`;
-}
+function categoryArt(name) { return `<div class="art">${_icon(_catIcon(name))}</div>`; }
 function stars(rating) {
-  const r = Math.round((rating || 0) * 2) / 2;
-  return `<span class="stars" title="${rating || 0} out of 5">${"★".repeat(Math.floor(r))}${r % 1 ? "⯪" : ""}${"☆".repeat(5 - Math.ceil(r))}</span>`;
+  if (typeof starRating === "function") return starRating(rating).replace("pc-rating", "stars");
+  return `<span class="stars">${Number(rating || 0).toFixed(1)} / 5</span>`;
 }
 
 // ------------------------------------------------------------------ signed-in user
@@ -202,34 +183,81 @@ async function renderPortalHeader(subtitle) {
   return me;
 }
 
+// Admin pages outside the console (live ops, analytics) get the console's sidebar + top bar, so every admin
+// screen looks and navigates the same. Needs ds.css + admin.css + ds.js on the page.
+const ADMIN_NAV = [
+  ["Operations", [["orders", "Orders", "inbox"], ["shipments", "Live shipments", "kanban"], ["riders", "Riders", "bike"], ["@live", "Live ops", "activity"]]],
+  ["Marketplace", [["vendors", "Vendors", "store"], ["catalog", "Catalog", "boxes"], ["users", "Users", "users"]]],
+  ["Money", [["finance", "Finance", "landmark"], ["payouts", "Payouts", "send"]]],
+  ["Data", [["pipeline", "Pipeline", "workflow"], ["@analytics", "Analytics", "chart-column"], ["@docs", "API docs", "file-code"]]],
+];
+const adminHref = (k, base) => (k === "@live" ? `${base}/dashboard` : k === "@analytics" ? `${base}/analytics` : k === "@docs" ? "/docs" : `${base}#/${k}`);
+async function mountAdminShell(active, title) {
+  const me = await loadMe();
+  if (!me || me.role !== "admin") { location.href = "/"; return null; }
+  const base = me.admin_path, I = (n, c = "") => _icon(n, c);
+  document.body.classList.add("k");
+  const theme = (() => { try { return localStorage.getItem("ka.theme") || "system"; } catch { return "system"; } })();
+  const app = document.createElement("div");
+  app.className = "app"; app.id = "app";
+  try { if (localStorage.getItem("ka.side") === "c") app.classList.add("collapsed"); } catch {}
+  app.innerHTML = `<aside class="side" aria-label="Admin navigation"><div class="side-head">${LOGO_SVG(26)}<span class="name">${BRAND.name}</span><span class="tag">Admin</span></div>
+    <nav>${ADMIN_NAV.map(([g, items], gi) => `${gi ? '<div class="grp-sep"></div>' : ""}<div class="grp">${g}</div>${items.map(([k, l, ic]) => `<a class="nav ${k === active ? "on" : ""}" href="${adminHref(k, base)}" title="${l}" ${k === "@docs" ? 'target="_blank" rel="noopener"' : ""}>${I(ic)}<span class="lbl">${l}</span>${k === "@docs" ? I("external-link", "ext") : ""}</a>`).join("")}`).join("")}</nav>
+    <div class="side-foot"><a class="nav" href="#" id="shell-collapse">${I("panel-left")}<span class="lbl">Collapse</span></a></div></aside>
+    <header class="top"><span class="crumb">${esc(title)}</span>
+      <a class="cmdk-btn" href="${base}#/orders" aria-label="Search orders">${I("search")}<span class="lbl">Search orders, pages, actions…</span><kbd>Ctrl K</kbd></a>
+      <span class="live" id="live">connecting</span>
+      <a class="ibtn" href="/" target="_blank" rel="noopener" title="Storefront" aria-label="Open storefront in a new tab">${I("external-link")}</a>
+      <div class="menu" id="shell-me"><button class="ibtn" aria-label="Admin menu"><span class="avatar" style="background:var(--k-brand)">${esc(initials(me.display_name))}</span></button>
+        <div class="pop"><div class="hd">${esc(me.display_name)}<div style="text-transform:none; font-weight:400; letter-spacing:0">${esc(me.email)}</div></div><div class="sep"></div>
+          <div style="padding:6px 10px"><div class="muted" style="font-size:11px; margin-bottom:6px">Theme</div><div class="seg">${[["light", "sun", "Light"], ["dark", "moon", "Dark"], ["system", "monitor", "Auto"]].map(([v, ic, l]) => `<button class="${theme === v ? "on" : ""}" data-theme-set="${v}">${I(ic, "xs")}${l}</button>`).join("")}</div></div>
+          <div class="sep"></div><button class="mi" onclick="logout()">${I("log-out")}Sign out</button></div></div>
+    </header><main class="page"><div class="wrap" id="shell-wrap"></div></main>`;
+  const old = $("main");
+  $$("body > header").forEach((h) => h.remove());
+  document.body.prepend(app);
+  if (old) { $("#shell-wrap").append(...old.childNodes); old.remove(); }
+  $("#shell-collapse").onclick = (e) => { e.preventDefault(); const c = app.classList.toggle("collapsed"); try { localStorage.setItem("ka.side", c ? "c" : ""); } catch {} };
+  $("#shell-me > button").onclick = (e) => { e.stopPropagation(); $("#shell-me").classList.toggle("open"); };
+  $$("[data-theme-set]").forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation(); const t = b.dataset.themeSet;
+    try { localStorage.setItem("ka.theme", t); } catch {}
+    if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+    $$("[data-theme-set]").forEach((x) => x.classList.toggle("on", x === b));
+    document.dispatchEvent(new CustomEvent("k-theme"));
+  }));
+  document.title = `${title} · ${BRAND.name} admin`;
+  return me;
+}
+
 function describeEvent(ev) {
   if (ev.kind === "order") {
     return ev.action === "created"
-      ? `🛒 New order <b>#${ev.order_id}</b> by ${esc(ev.name)} · ${money(ev.amount)} ${badge(ev.status)}`
-      : `📦 Order <b>#${ev.order_id}</b> → ${badge(ev.status)}`;
+      ? `${_icon("shopping-cart")} New order <b>#${ev.order_id}</b> by ${esc(ev.name)} · ${money(ev.amount)} ${badge(ev.status)}`
+      : `${_icon("package")} Order <b>#${ev.order_id}</b> → ${badge(ev.status)}`;
   }
   if (ev.kind === "shipment") {
     const who = ev.status === "assigned" || ev.status === "picked_up" || ev.status === "delivered" ? (ev.detail ? ` · rider ${esc(ev.detail)}` : "") : "";
-    return `🚚 #${ev.order_id} · ${esc(ev.name)} → ${badge(ev.status)}${who}`;
+    return `${_icon("truck")} #${ev.order_id} · ${esc(ev.name)} → ${badge(ev.status)}${who}`;
   }
   if (ev.kind === "customer") {
-    return ev.action === "created" ? `👤 New customer <b>${esc(ev.name)}</b> (${esc(ev.detail)})` : `🏠 ${esc(ev.name)} moved to ${esc(ev.detail)}`;
+    return ev.action === "created" ? `${_icon("user")} New customer <b>${esc(ev.name)}</b> (${esc(ev.detail)})` : `${_icon("map-pin")} ${esc(ev.name)} moved to ${esc(ev.detail)}`;
   }
-  if (ev.kind === "product") return `🏷️ ${esc(ev.name)} now ${money(ev.amount)}`;
+  if (ev.kind === "product") return `${_icon("tag")} ${esc(ev.name)} now ${money(ev.amount)}`;
   return esc(JSON.stringify(ev));
 }
 
 const SHIPMENT_STEPS = [
-  ["placed", "Placed", "created_at", "🧾"], ["confirmed", "Confirmed", "confirmed_at", "✔"], ["packed", "Packed", "ready_at", "📦"],
-  ["picked", "On the way", "picked_up_at", "🛵"], ["delivered", "Delivered", "delivered_at", "🏠"],
+  ["placed", "Placed", "created_at", "receipt"], ["confirmed", "Confirmed", "confirmed_at", "circle-check"], ["packed", "Packed", "ready_at", "package"],
+  ["picked", "On the way", "picked_up_at", "truck"], ["delivered", "Delivered", "delivered_at", "house"],
 ];
 function shipmentStepper(s) {
-  if (s.status === "cancelled") return `<p class="muted">❌ Cancelled ${fmtDateTime(s.cancelled_at)}</p>`;
+  if (s.status === "cancelled") return `<p class="muted">${_icon("x", "sm")} Cancelled ${fmtDateTime(s.cancelled_at)}</p>`;
   const reached = SHIPMENT_STEPS.map(([, , col]) => !!s[col]);
   const nowIdx = reached.lastIndexOf(true) + 1;
   return `<div class="steps">${SHIPMENT_STEPS.map(([, text, col, icon], i) => `
     <div class="step ${reached[i] ? "done" : i === nowIdx && s.status !== "returned" ? "now" : ""}">
-      <div class="dot">${reached[i] ? "✓" : icon}</div>${text}<time>${s[col] ? fmtDateTime(s[col]) : ""}</time></div>`).join("")}</div>`;
+      <div class="dot">${_icon(reached[i] ? "check" : icon)}</div>${text}<time>${s[col] ? fmtDateTime(s[col]) : ""}</time></div>`).join("")}</div>`;
 }
 
 document.addEventListener("DOMContentLoaded", () => {

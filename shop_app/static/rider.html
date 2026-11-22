@@ -4,12 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Rider · Kartora</title>
+  <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/ds.css">
   <link rel="stylesheet" href="/static/style.css">
   <style>
     main { max-width: 720px; }
-    .online-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px; border-radius: 14px; color: #fff; margin-bottom: 14px; }
-    .online-card.on { background: linear-gradient(120deg, #16a34a, #22c55e); } .online-card.off { background: linear-gradient(120deg, #475569, #64748b); }
-    .online-card button { background: #fff; color: #1d2330; border: 0; font-weight: 700; padding: 10px 16px; }
+    .online-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px; border-radius: 12px; margin-bottom: 16px; }
+    .online-card { border: 1px solid var(--line); } .online-card.on { background: var(--st-green-bg); color: var(--st-green); border-color: color-mix(in srgb, var(--st-green) 30%, transparent); } .online-card.off { background: var(--k-hover); color: var(--text); }
+    .online-card button { height: 40px; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); padding: 0 16px; }
     .route { display: grid; grid-template-columns: 26px 1fr; gap: 4px 10px; margin: 10px 0; }
     .route .pin { font-size: 18px; }
     .bigbtn { width: 100%; padding: 14px; font-size: 16px; font-weight: 700; }
@@ -28,13 +30,14 @@
 </main>
 
 <script src="/static/common.js"></script>
+<script src="/static/ds.js"></script>
 <script>
 let me;
 async function loadSummary() {
   const s = await api("/api/rider/summary");
   const online = s.status !== "offline";
   $("#online").className = `online-card ${online ? "on" : "off"}`;
-  $("#online").innerHTML = `<div><div style="font-size:20px; font-weight:800">${online ? (s.status === "busy" ? "🛵 On a delivery" : "🟢 You're online") : "⚪ You're offline"}</div>
+  $("#online").innerHTML = `<div><div style="font-size:20px; font-weight:800">${online ? (s.status === "busy" ? '<svg class="ic sm" aria-hidden="true"><use href="#i-bike"/></svg> On a delivery' : "You're online") : "You're offline"}</div>
     <div style="opacity:.9">${online ? "New deliveries are assigned to you automatically." : "Go online to start receiving deliveries."}${s.is_bot ? " (autopilot is driving for you)" : ""}</div></div>
     ${s.status === "busy" ? "" : `<button id="toggle">${online ? "Go offline" : "Go online"}</button>`}`;
   $("#toggle")?.addEventListener("click", async () => {
@@ -53,18 +56,18 @@ async function loadJobs() {
     return `<div class="job new">
       <div class="row" style="justify-content:space-between"><b>Order #${j.order_id} · parcel ${j.shipment_id}</b>${badge(j.status)}</div>
       <div class="route">
-        <span class="pin">🏪</span><div><b>Pick up</b> from ${esc(j.vendor_name)}<div class="muted small">${esc(j.pickup_city || "")}</div></div>
-        <span class="pin">🏠</span><div><b>Deliver</b> to ${esc(j.customer)}<div class="muted small">${esc(j.shipping_city)}, ${esc(j.shipping_country)}${j.customer_phone ? " · " + esc(j.customer_phone) : ""}</div></div>
+        <span class="pin"><svg class="ic sm" aria-hidden="true"><use href="#i-store"/></svg></span><div><b>Pick up</b> from ${esc(j.vendor_name)}<div class="muted small">${esc(j.pickup_city || "")}</div></div>
+        <span class="pin"><svg class="ic sm" aria-hidden="true"><use href="#i-house"/></svg></span><div><b>Deliver</b> to ${esc(j.customer)}<div class="muted small">${esc(j.shipping_city)}, ${esc(j.shipping_country)}${j.customer_phone ? " · " + esc(j.customer_phone) : ""}</div></div>
       </div>
-      <div class="row small" style="margin-bottom:10px">📦 ${j.units} item(s) · parcel value ${money(j.parcel_value)} · you earn <b>${money(j.delivery_fee)}</b></div>
-      ${cod ? `<div class="cod" style="margin-bottom:10px">💵 Collect cash on delivery for the order</div>` : `<div class="muted small" style="margin-bottom:10px">✔ Already paid online - nothing to collect</div>`}
+      <div class="row small" style="margin-bottom:10px"><svg class="ic sm" aria-hidden="true"><use href="#i-package"/></svg> ${j.units} item(s) · parcel value ${money(j.parcel_value)} · you earn <b>${money(j.delivery_fee)}</b></div>
+      ${cod ? `<div class="cod" style="margin-bottom:10px"><svg class="ic sm" aria-hidden="true"><use href="#i-banknote"/></svg> Collect cash on delivery for the order</div>` : `<div class="muted small" style="margin-bottom:10px"><svg class="ic sm" aria-hidden="true"><use href="#i-check"/></svg> Already paid online - nothing to collect</div>`}
       ${j.status === "assigned" ? `<button class="primary bigbtn" data-act="pickup" data-id="${j.shipment_id}">I've picked up the parcel</button>` : ""}
-      ${j.status === "picked_up" ? `<button class="buy bigbtn" data-act="deliver" data-id="${j.shipment_id}">Delivered to customer ✓</button>` : ""}
+      ${j.status === "picked_up" ? `<button class="buy bigbtn" data-act="deliver" data-id="${j.shipment_id}">Delivered to customer <svg class="ic sm" aria-hidden="true"><use href="#i-check"/></svg></button>` : ""}
     </div>`;
   }).join("") || `<div class="card muted">No active delivery. ${me ? "Stay online - the next parcel is assigned automatically." : ""}</div>`;
   $$("[data-act]").forEach((b) => (b.onclick = async () => {
     b.disabled = true;
-    try { await api(`/api/rider/jobs/${b.dataset.id}/${b.dataset.act}`, { method: "POST" }); toast(b.dataset.act === "pickup" ? "Picked up - head to the customer" : "Delivered! Earnings added 🎉", "good"); }
+    try { await api(`/api/rider/jobs/${b.dataset.id}/${b.dataset.act}`, { method: "POST" }); toast(b.dataset.act === "pickup" ? "Picked up - head to the customer" : "Delivered! Earnings added", "good"); }
     catch (e) { toast(e.message, "error"); }
     refresh();
   }));
@@ -80,7 +83,7 @@ const refresh = throttle(() => { loadSummary(); loadJobs(); }, 800);
   await loadSummary(); await loadJobs();
   liveEvents((ev) => {
     if (ev.kind !== "shipment") return;
-    if (ev.status === "assigned") toast(`🔔 New delivery: order #${ev.order_id} from ${ev.name}`, "good", 6000);
+    if (ev.status === "assigned") toast(`New delivery: order #${ev.order_id} from ${ev.name}`, "good", 6000);
     refresh();
   });
   setInterval(refresh, 20000);
