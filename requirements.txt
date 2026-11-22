@@ -3,3 +3,7 @@ pyodbc==5.5.0
 SQLAlchemy==2.1.9
 Faker==40.63.0
 python-dotenv==1.2.4
+
+# Phase 2 - ingestion to the bronze data lake
+pyarrow==26.0.1
+duckdb==2.0.1
