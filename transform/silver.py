@@ -183,6 +183,38 @@ TABLES: list[dict] = [
         },
     },
     {
+        "name": "commission_rules", "pk": "rule_id",
+        "clean": "SELECT * REPLACE (lower(trim(scope)) AS scope) FROM src",
+        "errors": {
+            "bad_scope": "scope NOT IN ('default','category','vendor')",
+            "rate_out_of_range": "rate < 0 OR rate > 0.5",
+        },
+        "warnings": {"unusually_high_rate": "rate > 0.25"},
+    },
+    {
+        "name": "payouts", "pk": "payout_id",
+        "clean": "SELECT * REPLACE (lower(trim(status)) AS status) FROM src",
+        "errors": {
+            "vendor_missing": "vendor_id NOT IN (SELECT vendor_id FROM silver_vendors)",
+            "non_positive_amount": "amount <= 0",
+        },
+        "warnings": {"paid_without_reference": "status = 'paid' AND (reference IS NULL OR trim(reference) = '')"},
+    },
+    {
+        "name": "ledger_entries", "pk": "entry_id",
+        "clean": "SELECT * REPLACE (lower(trim(entry_type)) AS entry_type, lower(trim(status)) AS status) FROM src",
+        "errors": {
+            "vendor_missing": "vendor_id NOT IN (SELECT vendor_id FROM silver_vendors)",
+            "order_missing": "order_id NOT IN (SELECT order_id FROM silver_orders)",
+            "bad_type": "entry_type NOT IN ('sale','commission','sale_reversal','commission_reversal','adjustment')",
+        },
+        "warnings": {
+            "sale_not_positive": "entry_type = 'sale' AND amount <= 0",
+            "commission_not_negative": "entry_type = 'commission' AND amount > 0",
+            "payout_missing": "payout_id IS NOT NULL AND payout_id NOT IN (SELECT payout_id FROM silver_payouts)",
+        },
+    },
+    {
         # The source has a password_hash column - extract.py never pulls it, so it can't reach the lake.
         "name": "users", "pk": "user_id",
         "clean": f"SELECT * REPLACE (lower(trim(email)) AS email, {tidy('display_name')} AS display_name) FROM src",

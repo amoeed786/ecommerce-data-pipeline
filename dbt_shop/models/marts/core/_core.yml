@@ -89,6 +89,29 @@ models:
       - name: net_revenue
         description: total_amount for orders that count as revenue (not cancelled/returned), else 0.
 
+  - name: fct_ledger
+    description: >
+      **Money fact** - grain: one seller-ledger entry. seller_amount is signed from the seller's side;
+      platform_revenue is the commission the marketplace kept (positive), net of returns.
+    columns:
+      - name: entry_id
+        data_tests: [unique, not_null]
+      - name: vendor_id
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_vendor'), field: vendor_id}}
+      - name: order_id
+        data_tests:
+          - relationships: {arguments: {to: ref('fct_orders'), field: order_id}}
+      - name: entry_type
+        data_tests:
+          - accepted_values:
+              arguments: {values: ['sale', 'commission', 'sale_reversal', 'commission_reversal', 'adjustment']}
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments: {values: ['pending', 'available', 'paid']}
+
   - name: dim_vendor
     description: Marketplace stores (current values). is_autopilot = the store accepts and packs by itself.
     columns:

@@ -15,6 +15,7 @@
     <button data-tab="vendors">🏪 Vendors</button>
     <button data-tab="riders">🛵 Riders</button>
     <button data-tab="users">👤 Users</button>
+    <button data-tab="finance">💰 Finance</button>
     <button data-tab="catalog">🏷️ Catalog</button>
     <button data-tab="pipeline">🛠️ Simulator &amp; pipeline</button>
   </div>
@@ -57,6 +58,33 @@
     <p class="muted small">Ready parcels go to available riders - online people first, then autopilot riders.</p>
     <div class="table-wrap" id="riders"></div></section>
   <section id="tab-users" class="card hidden"><h2>Users</h2><div class="table-wrap" id="users"></div></section>
+
+  <!-- ============ FINANCE ============ -->
+  <section id="tab-finance" class="hidden grid">
+    <div class="portal-kpis" id="fin-kpis" style="margin:0"></div>
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="row" style="justify-content:space-between"><h2>Seller balances</h2>
+          <button class="primary" id="run-payouts">💸 Run payouts</button></div>
+        <p class="muted small" style="margin-top:0" id="fin-hint"></p>
+        <div class="table-wrap" id="fin-balances"></div>
+      </div>
+      <div class="card">
+        <h2>Commission rates</h2>
+        <p class="muted small" style="margin-top:0">Most specific wins: a seller's own rate, else its category, else the default.
+          A rate is locked into each sale when it's delivered - changing it never rewrites past earnings.</p>
+        <div class="row" style="margin-bottom:10px"><b>Default</b><input type="number" id="rate-default" min="0" max="50" step="0.5" style="width:80px"> %
+          <button class="small" data-save-rate="default">Save</button></div>
+        <div class="table-wrap" id="fin-rates"></div>
+      </div>
+    </div>
+    <div class="grid cols-2">
+      <div class="card"><h2>Payouts</h2><p class="muted small" style="margin-top:0">Run payouts groups each seller's available earnings. Send the transfer, then mark it paid with the bank reference.</p>
+        <div class="table-wrap" id="fin-payouts"></div></div>
+      <div class="card"><h2>Commission earned · last 30 days</h2><div id="fin-chart"></div>
+        <p class="muted small" id="fin-gateway"></p></div>
+    </div>
+  </section>
 
   <!-- ============ CATALOG ============ -->
   <section id="tab-catalog" class="card hidden">
@@ -132,7 +160,67 @@ async function act(path, body, msg, method = "POST") {
 
 // ---------------- tabs
 const LOADERS = { control: () => { loadOverview(); loadOrders(); }, board: loadBoard, vendors: loadVendors, riders: loadRiders,
-  users: loadUsers, catalog: loadCatalog, pipeline: () => { loadAuto(); loadSim(); loadLake(); } };
+  users: loadUsers, finance: loadFinance, catalog: loadCatalog, pipeline: () => { loadAuto(); loadSim(); loadLake(); } };
+
+// ---------------- finance: commission, seller balances, payouts
+async function loadFinance() {
+  const f = await api("/api/admin/finance"), t = f.totals;
+  const tiles = [
+    ["Commission · 30 days", money(t.commission_30d), `${money(t.commission_all)} all-time - the platform's revenue`],
+    ["Sales (GMV) · 30 days", money(t.gmv_30d), "orders not cancelled or returned"],
+    ["Owed to sellers", money(t.owed_to_sellers), `${money(t.ready_for_payout)} ready to pay out now`],
+    ["Paid out to sellers", money(t.paid_out_all), "all-time"],
+    ["Refunds · 30 days", money(t.refunds_30d), `${t.awaiting_online} online payment(s) awaited · ${money(t.cod_to_collect)} cash to collect`],
+  ];
+  setHTML($("#fin-kpis"), tiles.map(([l, v, s]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="small muted">${s}</div></div>`).join(""));
+  $("#fin-hint").textContent = `Earnings are held ${f.hold_days} days after delivery (the return window), then become available. Payouts start at ${money(f.min_payout)}.`;
+  $("#fin-balances").innerHTML = table([
+    ["Seller", (b) => `<b>${esc(b.vendor_name)}</b>`], ["Available", (b) => `<b>${money(b.available)}</b>`, "num"], ["In return window", (b) => money(b.pending), "num"],
+    ["Scheduled", (b) => money(b.scheduled), "num"], ["Paid", (b) => money(b.paid), "num"], ["Commission all-time", (b) => money(b.commission), "num"],
+  ], f.balances);
+  $("#rate-default").value = (f.rules.default * 100).toFixed(1);
+  const pct = (r) => (r == null ? "" : (r * 100).toFixed(1));
+  $("#fin-rates").innerHTML = `<table><thead><tr><th>Category</th><th>Rate %</th><th></th></tr></thead><tbody>${
+    f.rules.categories.map((c) => `<tr><td>${esc(c.category_name)}</td>
+      <td><input type="number" min="0" max="50" step="0.5" value="${pct(c.rate)}" placeholder="default" id="rate-c-${c.category_id}" style="width:80px"></td>
+      <td><button class="small" data-save-rate="category" data-id="${c.category_id}">Save</button>
+        ${c.rate != null ? `<button class="small" data-clear-rate="category" data-id="${c.category_id}">Use default</button>` : ""}</td></tr>`).join("")}</tbody></table>
+    <h3 style="font-size:13px; margin:14px 0 6px">Seller overrides</h3>
+    <table><tbody>${f.rules.vendors.filter((v) => v.rate != null).map((v) => `<tr><td>${esc(v.vendor_name)}</td><td><b>${pct(v.rate)}%</b></td>
+      <td><button class="small" data-clear-rate="vendor" data-id="${v.vendor_id}">Remove</button></td></tr>`).join("") || `<tr><td class="muted small">None - every seller pays its category rate.</td></tr>`}</tbody></table>
+    <div class="row" style="margin-top:8px"><select id="ov-vendor">${f.rules.vendors.map((v) => `<option value="${v.vendor_id}">${esc(v.vendor_name)}</option>`).join("")}</select>
+      <input type="number" id="ov-rate" min="0" max="50" step="0.5" placeholder="%" style="width:80px"><button class="small" id="ov-save">Add override</button></div>`;
+  const saveRate = async (scope, id, value) => {
+    const rate_percent = value === null || value === "" ? null : +value;
+    if (await act("/api/admin/commission", { scope, target_id: id ?? null, rate_percent }, rate_percent == null ? "Override removed" : `Rate set to ${rate_percent}%`, "PUT")) loadFinance();
+  };
+  $$("[data-save-rate]").forEach((b) => (b.onclick = () => saveRate(b.dataset.saveRate, b.dataset.id ? +b.dataset.id : null,
+    b.dataset.saveRate === "default" ? $("#rate-default").value : $(`#rate-c-${b.dataset.id}`).value)));
+  $$("[data-clear-rate]").forEach((b) => (b.onclick = () => saveRate(b.dataset.clearRate, +b.dataset.id, null)));
+  $("#ov-save").onclick = () => saveRate("vendor", +$("#ov-vendor").value, $("#ov-rate").value);
+  $("#fin-payouts").innerHTML = table([
+    ["Payout", (p) => `#${p.payout_id}<div class="muted small">${fmtDateTime(p.created_at)}</div>`], ["Seller", (p) => esc(p.vendor_name)],
+    ["Amount", (p) => `<b>${money(p.amount)}</b>`, "num"],
+    ["Status", (p) => p.status === "paid" ? `<span class="badge s-delivered">paid</span><div class="muted small">${esc(p.reference || "")}</div>` : badge("processing")],
+    ["", (p) => p.status === "scheduled" ? `<button class="small primary" data-paid="${p.payout_id}">Mark paid</button>` : ""],
+  ], f.payouts);
+  $$("[data-paid]").forEach((b) => (b.onclick = async () => {
+    const ref = prompt(`Bank transfer reference for payout #${b.dataset.paid}:`);
+    if (ref && await act(`/api/admin/payouts/${b.dataset.paid}/paid`, { reference: ref }, "Payout marked paid")) loadFinance();
+  }));
+  const maxC = Math.max(1, ...f.commission_by_day.map((d) => d.commission));
+  setHTML($("#fin-chart"), `<div style="display:flex; gap:3px; align-items:flex-end; height:150px">${f.commission_by_day.map((d) =>
+    `<div title="${d.day}: ${money(d.commission)}" style="flex:1; height:${Math.max(1, d.commission / maxC * 100)}%; background:var(--accent); border-radius:3px 3px 0 0"></div>`).join("")}</div>
+    <div class="small muted" style="margin-top:6px">by delivery date · total ${money(f.commission_by_day.reduce((s, d) => s + d.commission, 0))}</div>`);
+  $("#fin-gateway").innerHTML = `Payment gateway: <b>${esc(f.gateway)}</b>${f.gateway === "sandbox" ? " (test mode - set PAYMENT_GATEWAY in .env once a real gateway adapter is added)" : ""}`;
+}
+$("#run-payouts").onclick = async () => {
+  try {
+    const r = await api("/api/admin/payouts/run", { method: "POST" });
+    toast(r.created.length ? `${r.created.length} payout(s) created - ${money(r.created.reduce((s, p) => s + p.amount, 0))}` : "Nothing ready to pay out yet", "good", 5000);
+    loadFinance();
+  } catch (e) { toast(e.message, "error"); }
+};
 
 async function loadAuto() {
   const s = await api("/api/admin/pipeline-status");
@@ -194,9 +282,9 @@ async function loadOrders() {
   const orders = filter.size ? await api("/api/admin/orders?" + new URLSearchParams([...[...filter].map((s) => ["status", s]), ["limit", 150]])) : [];
   $("#orders").innerHTML = orders.map((o) => `
     <tr class="clickable ${o.order_id === selected ? "selected" : ""} ${flashIds.has(o.order_id) ? "flash" : ""}" data-id="${o.order_id}">
-      <td><b>${o.order_id}</b></td><td>${ago(o.order_date)}</td><td>${esc(o.customer)}</td><td>${badge(o.status)}</td>
+      <td><b>${o.order_id}</b></td><td>${ago(o.order_date)}</td><td>${esc(o.customer)}</td><td>${o.awaiting_payment ? `<span class="badge s-pending">💳 awaiting payment</span>` : badge(o.status)}</td>
       <td class="num">${o.shipment_count}</td><td class="num">${money(o.total_amount)}</td>
-      <td>${o.status === "pending" ? `<button class="small primary" data-start="${o.order_id}">Start</button>` : ""}</td></tr>`).join("")
+      <td>${o.status === "pending" && !o.awaiting_payment ? `<button class="small primary" data-start="${o.order_id}">Start</button>` : ""}</td></tr>`).join("")
     || `<tr><td colspan="7" class="muted">No orders with these statuses.</td></tr>`;
   flashIds.clear();
   $$("#orders tr[data-id]").forEach((tr) => (tr.onclick = (e) => { if (!e.target.dataset.start) showOrder(+tr.dataset.id); }));

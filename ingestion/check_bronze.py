@@ -34,6 +34,9 @@ PRIMARY_KEYS = {
     "riders": "rider_id",
     "shipments": "shipment_id",
     "users": "user_id",
+    "commission_rules": "rule_id",
+    "payouts": "payout_id",
+    "ledger_entries": "entry_id",
 }
 
 

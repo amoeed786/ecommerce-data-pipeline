@@ -15,8 +15,13 @@ from __future__ import annotations
 
 import random
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
+
+try:  # imported as source_app.marketplace (web app) or as plain `marketplace` (scripts in source_app/)
+    from . import payments as pay
+except ImportError:
+    import payments as pay
 
 PAYMENT_METHODS = ["credit_card", "debit_card", "paypal", "bank_transfer", "cash_on_delivery"]
 COUPONS = {"SAVE5": Decimal("0.05"), "SAVE10": Decimal("0.10"), "SAVE20": Decimal("0.20")}
@@ -58,12 +63,16 @@ def set_setting(cur, key: str, value: str) -> None:
 # ------------------------------------------------------------------ checkout
 def create_order(cur, customer_id: int, lines: list[tuple[int, int]], payment_method: str,
                  coupon: str = "", ts: datetime | None = None,
-                 ship_city: str | None = None, ship_country: str | None = None) -> dict:
+                 ship_city: str | None = None, ship_country: str | None = None,
+                 pay_online_via_gateway: bool = False) -> dict:
     """Place an order. lines = [(product_id, quantity)]. Prices come from the database.
 
     Splits the order into one shipment per vendor, locks inventory rows while checking stock (so two
-    buyers can't take the last unit), and records the payment: online methods are paid now,
-    cash on delivery stays 'pending' until the rider delivers.
+    buyers can't take the last unit), and records the payment:
+      - cash on delivery: 'pending' until the rider delivers
+      - online, pay_online_via_gateway=True (real customers): 'pending' until the gateway confirms; the order
+        can't be started until then, and is cancelled if unpaid after PAYMENT_TIMEOUT_MINUTES
+      - online, otherwise (the simulator's fake shoppers): recorded as already paid
     """
     ts = ts or now()
     qty: dict[int, int] = defaultdict(int)
@@ -127,14 +136,20 @@ def create_order(cur, customer_id: int, lines: list[tuple[int, int]], payment_me
             "UPDATE dbo.inventory SET quantity_on_hand = quantity_on_hand - ?, updated_at = ? WHERE product_id = ?",
             q, ts, product_id,
         )
-    pay_status = "pending" if payment_method == "cash_on_delivery" else "completed"
+    if payment_method == "cash_on_delivery":
+        pay_status, provider = "pending", "cod"
+    elif pay_online_via_gateway:
+        pay_status, provider = "pending", None  # provider is set when the gateway session starts
+    else:
+        pay_status, provider = "completed", "simulator"
     cur.execute(
-        "INSERT INTO dbo.payments (order_id, payment_method, amount, payment_status, paid_at, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?,?)",
-        order_id, payment_method, total, pay_status, ts, ts, ts,
+        "INSERT INTO dbo.payments (order_id, payment_method, amount, payment_status, paid_at, provider, created_at, "
+        "updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        order_id, payment_method, total, pay_status, ts, provider, ts, ts,
     )
     return {"order_id": order_id, "status": "pending", "total_amount": float(total),
-            "shipments": len(shipment_ids), "payment_status": pay_status}
+            "shipments": len(shipment_ids), "payment_status": pay_status,
+            "needs_online_payment": pay_online_via_gateway and payment_method != "cash_on_delivery"}
 
 
 # ------------------------------------------------------------------ order status
@@ -186,6 +201,8 @@ def _move(cur, shipment_id: int, frm: tuple[str, ...], to: str, stamp_col: str |
 def start_order(cur, order_id: int, ts: datetime | None = None) -> None:
     """Admin pushes an order into fulfillment: every pending shipment goes to its vendor."""
     ts = ts or now()
+    if pay.awaiting_online_payment(cur, order_id):
+        raise MarketplaceError(f"Order #{order_id} is waiting for the customer's online payment")
     n = cur.execute(
         "UPDATE dbo.shipments SET status = 'confirmed', confirmed_at = ?, updated_at = ? "
         "WHERE order_id = ? AND status = 'pending'", ts, ts, order_id,
@@ -222,6 +239,7 @@ def rider_deliver(cur, shipment_id: int, rider_id: int | None = None, ts: dateti
     ts = ts or now()
     _check_owner(cur, shipment_id, "rider_id", rider_id)
     _move(cur, shipment_id, ("picked_up",), "delivered", "delivered_at", ts)
+    pay.record_delivery(cur, shipment_id, ts)  # credit the seller: sale - commission, held for the return window
     cur.execute(  # free the rider unless they still carry something
         "UPDATE r SET status = 'available', updated_at = ? FROM dbo.riders r "
         "WHERE r.rider_id = (SELECT rider_id FROM dbo.shipments WHERE shipment_id = ?) AND r.status = 'busy' "
@@ -248,10 +266,7 @@ def cancel_order(cur, order_id: int, customer_id: int | None = None, ts: datetim
         "FROM dbo.inventory inv JOIN dbo.order_items oi ON oi.product_id = inv.product_id WHERE oi.order_id = ?",
         ts, order_id,
     )
-    cur.execute(
-        "UPDATE dbo.payments SET payment_status = CASE payment_status WHEN 'completed' THEN 'refunded' ELSE 'failed' END, "
-        "updated_at = ? WHERE order_id = ? AND payment_status IN ('completed','pending')", ts, order_id,
-    )
+    pay.refund_payment(cur, order_id, ts)  # online: refunded through the gateway; unpaid/COD: marked failed
     cur.execute("UPDATE dbo.orders SET status = 'cancelled', updated_at = ? WHERE order_id = ?", ts, order_id)
 
 
@@ -264,10 +279,14 @@ def return_order(cur, order_id: int, customer_id: int | None = None, ts: datetim
         raise MarketplaceError("This is not your order")
     if row.status != "delivered":
         raise MarketplaceError("Only delivered orders can be returned")
+    if customer_id is not None:  # customers get the return window; admins can still accept a late return
+        last = cur.execute("SELECT MAX(delivered_at) FROM dbo.shipments WHERE order_id = ?", order_id).fetchval()
+        if last and last < ts - timedelta(days=pay.HOLD_DAYS):
+            raise MarketplaceError(f"The {pay.HOLD_DAYS:g}-day return window for this order has ended")
     cur.execute("UPDATE dbo.shipments SET status = 'returned', updated_at = ? WHERE order_id = ? AND status = 'delivered'",
                 ts, order_id)
-    cur.execute("UPDATE dbo.payments SET payment_status = 'refunded', updated_at = ? WHERE order_id = ? "
-                "AND payment_status = 'completed'", ts, order_id)
+    pay.refund_payment(cur, order_id, ts)  # give the customer their money back
+    pay.record_return(cur, order_id, ts)   # and take the sale (net of commission) back from the seller
     cur.execute("UPDATE dbo.orders SET status = 'returned', updated_at = ? WHERE order_id = ?", ts, order_id)
 
 
@@ -312,7 +331,9 @@ def engine_tick(conn, ts: datetime | None = None) -> dict[str, int]:
         for (oid,) in cur.execute(
             "SELECT TOP 50 o.order_id FROM dbo.orders o WHERE o.status = 'pending' "
             "AND o.order_date <= DATEADD(second, -CAST(3 / ? AS INT), ?) "
-            "AND EXISTS (SELECT 1 FROM dbo.shipments s WHERE s.order_id = o.order_id AND s.status = 'pending')",
+            "AND EXISTS (SELECT 1 FROM dbo.shipments s WHERE s.order_id = o.order_id AND s.status = 'pending') "
+            "AND NOT EXISTS (SELECT 1 FROM dbo.payments p WHERE p.order_id = o.order_id AND p.payment_status = 'pending' "
+            "                AND p.payment_method <> 'cash_on_delivery')",  # online orders wait for their payment
             speed, ts,
         ).fetchall():
             try:
@@ -346,6 +367,14 @@ def engine_tick(conn, ts: datetime | None = None) -> dict[str, int]:
         f"WHERE s.status = 'assigned' AND {due('assigned_at', 6, 8)}", (ts,), rider_pickup)
     run("rider_delivered", f"SELECT TOP 50 s.shipment_id FROM dbo.shipments s {bot_rider} "
         f"WHERE s.status = 'picked_up' AND {due('picked_up_at', 10, 20)}", (ts,), rider_deliver)
+    # money housekeeping: earnings past the return window become payable; abandoned online payments expire
+    n = pay.release_available(cur, ts)
+    expired = pay.expire_unpaid_orders(cur, ts, cancel_order)
+    conn.commit()
+    if n:
+        done["earnings_released"] += n
+    if expired:
+        done["unpaid_orders_expired"] += expired
     return dict(done)
 
 

@@ -27,3 +27,9 @@ sources:
         description: One parcel per vendor per order, with a timestamp for every fulfilment step.
       - name: users
         description: Login accounts (no password data - excluded at extraction).
+      - name: commission_rules
+        description: Commission rates (default / per category / per seller).
+      - name: payouts
+        description: Transfers of seller earnings.
+      - name: ledger_entries
+        description: Seller ledger - sale (+), commission (-), and their reversals on returns.

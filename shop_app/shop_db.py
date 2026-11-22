@@ -2,6 +2,7 @@
 this module is the SQL behind each screen (storefront, customer, vendor, rider, admin)."""
 from __future__ import annotations
 
+import os
 import sys
 import threading
 import time
@@ -239,7 +240,9 @@ def update_profile(customer_id: int, phone: str, city: str, country: str) -> Non
 ORDER_HEAD = """
     SELECT o.order_id, o.customer_id, c.first_name + ' ' + c.last_name AS customer, c.email, o.order_date, o.status,
            o.total_amount, o.shipping_city, o.shipping_country, o.updated_at,
-           p.payment_method, p.payment_status,
+           p.payment_method, p.payment_status, p.failure_reason AS payment_failure, p.provider AS payment_provider,
+           CASE WHEN p.payment_status = 'pending' AND p.payment_method <> 'cash_on_delivery' AND o.status = 'pending'
+                THEN 1 ELSE 0 END AS awaiting_payment,
            (SELECT COUNT(*) FROM dbo.order_items i WHERE i.order_id = o.order_id) AS items,
            (SELECT COUNT(*) FROM dbo.shipments s WHERE s.order_id = o.order_id) AS shipment_count
     FROM dbo.orders o
@@ -471,7 +474,8 @@ def admin_overview() -> dict:
         "shipments_by_status": query("SELECT status, COUNT(*) AS n FROM dbo.shipments "
                                      "WHERE status IN ('pending','confirmed','packing','ready','assigned','picked_up') GROUP BY status"),
         "riders_by_status": query("SELECT status, COUNT(*) AS n FROM dbo.riders GROUP BY status"),
-        "pending_orders": scalar("SELECT COUNT(*) FROM dbo.orders WHERE status = 'pending' AND order_date <= SYSDATETIME()"),
+        "pending_orders": scalar("SELECT COUNT(*) FROM dbo.orders WHERE status = 'pending' AND order_date <= SYSDATETIME()"
+                               " AND NOT EXISTS (SELECT 1 FROM dbo.payments p WHERE p.order_id = dbo.orders.order_id AND p.payment_status = 'pending' AND p.payment_method <> 'cash_on_delivery')"),
     }
 
 
@@ -543,6 +547,88 @@ def set_flag(table: str, key_col: str, key: int, column: str, value) -> None:
     clear_catalog_cache()  # store visibility / autopilot changes show up on the storefront right away
     if not execute(f"UPDATE dbo.{table} SET {column} = ?, updated_at = ? WHERE {key_col} = ?", value, mp.now(), key):
         raise ShopError("Not found")
+
+
+# ================================================================== money: seller earnings + admin finance
+LEDGER_SQL = """
+    SELECT TOP ({n}) l.entry_id, l.order_id, l.shipment_id, l.entry_type, l.amount, l.commission_rate, l.status,
+           l.available_at, l.created_at, l.payout_id, p.product_name
+    FROM dbo.ledger_entries l
+    LEFT JOIN dbo.order_items i ON i.order_item_id = l.order_item_id
+    LEFT JOIN dbo.products p ON p.product_id = i.product_id
+    WHERE l.vendor_id = ? ORDER BY l.created_at DESC, l.entry_id DESC
+"""
+
+
+def vendor_earnings(vendor_id: int) -> dict:
+    with tx() as cur:
+        balance = mp.pay.vendor_balances(cur, vendor_id)[0]
+        rates = mp.pay.commission_rates(cur)
+    return {
+        "balance": balance,
+        "hold_days": mp.pay.HOLD_DAYS,
+        "min_payout": float(mp.pay.MIN_PAYOUT),
+        "rates": [{"category_name": c["category_name"],
+                   "rate": float(rates["vendor"].get(vendor_id) or rates["category"].get(c["category_id"]) or rates["default"]),
+                   "source": "your store" if vendor_id in rates["vendor"] else
+                             ("category" if c["category_id"] in rates["category"] else "default")}
+                  for c in categories()],
+        "ledger": query(LEDGER_SQL.format(n=60), vendor_id),
+        "payouts": query("SELECT TOP 20 payout_id, amount, entry_count, status, reference, created_at, paid_at "
+                         "FROM dbo.payouts WHERE vendor_id = ? ORDER BY created_at DESC", vendor_id),
+        "sales_by_day": query("""
+            SELECT CAST(created_at AS date) AS day,
+                   SUM(CASE WHEN entry_type IN ('sale','sale_reversal') THEN amount ELSE 0 END) AS sales,
+                   -SUM(CASE WHEN entry_type IN ('commission','commission_reversal') THEN amount ELSE 0 END) AS commission
+            FROM dbo.ledger_entries WHERE vendor_id = ? AND created_at >= DATEADD(day, -29, CAST(GETDATE() AS date))
+            GROUP BY CAST(created_at AS date) ORDER BY day
+        """, vendor_id),
+    }
+
+
+def finance_overview() -> dict:
+    with tx() as cur:
+        balances = mp.pay.vendor_balances(cur)
+        rates = mp.pay.commission_rates(cur)
+    totals = query_one("""
+        SELECT
+          (SELECT COALESCE(SUM(total_amount), 0) FROM dbo.orders WHERE order_date >= DATEADD(day, -30, GETDATE())
+             AND status NOT IN ('cancelled','returned')) AS gmv_30d,
+          (SELECT COALESCE(-SUM(amount), 0) FROM dbo.ledger_entries WHERE entry_type IN ('commission','commission_reversal')
+             AND created_at >= DATEADD(day, -30, GETDATE())) AS commission_30d,
+          (SELECT COALESCE(-SUM(amount), 0) FROM dbo.ledger_entries WHERE entry_type IN ('commission','commission_reversal')) AS commission_all,
+          (SELECT COALESCE(SUM(refunded_amount), 0) FROM dbo.payments WHERE payment_status = 'refunded'
+             AND updated_at >= DATEADD(day, -30, GETDATE())) AS refunds_30d,
+          (SELECT COALESCE(SUM(amount), 0) FROM dbo.payouts WHERE status = 'paid') AS paid_out_all,
+          (SELECT COUNT(*) FROM dbo.payments WHERE payment_status = 'pending' AND payment_method <> 'cash_on_delivery') AS awaiting_online,
+          (SELECT COALESCE(SUM(amount), 0) FROM dbo.payments WHERE payment_status = 'pending' AND payment_method = 'cash_on_delivery') AS cod_to_collect
+    """)
+    totals["owed_to_sellers"] = sum(b["pending"] + b["available"] + b["scheduled"] for b in balances)
+    totals["ready_for_payout"] = sum(b["available"] for b in balances if b["available"] >= float(mp.pay.MIN_PAYOUT))
+    cats = categories()
+    vendors = query("SELECT vendor_id, vendor_name FROM dbo.vendors ORDER BY vendor_name")
+    return {
+        "totals": totals, "balances": balances, "hold_days": mp.pay.HOLD_DAYS, "min_payout": float(mp.pay.MIN_PAYOUT),
+        "gateway": os.getenv("PAYMENT_GATEWAY", "sandbox"),
+        "rules": {
+            "default": float(rates["default"]),
+            "categories": [{"category_id": c["category_id"], "category_name": c["category_name"],
+                            "rate": float(rates["category"][c["category_id"]]) if c["category_id"] in rates["category"] else None}
+                           for c in cats],
+            "vendors": [{"vendor_id": v["vendor_id"], "vendor_name": v["vendor_name"],
+                         "rate": float(rates["vendor"][v["vendor_id"]]) if v["vendor_id"] in rates["vendor"] else None}
+                        for v in vendors],
+        },
+        "payouts": query("""SELECT TOP 40 p.payout_id, p.vendor_id, v.vendor_name, p.amount, p.entry_count, p.status,
+                                   p.reference, p.created_at, p.paid_at
+                            FROM dbo.payouts p JOIN dbo.vendors v ON v.vendor_id = p.vendor_id
+                            ORDER BY CASE p.status WHEN 'scheduled' THEN 0 ELSE 1 END, p.created_at DESC"""),
+        "commission_by_day": query("""
+            SELECT CAST(created_at AS date) AS day, -SUM(amount) AS commission
+            FROM dbo.ledger_entries WHERE entry_type IN ('commission','commission_reversal')
+              AND created_at >= DATEADD(day, -29, CAST(GETDATE() AS date))
+            GROUP BY CAST(created_at AS date) ORDER BY day"""),
+    }
 
 
 # ================================================================== live operations dashboard

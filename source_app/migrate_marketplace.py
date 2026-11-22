@@ -26,6 +26,7 @@ from passwords import hash_password
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 SCHEMA_FILE = Path(__file__).with_name("schema_marketplace.sql")
+PAYMENTS_SCHEMA_FILE = Path(__file__).with_name("schema_payments.sql")
 DEMO_PASSWORD = "Demo@123"
 ADMIN_PASSWORD = "Admin@123"
 
@@ -59,9 +60,10 @@ DESCRIPTIONS = {
 
 
 def run_schema(cur) -> None:
-    for batch in re.split(r"^\s*GO\s*$", SCHEMA_FILE.read_text(encoding="utf-8"), flags=re.M | re.I):
-        if batch.strip():
-            cur.execute(batch)
+    for f in (SCHEMA_FILE, PAYMENTS_SCHEMA_FILE):
+        for batch in re.split(r"^\s*GO\s*$", f.read_text(encoding="utf-8"), flags=re.M | re.I):
+            if batch.strip():
+                cur.execute(batch)
 
 
 def seed_vendors(cur, ts) -> dict[str, int]:
@@ -208,6 +210,77 @@ def seed_users(cur, vendor_ids: dict[str, int], ts) -> list[tuple[str, str, str]
     return created
 
 
+START_RATES = {"default": "0.10", "Electronics": "0.05", "Grocery": "0.06", "Books": "0.08", "Beauty": "0.12",
+               "Fashion": "0.15"}
+
+
+def seed_commission(cur) -> None:
+    import payments as pay
+    from decimal import Decimal
+    if cur.execute("SELECT COUNT(*) FROM dbo.commission_rules").fetchval():
+        return
+    pay.set_rate(cur, "default", None, Decimal(START_RATES["default"]))
+    for cat_name, cat_id in cur.execute("SELECT category_name, category_id FROM dbo.categories").fetchall():
+        if cat_name in START_RATES:
+            pay.set_rate(cur, "category", cat_id, Decimal(START_RATES[cat_name]))
+
+
+def backfill_ledger(cur, ts: datetime) -> tuple[int, int, int]:
+    """Sale + commission rows for every past delivered line, reversals for returned orders, and weekly payouts
+    (already paid) for everything that became payable before this week. Set-based: fast for 30k+ lines."""
+    import payments as pay
+    hold_hours = int(pay.HOLD_DAYS * 24)
+    added = cur.execute(f"""
+        INSERT INTO dbo.ledger_entries (vendor_id, order_id, shipment_id, order_item_id, entry_type, amount,
+                                        commission_rate, status, available_at, created_at, updated_at)
+        SELECT s.vendor_id, i.order_id, s.shipment_id, i.order_item_id, t.entry_type,
+               CASE t.entry_type WHEN 'sale' THEN i.line_total ELSE -ROUND(i.line_total * r.rate, 2) END,
+               r.rate,
+               CASE WHEN DATEADD(hour, {hold_hours}, s.delivered_at) <= ? THEN 'available' ELSE 'pending' END,
+               DATEADD(hour, {hold_hours}, s.delivered_at), s.delivered_at, ?
+        FROM dbo.order_items i
+        JOIN dbo.shipments s ON s.shipment_id = i.shipment_id
+        JOIN dbo.products p ON p.product_id = i.product_id
+        CROSS APPLY (SELECT COALESCE(
+            (SELECT rate FROM dbo.commission_rules WHERE scope = 'vendor' AND vendor_id = s.vendor_id),
+            (SELECT rate FROM dbo.commission_rules WHERE scope = 'category' AND category_id = p.category_id),
+            (SELECT rate FROM dbo.commission_rules WHERE scope = 'default'), 0.10) AS rate) r
+        CROSS JOIN (VALUES ('sale'), ('commission')) t(entry_type)
+        WHERE s.status IN ('delivered', 'returned') AND s.delivered_at IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM dbo.ledger_entries l WHERE l.order_item_id = i.order_item_id AND l.entry_type = t.entry_type)
+    """, ts, ts).rowcount
+    reversed_ = cur.execute("""
+        INSERT INTO dbo.ledger_entries (vendor_id, order_id, shipment_id, order_item_id, entry_type, amount,
+                                        commission_rate, status, available_at, created_at, updated_at)
+        SELECT l.vendor_id, l.order_id, l.shipment_id, l.order_item_id, l.entry_type + '_reversal', -l.amount,
+               l.commission_rate, 'available', o.updated_at, o.updated_at, ?
+        FROM dbo.ledger_entries l JOIN dbo.orders o ON o.order_id = l.order_id
+        WHERE o.status = 'returned' AND l.entry_type IN ('sale', 'commission')
+          AND NOT EXISTS (SELECT 1 FROM dbo.ledger_entries r WHERE r.order_item_id = l.order_item_id
+                          AND r.entry_type = l.entry_type + '_reversal')
+    """, ts).rowcount
+    # settle history: one paid payout per seller per week, for everything payable before this week started
+    week_start = (ts - timedelta(days=ts.weekday())).replace(hour=0, minute=0, second=0)
+    groups = cur.execute("""
+        SELECT vendor_id, DATEADD(week, DATEDIFF(week, 0, available_at), 0) AS wk, SUM(amount), COUNT(*)
+        FROM dbo.ledger_entries WHERE status = 'available' AND payout_id IS NULL AND available_at < ?
+        GROUP BY vendor_id, DATEADD(week, DATEDIFF(week, 0, available_at), 0) HAVING SUM(amount) > 0
+    """, week_start).fetchall()
+    for vendor_id, wk, total, n in groups:
+        paid_at = min(wk + timedelta(days=7), ts)  # never a payout dated in the future
+        pid = cur.execute(
+            "INSERT INTO dbo.payouts (vendor_id, amount, entry_count, status, reference, created_at, paid_at, updated_at) "
+            "OUTPUT INSERTED.payout_id VALUES (?,?,?, 'paid', ?, ?, ?, ?)",
+            vendor_id, total, n, f"HIST-{vendor_id}-{wk:%Y%m%d}", paid_at, paid_at, ts).fetchval()
+        # same week key as the GROUP BY above (DATEDIFF(week) counts from Sunday - a plain date range would not match)
+        cur.execute("UPDATE dbo.ledger_entries SET payout_id = ?, status = 'paid', updated_at = ? "
+                    "WHERE vendor_id = ? AND status = 'available' AND payout_id IS NULL AND available_at < ? "
+                    "AND DATEADD(week, DATEDIFF(week, 0, available_at), 0) = ?", pid, ts, vendor_id, week_start, wk)
+    cur.execute("UPDATE dbo.payments SET provider = 'cod' WHERE provider IS NULL AND payment_method = 'cash_on_delivery'")
+    cur.execute("UPDATE dbo.payments SET provider = 'simulator' WHERE provider IS NULL AND payment_status <> 'pending'")
+    return added, reversed_, len(groups)
+
+
 def main() -> None:
     random.seed(7)
     ts = datetime.now().replace(microsecond=0)
@@ -240,10 +313,15 @@ def main() -> None:
                     "INSERT INTO dbo.app_settings (setting_key, setting_value) VALUES (?, ?)", key, key, value)
     created = seed_users(cur, vendor_ids, ts)
     conn.commit()
-    conn.close()
     print("5. settings + demo logins")
     for role, email, password in created:
         print(f"     {role:<9} {email:<32} {password}")
+    seed_commission(cur)
+    added, reversed_, payouts = backfill_ledger(cur, ts)
+    conn.commit()
+    conn.close()
+    print(f"6. commission + ledger: {added:,} sale/commission entries, {reversed_:,} return reversals, "
+          f"{payouts:,} past weekly payouts settled")
     print("Done. Run ingestion/extract.py to bring the new tables into the lake.")
 
 

@@ -21,7 +21,20 @@
   <div class="tabs">
     <button data-tab="orders" class="on">📦 Orders</button>
     <button data-tab="products">🏷️ Products &amp; photos</button>
+    <button data-tab="earnings">💰 Earnings</button>
   </div>
+
+  <section id="tab-earnings" class="hidden grid">
+    <div class="portal-kpis" id="earn-kpis" style="margin:0"></div>
+    <div class="grid cols-2">
+      <div class="card"><h2>Sales vs commission</h2><div id="earn-chart"></div></div>
+      <div class="card"><h2>Your commission rates</h2><p class="muted small" style="margin-top:0">Taken from each sale when the parcel is delivered. A return gives it back.</p><div class="table-wrap" id="earn-rates"></div></div>
+    </div>
+    <div class="grid cols-2">
+      <div class="card"><h2>Ledger</h2><p class="muted small" style="margin-top:0">Every sale credits you; its commission is deducted. Held during the return window, then paid out.</p><div class="table-wrap" id="earn-ledger"></div></div>
+      <div class="card"><h2>Payouts</h2><div class="table-wrap" id="earn-payouts"></div></div>
+    </div>
+  </section>
 
   <section id="tab-orders">
     <div class="stage-tabs" id="stages"></div>
@@ -80,10 +93,42 @@ const fresh = new Set();
 
 $$(".tabs button").forEach((b) => (b.onclick = () => {
   $$(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
-  $("#tab-orders").classList.toggle("hidden", b.dataset.tab !== "orders");
-  $("#tab-products").classList.toggle("hidden", b.dataset.tab !== "products");
+  ["orders", "products", "earnings"].forEach((t) => $(`#tab-${t}`).classList.toggle("hidden", b.dataset.tab !== t));
   if (b.dataset.tab === "products") loadProducts();
+  if (b.dataset.tab === "earnings") loadEarnings();
 }));
+
+// ---------------- earnings (seller ledger + payouts)
+const ENTRY_LABEL = { sale: "Sale", commission: "Commission", sale_reversal: "Return - sale reversed", commission_reversal: "Return - commission refunded", adjustment: "Adjustment" };
+async function loadEarnings() {
+  const e = await api("/api/vendor/earnings"), b = e.balance;
+  const tiles = [
+    ["Available for payout", money(b.available), b.available >= e.min_payout ? "included in the next payout run" : `payouts start at ${money(e.min_payout)}`],
+    ["In the return window", money(b.pending), `released ${e.hold_days} days after delivery`],
+    ["Payout on the way", money(b.scheduled), "scheduled, transfer pending"],
+    ["Paid to you", money(b.paid), `${money(b.gross_sales)} sales · ${money(b.commission)} commission all-time`],
+  ];
+  setHTML($("#earn-kpis"), tiles.map(([l, v, s]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="small muted">${s}</div></div>`).join(""));
+  const maxDay = Math.max(1, ...e.sales_by_day.map((d) => d.sales));
+  setHTML($("#earn-chart"), e.sales_by_day.length ? `<div style="display:flex; gap:3px; align-items:flex-end; height:140px">${e.sales_by_day.map((d) => `
+    <div title="${d.day}: sales ${money(d.sales)}, commission ${money(d.commission)}" style="flex:1; display:flex; flex-direction:column-reverse; height:100%">
+      <div style="height:${Math.max(0, (d.sales - d.commission) / maxDay * 100)}%; background:var(--accent); border-radius:3px 3px 0 0; min-height:${d.sales > 0 ? 2 : 0}px"></div>
+      <div style="height:${Math.max(0, d.commission / maxDay * 100)}%; background:var(--deal); opacity:.75"></div></div>`).join("")}</div>
+    <div class="row small muted" style="margin-top:6px"><span style="color:var(--accent)">■</span> your earnings <span style="color:var(--deal)">■</span> commission <span class="spacer"></span> last 30 days, by delivery date</div>`
+    : `<p class="muted">No deliveries in the last 30 days.</p>`);
+  setHTML($("#earn-rates"), `<table><thead><tr><th>Category</th><th class="num">Commission</th><th>Set by</th></tr></thead><tbody>${
+    e.rates.map((r) => `<tr><td>${esc(r.category_name)}</td><td class="num"><b>${(r.rate * 100).toFixed(1)}%</b></td><td class="muted small">${esc(r.source)}</td></tr>`).join("")}</tbody></table>`);
+  setHTML($("#earn-ledger"), e.ledger.length ? `<table><thead><tr><th>Date</th><th>Order</th><th>What</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>${
+    e.ledger.map((l) => `<tr><td>${fmtDateTime(l.created_at)}</td><td>#${l.order_id}<div class="muted small">${esc(l.product_name || "")}</div></td>
+      <td>${ENTRY_LABEL[l.entry_type] || l.entry_type}${l.entry_type === "commission" ? ` <span class="muted small">(${(l.commission_rate * 100).toFixed(1)}%)</span>` : ""}</td>
+      <td class="num" style="color:${l.amount < 0 ? "var(--bad)" : "var(--good)"}; font-weight:700">${l.amount < 0 ? "−" : "+"}${money(Math.abs(l.amount))}</td>
+      <td>${l.status === "pending" ? `<span class="badge s-pending">held until ${fmtDateTime(l.available_at)}</span>` : badge(l.status === "paid" ? "completed" : l.status)}</td></tr>`).join("")}</tbody></table>`
+    : `<p class="muted">No earnings yet - they appear when your first parcel is delivered.</p>`);
+  setHTML($("#earn-payouts"), e.payouts.length ? `<table><thead><tr><th>Payout</th><th class="num">Amount</th><th class="num">Entries</th><th>Status</th><th>Reference</th></tr></thead><tbody>${
+    e.payouts.map((p) => `<tr><td>#${p.payout_id}<div class="muted small">${fmtDateTime(p.created_at)}</div></td><td class="num"><b>${money(p.amount)}</b></td><td class="num">${p.entry_count}</td>
+      <td>${p.status === "paid" ? `<span class="badge s-delivered">paid ${fmtDateTime(p.paid_at)}</span>` : badge(p.status === "scheduled" ? "processing" : p.status)}</td>
+      <td class="muted small">${esc(p.reference || "-")}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">No payouts yet.</p>`);
+}
 
 async function loadSummary() {
   const s = store = await api("/api/vendor/summary");

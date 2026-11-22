@@ -56,6 +56,46 @@ Colors are in `style.css` (violet `--accent`, coral `--deal`).
 - **Seller center:** tick several orders (or "select all"), then **⚡ Accept + pack & hand to rider** in one
   click. There are also separate Accept and Mark packed buttons, and printable **packing slips**.
 
+## Payments, commission and seller payouts
+
+**Online payments** go through a pluggable gateway (`source_app/payments.py`):
+
+```
+checkout (card / PayPal / bank) ─► order 'pending', payment 'pending' ─► customer sent to the gateway's page
+   ─► gateway sends a SIGNED callback ─► payment 'completed' ─► order can now be started (admin / auto-approve)
+   declined → customer retries from the order page · never paid → order cancelled after 30 min, stock restored
+```
+
+- The built-in **sandbox gateway** works like a real one: a hosted card page at `/pay/<session>`, test cards
+  (see `TEST_ACCOUNTS.md`) and HMAC-signed callbacks.
+- Callbacks are verified, stored in `payment_events`, and processed once only, so a gateway retrying the same
+  event changes nothing.
+- The store never stores card numbers.
+- Cancellations and returns refund through the same gateway. Cash on delivery is collected by the rider at drop-off.
+- **A real gateway** means one new class with `create_session`, `verify` and `refund`, then `PAYMENT_GATEWAY=<name>`
+  in `.env`. Stripe doesn't serve Pakistani businesses, so use JazzCash, Easypaisa or a bank once you have merchant
+  credentials.
+
+**Commission and the seller ledger:**
+- **Which rate applies:** the seller's own rate, else its category's, else the default.
+  Starting rates: 10% default; Electronics 5%; Grocery 6%; Books 8%; Beauty 12%; Fashion 15%.
+  Edit them in **Admin → Finance**.
+- **Delivery:** each order line credits its seller **+sale** and **−commission**, with the rate in force at that
+  moment saved on the entry.
+- **Return window:** entries are held for `PAYOUT_HOLD_DAYS` (default 7), then become available.
+  A return writes reversals, so the seller nets zero.
+- **Payouts:** **Run payouts** groups each seller's available balance (minimum `PAYOUT_MIN_AMOUNT`). Send the
+  transfer, then **Mark paid** with the bank reference.
+- **Seller view:** sellers see all of this in **Seller center → Earnings**.
+- **Past data:** `migrate_marketplace.py` backfilled the ledger for all past deliveries and settled history into
+  weekly paid payouts.
+
+**In the pipeline:**
+- **Extract and silver:** `commission_rules`, `payouts` and `ledger_entries` are extracted and quality-checked.
+- **dbt:** builds `fct_ledger`, `mart_platform_revenue_daily` (commission, take rate, refunds) and `mart_seller_balances`.
+- **Reconciliation tests:** every delivered line is credited exactly once, and returned orders net to zero.
+- **BI:** shows a **Marketplace revenue** section.
+
 ## Run everything (one command)
 
 ```powershell

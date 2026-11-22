@@ -44,7 +44,8 @@ RUN_LOG_FILE = STATE_DIR / "ingestion_log.jsonl"
 
 # Parents before children, so a batch never holds an order whose customer isn't extracted yet.
 TABLES = ["categories", "customers", "vendors", "riders", "products", "inventory",
-          "orders", "shipments", "order_items", "payments", "users"]
+          "orders", "shipments", "order_items", "payments", "users",
+          "commission_rules", "payouts", "ledger_entries"]
 # Columns that must never leave the source system. (user_sessions and app_settings aren't extracted at all.)
 EXCLUDED_COLUMNS = {"users": {"password_hash"}}
 WATERMARK_COLUMN = "updated_at"

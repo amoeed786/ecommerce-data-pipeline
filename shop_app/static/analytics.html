@@ -44,7 +44,7 @@
   </div>
   <nav class="bi-nav" id="bi-nav">
     <a href="#overview" class="on">Overview</a><a href="#sales">Sales</a><a href="#customers">Customers</a>
-    <a href="#products">Products &amp; categories</a><a href="#sellers">Sellers</a><a href="#delivery">Delivery</a>
+    <a href="#products">Products &amp; categories</a><a href="#sellers">Sellers</a><a href="#money">Marketplace revenue</a><a href="#delivery">Delivery</a>
   </nav>
   <div id="error" class="card hidden" style="border-color: var(--bad)"></div>
 
@@ -101,6 +101,19 @@
     <div class="insight" id="ins-sellers"></div>
     <div class="card chart-card"><h3>Seller leaderboard · last 30 days</h3><p class="how">Prep = time from confirmation to packed. To door = confirmation to delivered.</p>
       <div class="table-wrap" id="sellers-table"></div><p class="source">mart_vendor_performance</p></div>
+  </section>
+
+  <section class="bi-section" id="money">
+    <h2>Marketplace revenue</h2>
+    <div class="insight" id="ins-money"></div>
+    <div class="grid cols-2">
+      <div class="card chart-card"><h3>Commission earned per day · last 90 days</h3>
+        <p class="how">The platform's own revenue: each seller's commission, counted when a parcel is delivered and given back on returns.</p>
+        <div class="chart-box tall"><canvas id="c-commission"></canvas></div><p class="source">mart_platform_revenue_daily</p></div>
+      <div class="card chart-card"><h3>Where sellers' money is</h3>
+        <p class="how">Held = inside the return window. Available = ready for the next payout run. Paid = already transferred.</p>
+        <div class="table-wrap" id="balances-table"></div><p class="source">mart_seller_balances</p></div>
+    </div>
   </section>
 
   <section class="bi-section" id="delivery">
@@ -239,6 +252,25 @@ async function load() {
     v.map((x) => `<tr><td>${x.revenue_rank}</td><td><b>${esc(x.vendor_name)}</b><div class="small">${stars(x.rating)} ${x.is_autopilot ? "· autopilot" : "· run by a person"}</div></td>
       <td class="bar-cell"><i style="width:${(x.revenue_30d / maxV) * 100}%"></i><span>${money(x.revenue_30d)}</span></td><td class="num">${int(x.shipments_30d)}</td>
       <td class="num">${mins(x.avg_prep_minutes)}</td><td class="num">${mins(x.avg_delivery_minutes)}</td><td class="num">${pct(x.cancel_rate)}</td><td class="num">${pct(x.return_rate)}</td></tr>`).join("")}</tbody></table>`;
+
+  // ---- marketplace revenue (commission)
+  const pl = a.platform || [], last30 = pl.slice(-30);
+  const comm30 = last30.reduce((s, d) => s + d.commission, 0), sales30 = last30.reduce((s, d) => s + d.delivered_sales, 0);
+  const sb = a.seller_balances || [], held = sb.reduce((s, x) => s + x.held_in_return_window, 0), avail = sb.reduce((s, x) => s + x.available, 0);
+  $("#ins-money").innerHTML = pl.length ? `${BRAND.name} earned <b>${money(comm30)}</b> in commission over the last 30 days - a
+    <b>${pct(comm30 / (sales30 || 1))}</b> take rate on ${money(sales30)} of delivered sales.
+    Sellers have <b>${money(held)}</b> held in the return window and <b>${money(avail)}</b> ready for payout.`
+    : "Run the pipeline to build the marketplace revenue marts.";
+  if (pl.length) {
+    chart("#c-commission", { type: "bar", data: { labels: pl.map((d) => day(d.date_day)), datasets: [{ label: "Commission", data: pl.map((d) => d.commission), backgroundColor: BRAND_C, ...barStyle }] },
+      options: { plugins: { tooltip: { callbacks: { label: (c) => `Commission: ${money(c.raw)} · take rate ${pct(pl[c.dataIndex].take_rate)}` } } },
+        scales: { y: { beginAtZero: true, ticks: { callback: kMoney } }, x: { ticks: { maxTicksLimit: 10 }, grid: { display: false } } } } });
+  }
+  $("#balances-table").innerHTML = sb.length ? `<table><thead><tr><th>Seller</th><th class="num">Sales</th><th class="num">Commission</th><th class="num">Rate</th>
+    <th class="num">Held</th><th class="num">Available</th><th class="num">Paid out</th></tr></thead><tbody>${
+    sb.map((x) => `<tr><td><b>${esc(x.vendor_name)}</b></td><td class="num">${money(x.gross_sales)}</td><td class="num">${money(x.commission_paid)}</td>
+      <td class="num">${pct(x.effective_rate)}</td><td class="num">${money(x.held_in_return_window)}</td><td class="num"><b>${money(x.available)}</b></td>
+      <td class="num">${money(x.paid_out)}</td></tr>`).join("")}</tbody></table>` : "";
 
   // ---- delivery
   const st = a.stage_median.filter((s) => s.minutes != null), slowest = [...st].sort((x, y) => y.minutes - x.minutes)[0];

@@ -11,7 +11,8 @@ from pathlib import Path
 from db import DATABASE, SERVER, get_connection
 
 SCHEMA_FILES = [Path(__file__).with_name("schema.sql"),               # v1: shop tables
-                Path(__file__).with_name("schema_marketplace.sql")]   # v2: vendors, riders, shipments, users
+                Path(__file__).with_name("schema_marketplace.sql"),   # v2: vendors, riders, shipments, users
+                Path(__file__).with_name("schema_payments.sql")]      # v3: online payments, commission, ledger, payouts
 
 
 def main() -> None:

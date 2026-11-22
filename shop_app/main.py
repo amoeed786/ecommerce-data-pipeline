@@ -138,6 +138,11 @@ async def shop_error(_: Request, exc: mp.MarketplaceError):
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
+@app.exception_handler(mp.pay.PaymentError)
+async def payment_error(_: Request, exc: Exception):
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
 # ================================================================== pages
 def page(file: str, *roles: str):
     """Serve a page; if it needs a role the visitor doesn't have, send them to the right sign-in page
@@ -311,10 +316,66 @@ def update_my_profile(body: Profile, user: dict = Depends(customer)):
 
 @app.post("/api/orders", tags=["customer"])
 def checkout(body: Checkout, user: dict = Depends(customer)):
+    """Place the order. Online methods return a payment_url: the customer pays on the gateway's page, and the
+    order only goes to the stores once the gateway confirms (or is cancelled if never paid)."""
     with db.tx() as cur:
-        return mp.create_order(cur, user["customer_id"], [(i.product_id, i.quantity) for i in body.items],
-                               body.payment_method, body.coupon, ship_city=body.ship_city.strip() or None,
-                               ship_country=body.ship_country.strip() or None)
+        res = mp.create_order(cur, user["customer_id"], [(i.product_id, i.quantity) for i in body.items],
+                              body.payment_method, body.coupon, ship_city=body.ship_city.strip() or None,
+                              ship_country=body.ship_country.strip() or None, pay_online_via_gateway=True)
+        if res["needs_online_payment"]:
+            res["payment_url"] = mp.pay.start_online_payment(cur, res["order_id"])
+    db.clear_catalog_cache()  # stock changed
+    return res
+
+
+@app.post("/api/me/orders/{order_id}/pay", tags=["customer"])
+def pay_my_order(order_id: int, user: dict = Depends(customer)):
+    """Start (or retry) the online payment for one of your unpaid orders."""
+    _my_order(order_id, user)
+    with db.tx() as cur:
+        return {"payment_url": mp.pay.start_online_payment(cur, order_id)}
+
+
+# ---- hosted payment page (sandbox gateway) + gateway callbacks
+class SandboxCard(BaseModel):
+    card_number: str = Field(min_length=12, max_length=23)
+    expiry: str = Field(pattern=r"^\s*(0[1-9]|1[0-2])\s*/\s*\d{2}\s*$")
+    cvc: str = Field(pattern=r"^\d{3,4}$")
+    name: str = Field(min_length=2, max_length=80)
+
+
+@app.get("/pay/{session_ref}", include_in_schema=False)
+def payment_page(session_ref: str):
+    return FileResponse(STATIC / "pay.html")  # the session ref is long and random: knowing it is the access
+
+
+@app.get("/api/pay/{session_ref}", tags=["payments"])
+def payment_session(session_ref: str):
+    with db.tx() as cur:
+        info = mp.pay.session_info(cur, session_ref)
+    if info is None:
+        raise HTTPException(404, "Payment session not found")
+    return {**info, "gateway": os.getenv("PAYMENT_GATEWAY", "sandbox")}
+
+
+@app.post("/api/pay/{session_ref}/sandbox", tags=["payments"])
+def sandbox_pay(session_ref: str, body: SandboxCard):
+    """The sandbox gateway's 'Pay' button. Card details are only checked here, never stored or logged."""
+    with db.tx() as cur:
+        return mp.pay.sandbox_pay(cur, session_ref, body.card_number)
+
+
+@app.post("/api/webhooks/{provider}", tags=["payments"])
+async def payment_webhook(provider: str, request: Request):
+    """Where a real gateway sends its signed result. The signature is checked before anything happens, and a
+    repeated event is recognised and ignored."""
+    payload = await request.body()
+    signature = request.headers.get("X-Signature", "")
+    try:
+        with db.tx() as cur:
+            return mp.pay.handle_webhook(cur, provider, payload, signature)
+    except mp.pay.PaymentError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get("/api/me/orders", tags=["customer"])
@@ -456,6 +517,11 @@ def vendor_add_product(body: NewProduct, user: dict = Depends(vendor)):
     return {"product_id": pid}
 
 
+@app.get("/api/vendor/earnings", tags=["vendor"])
+def vendor_earnings(user: dict = Depends(vendor)):
+    return db.vendor_earnings(user["vendor_id"])
+
+
 @app.post("/api/vendor/autopilot", tags=["vendor"])
 def vendor_autopilot(body: Toggle, user: dict = Depends(vendor)):
     db.set_flag("vendors", "vendor_id", user["vendor_id"], "is_bot", int(body.on))
@@ -547,7 +613,8 @@ def admin_order(order_id: int, _: dict = Depends(admin)):
 @app.post("/api/admin/orders/start-all", tags=["admin"])
 def admin_start_all(_: dict = Depends(admin)):
     ids = [r["order_id"] for r in db.query(
-        "SELECT order_id FROM dbo.orders WHERE status = 'pending' AND order_date <= SYSDATETIME()")]
+        "SELECT order_id FROM dbo.orders WHERE status = 'pending' AND order_date <= SYSDATETIME()"
+        " AND NOT EXISTS (SELECT 1 FROM dbo.payments p WHERE p.order_id = dbo.orders.order_id AND p.payment_status = 'pending' AND p.payment_method <> 'cash_on_delivery')")]
     started = 0
     for oid in ids:
         try:
@@ -591,6 +658,44 @@ def admin_shipment_action(shipment_id: int, action: str, _: dict = Depends(admin
 @app.get("/api/admin/shipments", tags=["admin"])
 def admin_shipments(_: dict = Depends(admin)):
     return db.shipments_board()
+
+
+class CommissionRule(BaseModel):
+    scope: str                          # default | category | vendor
+    target_id: int | None = None        # category_id or vendor_id
+    rate_percent: float | None = Field(default=None, ge=0, le=50)  # null removes a category/vendor override
+
+
+class PayoutPaid(BaseModel):
+    reference: str = Field(min_length=3, max_length=100)
+
+
+@app.get("/api/admin/finance", tags=["admin"])
+def admin_finance(_: dict = Depends(admin)):
+    return db.finance_overview()
+
+
+@app.put("/api/admin/commission", tags=["admin"])
+def admin_commission(body: CommissionRule, _: dict = Depends(admin)):
+    from decimal import Decimal  # noqa: PLC0415
+    rate = None if body.rate_percent is None else (Decimal(str(body.rate_percent)) / 100).quantize(Decimal("0.0001"))
+    with db.tx() as cur:
+        mp.pay.set_rate(cur, body.scope, body.target_id, rate)
+    return db.finance_overview()["rules"]
+
+
+@app.post("/api/admin/payouts/run", tags=["admin"])
+def admin_run_payouts(_: dict = Depends(admin)):
+    with db.tx() as cur:
+        mp.pay.release_available(cur, mp.now())
+        return {"created": mp.pay.run_payouts(cur, mp.now())}
+
+
+@app.post("/api/admin/payouts/{payout_id}/paid", tags=["admin"])
+def admin_payout_paid(payout_id: int, body: PayoutPaid, _: dict = Depends(admin)):
+    with db.tx() as cur:
+        mp.pay.mark_payout_paid(cur, payout_id, body.reference, mp.now())
+    return {"ok": True}
 
 
 @app.get("/api/admin/vendors", tags=["admin"])
@@ -710,6 +815,10 @@ def gold_analytics(_: dict = Depends(admin)):
             ORDER BY l.historical_ltv DESC LIMIT 10"""),
         "vendors": q(f"SELECT * FROM {g('mart_vendor_performance')} ORDER BY revenue_30d DESC") if has("mart_vendor_performance") else [],
         "delivery": q(f"SELECT * FROM {g('mart_delivery_daily')} ORDER BY date_day") if has("mart_delivery_daily") else [],
+        "platform": q(f"""SELECT date_day, delivered_sales, commission, take_rate, refunds FROM {g('mart_platform_revenue_daily')}
+                          WHERE date_day >= current_date - 90 ORDER BY date_day""") if has("mart_platform_revenue_daily") else [],
+        "seller_balances": q(f"SELECT * FROM {g('mart_seller_balances')} ORDER BY commission_paid DESC")
+                           if has("mart_seller_balances") else [],
         "daily": q(f"""SELECT date_day, orders, revenue_orders, revenue, avg_order_value, margin_pct, revenue_7d_avg,
                               cancelled_orders + returned_orders AS lost_orders
                        FROM {g('mart_daily_sales')} WHERE date_day >= current_date - 90 AND date_day < current_date ORDER BY date_day"""),

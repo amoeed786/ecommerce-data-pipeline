@@ -35,6 +35,17 @@ to handle its orders yourself.
 | ToyBox | `toybox@kartora.test` |
 | FreshMart | `freshmart@kartora.test` |
 
+## Test cards (sandbox payment gateway)
+
+Pay with a card / PayPal / bank transfer at checkout and you're sent to the payment page. Use any future
+expiry (e.g. `12/30`) and any 3-digit CVC.
+
+| Card number | Result |
+|---|---|
+| `4242 4242 4242 4242` | Payment succeeds |
+| `4000 0000 0000 0002` | Declined by the bank |
+| `4000 0000 0000 9995` | Insufficient funds |
+
 ## Coupons (checkout)
 
 | Code | Discount |

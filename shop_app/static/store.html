@@ -38,8 +38,8 @@ const S = { categories: [], products: {}, cart: JSON.parse(localStorage.getItem(
 const view = $("#view");
 const saveCart = () => { localStorage.setItem("shoplite.cart", JSON.stringify(S.cart)); $("#cartcount").textContent = S.cart.reduce((a, l) => a + l.quantity, 0); };
 const remember = (list) => list.forEach((p) => (S.products[p.product_id] = p));
-const PAYMENT_LABELS = { cash_on_delivery: ["💵", "Cash on delivery", "Pay the rider when it arrives"], credit_card: ["💳", "Credit card", "Visa, Mastercard"],
-  debit_card: ["💳", "Debit card", "Pay from your bank card"], paypal: ["🅿️", "PayPal", "Pay with your PayPal balance"], bank_transfer: ["🏦", "Bank transfer", "Direct transfer"] };
+const PAYMENT_LABELS = { cash_on_delivery: ["💵", "Cash on delivery", "Pay the rider when it arrives"], credit_card: ["💳", "Credit card", "Visa, Mastercard - pay securely on the next page"],
+  debit_card: ["💳", "Debit card", "Pay from your bank card on the next page"], paypal: ["🅿️", "PayPal", "Pay with your PayPal balance"], bank_transfer: ["🏦", "Bank transfer", "Online bank payment"] };
 const SHIP_MSG = { confirmed: "was confirmed by the store", packing: "is being packed", ready: "is packed and waiting for a rider",
   assigned: "has a rider on the way to the store", picked_up: "is on the way to you 🛵", delivered: "was delivered 🎉", cancelled: "was cancelled" };
 
@@ -293,7 +293,7 @@ async function pageCheckout() {
     <div class="section"><h2>2 · Payment</h2><div class="pay-opts">${Object.entries(PAYMENT_LABELS).map(([k, [icon, name, sub]], i) => `
       <label class="pay-opt"><input type="radio" name="pay" value="${k}" ${i ? "" : "checked"}> <span style="font-size:22px">${icon}</span>
         <span><b>${name}</b><div class="muted small">${sub}</div></span></label>`).join("")}</div>
-      <p class="muted small">Demo store - no real payment is taken. Online methods are marked paid immediately; cash is collected by the rider.</p></div>
+      <p class="muted small">🔒 Online methods take you to our secure payment page (sandbox: use test card 4242 4242 4242 4242). Your order goes to the stores as soon as the payment is confirmed. Cash is collected by the rider.</p></div>
     <div class="section"><h2>3 · Review items</h2>${Object.entries(byVendor(lines)).map(([vendor, ls]) => `
       <div style="margin-bottom:10px"><b>🏪 ${esc(vendor)}</b> <span class="muted small">· parcel ${Object.keys(byVendor(lines)).indexOf(vendor) + 1}</span>
       ${ls.map((l) => `<div class="cart-line" style="grid-template-columns:48px 1fr auto"><div style="width:48px">${productArt(l.p, "sm")}</div><div>${esc(l.p.product_name)} <span class="muted">× ${l.quantity}</span></div><b>${money(l.p.unit_price * l.quantity)}</b></div>`).join("")}</div>`).join("")}</div>
@@ -321,7 +321,7 @@ async function pageCheckout() {
       _apiCache.clear();  // stock just changed - don't show cached numbers
       if ($("#phone").value !== (prof.phone || "")) api("/api/me/profile", { method: "PUT", body: { phone: $("#phone").value, city: prof.city || "", country: prof.country || "" } });
       toast(`Order #${res.order_id} placed!`, "good", 5000);
-      location.hash = `#/orders/${res.order_id}?placed=1`;
+      if (res.payment_url) { location.href = res.payment_url; return; }  // online payment: off to the payment page`n      location.hash = `#/orders/${res.order_id}?placed=1`;
     } catch (e) { toast(e.message, "error", 6000); $("#place").disabled = false; }
   };
 }
@@ -339,7 +339,7 @@ async function pageOrders() {
   view.innerHTML = `<div class="section"><h1>My orders</h1><p class="muted small">Status updates arrive live.</p></div>
     ${orders.map((o) => `<a class="section" style="display:block; color:var(--text)" href="#/orders/${o.order_id}">
       <div class="row" style="justify-content:space-between"><div><b>Order #${o.order_id}</b> <span class="muted small">placed ${fmtDateTime(o.order_date)} · ${o.items} item(s) · ${o.shipment_count} parcel(s)</span></div>
-        <div>${badge(o.status)} <b>${money(o.total_amount)}</b></div></div>
+        <div>${o.awaiting_payment ? `<span class="badge s-pending">💳 awaiting payment</span>` : badge(o.status)} <b>${money(o.total_amount)}</b></div></div>
       <div class="row" style="margin-top:10px">${o.lines.slice(0, 6).map((l) => `<div style="width:56px" title="${esc(l.product_name)} × ${l.quantity}">${productArt(l, "sm")}</div>`).join("")}
         <span class="spacer"></span><span class="small" style="color:var(--accent)">Track order →</span></div></a>`).join("")
       || `<div class="section muted">No orders yet. <a href="#/">Start shopping</a></div>`}`;
@@ -348,8 +348,14 @@ async function pageOrders() {
 async function pageOrder(id) {
   if (!(await needCustomer())) return;
   const o = await api(`/api/me/orders/${id}`);
-  const placed = hashQuery().get("placed");
+  const placed = hashQuery().get("placed"), paid = hashQuery().get("paid");
   view.innerHTML = `
+    ${o.awaiting_payment ? `<div class="section" style="border-color:var(--warn); background:color-mix(in srgb, var(--warn) 9%, var(--panel))">
+      <div class="row" style="justify-content:space-between"><div><h1 style="margin:0">💳 Awaiting payment</h1>
+        <p class="muted" style="margin:4px 0 0">${o.payment_failure ? `Last attempt failed: <b>${esc(o.payment_failure)}</b>. ` : ""}Your order goes to the stores as soon as it's paid. Unpaid orders are cancelled after 30 minutes.</p></div>
+        <button class="buy" id="paynow" style="padding:12px 22px; font-weight:800">Pay ${money(o.total_amount)} now</button></div></div>` : ""}
+    ${paid && !o.awaiting_payment ? `<div class="section" style="border-color:var(--good); background:color-mix(in srgb, var(--good) 8%, var(--panel))">
+      <h1>✅ Payment received - thank you!</h1><p class="muted" style="margin:0">Your order is now with the stores. Follow it live below.</p></div>` : ""}
     ${placed ? `<div class="section" style="border-color:var(--good); background:color-mix(in srgb, var(--good) 8%, var(--panel))">
       <h1>🎉 Thank you! Your order is placed.</h1><p class="muted" style="margin:0">We'll update this page live as stores pack your parcels and riders bring them to you.</p></div>` : ""}
     <div class="section"><div class="row" style="justify-content:space-between">
@@ -364,6 +370,10 @@ async function pageOrder(id) {
       ${o.lines.filter((l) => l.shipment_id === s.shipment_id).map((l) => `<div class="cart-line" style="grid-template-columns:56px 1fr auto">
         <a href="#/p/${l.product_id}" style="width:56px">${productArt(l, "sm")}</a><div>${esc(l.product_name)} <span class="muted">× ${l.quantity}</span>
         ${l.discount > 0 ? `<span class="badge s-delivered">${Math.round(l.discount * 100)}% coupon</span>` : ""}</div><b>${money(l.line_total)}</b></div>`).join("")}</div>`).join("")}`;
+  $("#paynow")?.addEventListener("click", async () => {
+    try { location.href = (await api(`/api/me/orders/${id}/pay`, { method: "POST" })).payment_url; }
+    catch (e) { toast(e.message, "error"); }
+  });
   $("#cancel")?.addEventListener("click", async () => {
     if (!confirm("Cancel this order? Online payments are refunded.")) return;
     try { await api(`/api/me/orders/${id}/cancel`, { method: "POST" }); toast("Order cancelled"); render(); } catch (e) { toast(e.message, "error"); }

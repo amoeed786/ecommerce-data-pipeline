@@ -51,5 +51,17 @@ models:
       - name: date_day
         data_tests: [unique, not_null]
 
+  - name: mart_platform_revenue_daily
+    description: Per delivery day - delivered sales, commission earned (the platform's revenue), take rate, refunds.
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+
+  - name: mart_seller_balances
+    description: Per seller - gross sales, commission paid, effective rate, and money held / available / paid out.
+    columns:
+      - name: vendor_id
+        data_tests: [unique, not_null]
+
   - name: mart_revenue_forecast
     description: Last 90 days of actual revenue plus a 30-day forecast (linear trend x weekday seasonality).
