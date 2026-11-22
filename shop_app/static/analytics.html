@@ -13,10 +13,12 @@
     .bi-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
     .fresh { display: inline-flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 12px; }
     .fresh::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
-    .bi-nav { position: sticky; top: 57px; z-index: 12; background: var(--bg); padding: 8px 0; margin-bottom: 8px; display: flex; gap: 6px; overflow-x: auto; }
+    .bi-nav { position: sticky; top: 0; z-index: 12; background: var(--k-bg); padding: 10px 0; margin: 0 0 12px; display: flex; gap: 6px; overflow-x: auto;
+      scrollbar-width: none; border-bottom: 1px solid var(--line); }
+    .bi-nav::-webkit-scrollbar { display: none; }
     .bi-nav a { padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--text); white-space: nowrap; font-size: 13px; }
     .bi-nav a.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-    .bi-section { scroll-margin-top: 110px; margin-bottom: 28px; }
+    .bi-section { scroll-margin-top: 64px; margin-bottom: 28px; }
     .bi-section > h2 { font-size: 20px; margin: 4px 0 4px; }
     .insight { background: var(--accent-soft); border-left: 4px solid var(--accent); border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 8px 0 14px; font-size: 14px; }
     .insight b { color: var(--accent-strong); }
@@ -27,9 +29,10 @@
     .delta.up { color: var(--good); } .delta.down { color: var(--bad); }
     .kpi .help { font-size: 11px; color: var(--muted); margin-top: 4px; }
     .heat td.cell { text-align: center; font-variant-numeric: tabular-nums; font-size: 12px; min-width: 52px; }
-    .bar-cell { position: relative; min-width: 140px; }
-    .bar-cell i { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 8px; border-radius: 4px; background: var(--accent); opacity: .25; }
-    .bar-cell span { position: relative; }
+    .barc { display: flex; align-items: center; gap: 10px; min-width: 220px; }
+    .barc .v { min-width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+    .barc .track { flex: 1; min-width: 60px; height: 6px; border-radius: 3px; background: var(--k-hover); overflow: hidden; }
+    .barc .track i { display: block; height: 100%; border-radius: 3px; background: var(--accent); opacity: .7; }
     .seg-list { display: grid; gap: 8px; }
     .seg { display: grid; grid-template-columns: 150px 1fr 90px; gap: 10px; align-items: center; font-size: 13px; }
     .seg .track { height: 10px; background: var(--bg); border-radius: 5px; overflow: hidden; }
@@ -110,10 +113,10 @@
     <h2>Marketplace revenue</h2>
     <div class="insight" id="ins-money"></div>
     <div class="grid cols-2">
-      <div class="card chart-card"><h3>Commission earned per day · last 90 days</h3>
+      <div class="card chart-card" style="grid-column: 1 / -1"><h3>Commission earned per day · last 90 days</h3>
         <p class="how">The platform's own revenue: each seller's commission, counted when a parcel is delivered and given back on returns.</p>
         <div class="chart-box tall"><canvas id="c-commission"></canvas></div><p class="source">mart_platform_revenue_daily</p></div>
-      <div class="card chart-card"><h3>Where sellers' money is</h3>
+      <div class="card chart-card" style="grid-column: 1 / -1"><h3>Where sellers' money is</h3>
         <p class="how">Held = inside the return window. Available = ready for the next payout run. Paid = already transferred.</p>
         <div class="table-wrap" id="balances-table"></div><p class="source">mart_seller_balances</p></div>
     </div>
@@ -244,7 +247,7 @@ async function load() {
   const maxPR = Math.max(...a.top_products.map((p) => p.revenue));
   $("#products-table").innerHTML = `<table><thead><tr><th>#</th><th>Product</th><th>Revenue</th><th class="num">Units</th><th class="num">Margin</th><th class="num">Returns</th><th class="num">Stock</th></tr></thead><tbody>${
     a.top_products.map((p) => `<tr><td>${p.revenue_rank}</td><td><b>${esc(p.product_name)}</b><div class="small"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${catColor(p.category_name)}"></span> ${esc(p.category_name)} · ${money(p.current_price)}</div></td>
-      <td class="bar-cell"><i style="width:${(p.revenue / maxPR) * 100}%"></i><span>${money(p.revenue)}</span></td><td class="num">${int(p.units_sold)}</td>
+      <td><div class="barc"><span class="v">${money(p.revenue)}</span><span class="track"><i style="width:${(p.revenue / maxPR) * 100}%"></i></span></div></td><td class="num">${int(p.units_sold)}</td>
       <td class="num">${pct(p.margin_pct, 0)}</td><td class="num">${pct(p.return_rate)}</td><td class="num ${p.stock < 20 ? "stock-low" : ""}">${int(p.stock)}</td></tr>`).join("")}</tbody></table>`;
 
   // ---- sellers
@@ -254,7 +257,7 @@ async function load() {
   const maxV = Math.max(...v.map((x) => x.revenue_30d), 1);
   $("#sellers-table").innerHTML = `<table><thead><tr><th>#</th><th>Seller</th><th>Revenue</th><th class="num">Parcels</th><th class="num">Avg prep</th><th class="num">Avg to door</th><th class="num">Cancelled</th><th class="num">Returned</th></tr></thead><tbody>${
     v.map((x) => `<tr><td>${x.revenue_rank}</td><td><b>${esc(x.vendor_name)}</b><div class="small">${stars(x.rating)} ${x.is_autopilot ? "· autopilot" : "· run by a person"}</div></td>
-      <td class="bar-cell"><i style="width:${(x.revenue_30d / maxV) * 100}%"></i><span>${money(x.revenue_30d)}</span></td><td class="num">${int(x.shipments_30d)}</td>
+      <td><div class="barc"><span class="v">${money(x.revenue_30d)}</span><span class="track"><i style="width:${(x.revenue_30d / maxV) * 100}%"></i></span></div></td><td class="num">${int(x.shipments_30d)}</td>
       <td class="num">${mins(x.avg_prep_minutes)}</td><td class="num">${mins(x.avg_delivery_minutes)}</td><td class="num">${pct(x.cancel_rate)}</td><td class="num">${pct(x.return_rate)}</td></tr>`).join("")}</tbody></table>`;
 
   // ---- marketplace revenue (commission)
@@ -283,7 +286,7 @@ async function load() {
     Riders delivered <b>${int(d30.reduce((s, d) => s + d.deliveries, 0))}</b> parcels in the last 30 days.
     <span class="muted">(Older orders were imported with multi-day courier times; new marketplace orders are measured in minutes.)</span>`;
   chart("#c-stages", { type: "bar", data: { labels: st.map((s) => s.stage), datasets: [{ label: "Median minutes", data: st.map((s) => s.minutes), backgroundColor: BRAND_C, ...barStyle }] },
-    options: { indexAxis: "y", plugins: { tooltip: { callbacks: { label: (c) => `typical: ${mins(c.raw)}` } } }, scales: { x: { type: "logarithmic", ticks: { callback: (val) => mins(val) } }, y: { grid: { display: false } } } } });
+    options: { indexAxis: "y", plugins: { tooltip: { callbacks: { label: (c) => `typical: ${mins(c.raw)}` } } }, scales: { x: { type: "logarithmic", ticks: { autoSkip: false, callback: (val) => ([1, 2, 5, 10, 20, 30, 60, 120, 240, 480].includes(Math.round(val * 100) / 100) ? mins(val) : "") } }, y: { grid: { display: false } } } } });
   chart("#c-deliveries", { type: "bar", data: { labels: d30.map((d) => day(d.date_day)), datasets: [{ label: "Parcels delivered", data: d30.map((d) => d.deliveries), backgroundColor: SERIES[2], ...barStyle }] },
     options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { ticks: { maxTicksLimit: 10 }, grid: { display: false } } } } });
 }
