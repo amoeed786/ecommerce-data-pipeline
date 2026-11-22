@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShopLite Analytics</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    .delta { font-size: 12px; font-weight: 600; }
+    .delta.up { color: var(--good); } .delta.down { color: var(--bad); }
+    .heat td.cell { text-align: center; font-variant-numeric: tabular-nums; font-size: 12px; }
+    .source { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">Shop<span>Lite</span> <span class="muted small">analytics</span></div>
+  <nav><a href="/">Shop</a><a href="/admin">Admin</a><a href="/dashboard">Dashboard</a><a href="/analytics">Analytics</a><a href="/docs" target="_blank">API</a></nav>
+  <div class="spacer"></div>
+  <span class="muted small" id="built"></span>
+  <button id="reload" class="small">Reload</button>
+</header>
+
+<main>
+  <p class="muted small" style="margin-top:0">Built from the <b>gold layer</b> (<code>data_lake/gold/*.parquet</code>, made by dbt). It's as fresh as the
+    last pipeline run - refresh it from Admin → Simulator &amp; pipeline (Extract → Build silver → dbt build → Export gold) or let Dagster's schedule do it.
+    For second-by-second numbers, see <a href="/dashboard">Dashboard</a>.</p>
+  <div id="error" class="card hidden" style="border-color: var(--bad)"></div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid cols-2" style="margin-bottom:16px">
+    <div class="card"><h2>Revenue: last 90 days + 30-day forecast</h2><div class="chart-box" style="height:280px"><canvas id="c-forecast"></canvas></div>
+      <p class="source">mart_revenue_forecast · linear trend × weekday seasonality</p></div>
+    <div class="card"><h2>Customer segments (RFM)</h2><div class="chart-box" style="height:280px"><canvas id="c-rfm"></canvas></div>
+      <p class="source">mart_customer_rfm · recency, frequency, monetary scored 1–5</p></div>
+  </div>
+
+  <div class="grid cols-2" style="margin-bottom:16px">
+    <div class="card"><h2>Revenue by category per month</h2><div class="chart-box" style="height:280px"><canvas id="c-category"></canvas></div>
+      <p class="source">mart_category_monthly</p></div>
+    <div class="card"><h2>Cohort retention</h2>
+      <p class="muted small" style="margin:0 0 8px">Of the customers whose first order was in a month, the share who ordered again N months later.</p>
+      <div class="table-wrap"><table class="heat" id="cohorts"></table></div>
+      <p class="source">mart_cohort_retention</p></div>
+  </div>
+
+  <div class="grid cols-even">
+    <div class="card"><h2>Top products</h2><div class="table-wrap" id="products"></div><p class="source">mart_product_performance</p></div>
+    <div class="card"><h2>Most valuable customers</h2><div class="table-wrap" id="customers"></div><p class="source">mart_customer_ltv + mart_customer_rfm</p></div>
+  </div>
+</main>
+
+<script src="/static/common.js"></script>
+<script>
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+Chart.defaults.color = css("--muted"); Chart.defaults.borderColor = css("--line");
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily; Chart.defaults.maintainAspectRatio = false;
+const ACCENT = css("--accent");
+const PALETTE = ["#2f6fed", "#1f9d55", "#e0a526", "#7c5ce0", "#d64545", "#13a3b5", "#e0679b", "#8a93a6"];
+const SEGMENT_COLORS = { "Champions": "#1f9d55", "Loyal": "#2f6fed", "Potential loyalist": "#13a3b5", "New customer": "#7c5ce0",
+  "Needs attention": "#e0a526", "At risk": "#e07b39", "Cannot lose them": "#d64545", "Hibernating": "#8a93a6" };
+const pct = (v) => (v == null ? "–" : (v * 100).toFixed(1) + "%");
+const kMoney = (v) => "$" + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(v >= 100000 ? 0 : 1) + "k" : Math.round(v));
+const charts = {};
+
+function delta(cur, prev) {
+  if (!prev) return "";
+  const d = cur / prev - 1;
+  return `<span class="delta ${d >= 0 ? "up" : "down"}">${d >= 0 ? "▲" : "▼"} ${(Math.abs(d) * 100).toFixed(1)}% vs prev 30d</span>`;
+}
+
+function chart(id, config) { charts[id]?.destroy(); charts[id] = new Chart($(id), config); }
+
+async function load() {
+  let a;
+  try { a = await api("/api/analytics"); $("#error").classList.add("hidden"); }
+  catch (e) { $("#error").classList.remove("hidden"); $("#error").textContent = e.message; return; }
+  $("#built").textContent = "gold built " + fmtDateTime(a.built_at);
+
+  const k = a.kpis;
+  const tiles = [
+    ["Revenue · last 30 days", money(k.revenue_30d), delta(k.revenue_30d, k.revenue_prev_30d)],
+    ["Orders · last 30 days", int(k.orders_30d), delta(k.orders_30d, k.orders_prev_30d)],
+    ["Avg order value", money(k.revenue_30d / k.orders_30d), ""],
+    ["Gross margin", pct(k.margin_30d / k.revenue_30d), money(k.margin_30d) + " profit"],
+    ["Cancelled + returned", pct(k.lost_orders_30d / k.all_orders_30d), int(k.lost_orders_30d) + " orders"],
+  ];
+  $("#kpis").innerHTML = tiles.map(([l, v, s]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="small muted">${s}</div></div>`).join("");
+
+  const days = a.forecast.map((r) => new Date(r.date_day + "T00:00").toLocaleDateString([], { month: "short", day: "numeric" }));
+  chart("#c-forecast", { type: "line", data: { labels: days, datasets: [
+      { label: "Actual", data: a.forecast.map((r) => r.revenue), borderColor: ACCENT, backgroundColor: ACCENT + "22", fill: true, pointRadius: 0, tension: .25 },
+      { label: "Forecast", data: a.forecast.map((r) => r.forecast), borderColor: css("--warn"), borderDash: [6, 4], pointRadius: 0, tension: .25 }] },
+    options: { plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true, ticks: { callback: kMoney } }, x: { ticks: { maxTicksLimit: 10 }, grid: { display: false } } } } });
+
+  chart("#c-rfm", { type: "bar", data: { labels: a.rfm.map((r) => r.segment), datasets: [
+      { data: a.rfm.map((r) => r.customers), backgroundColor: a.rfm.map((r) => SEGMENT_COLORS[r.segment] || ACCENT), borderRadius: 4 }] },
+    options: { indexAxis: "y", plugins: { legend: { display: false }, tooltip: { callbacks: {
+      afterLabel: (c) => `avg spend ${money(a.rfm[c.dataIndex].avg_spend)} · last order ~${a.rfm[c.dataIndex].avg_recency} days ago` } } },
+      scales: { y: { grid: { display: false } } } } });
+
+  const months = [...new Set(a.category_monthly.map((r) => r.year_month))];
+  const cats = [...new Set(a.category_monthly.map((r) => r.category_name))];
+  chart("#c-category", { type: "bar", data: { labels: months, datasets: cats.map((c, i) => ({
+      label: c, backgroundColor: PALETTE[i % PALETTE.length],
+      data: months.map((m) => a.category_monthly.find((r) => r.year_month === m && r.category_name === c)?.revenue || 0) })) },
+    options: { plugins: { legend: { display: true, position: "bottom", labels: { boxWidth: 12 } } },
+      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, ticks: { callback: kMoney } } } } });
+
+  // cohort heatmap: rows = cohort, columns = months since first order
+  const cohorts = [...new Set(a.cohorts.map((r) => r.cohort))];
+  const maxM = Math.max(...a.cohorts.map((r) => r.months_since_first));
+  const cell = (v) => v == null ? `<td class="cell"></td>`
+    : `<td class="cell" style="background: rgba(47,111,237,${(0.08 + v * 0.85).toFixed(2)}); color:${v > .5 ? "#fff" : "inherit"}">${pct(v)}</td>`;
+  $("#cohorts").innerHTML = `<thead><tr><th>Cohort</th><th class="num">Size</th>${[...Array(maxM + 1).keys()].map((m) => `<th class="num">M${m}</th>`).join("")}</tr></thead><tbody>${
+    cohorts.map((c) => { const rows = a.cohorts.filter((r) => r.cohort === c);
+      return `<tr><td>${c}</td><td class="num">${rows[0].cohort_size}</td>${[...Array(maxM + 1).keys()].map((m) => cell(rows.find((r) => r.months_since_first === m)?.retention_pct)).join("")}</tr>`; }).join("")}</tbody>`;
+
+  $("#products").innerHTML = `<table><thead><tr><th>#</th><th>Product</th><th class="num">Units</th><th class="num">Revenue</th><th class="num">Margin</th><th class="num">Returns</th><th class="num">Stock</th></tr></thead><tbody>${
+    a.top_products.map((p) => `<tr><td>${p.revenue_rank}</td><td>${esc(p.product_name)}<div class="muted small">${esc(p.category_name)} · ${money(p.current_price)}</div></td>
+      <td class="num">${int(p.units_sold)}</td><td class="num">${money(p.revenue)}</td><td class="num">${pct(p.margin_pct)}</td>
+      <td class="num">${pct(p.return_rate)}</td><td class="num ${p.stock < 20 ? "stock-low" : ""}">${int(p.stock)}</td></tr>`).join("")}</tbody></table>`;
+
+  $("#customers").innerHTML = `<table><thead><tr><th>Customer</th><th>Segment</th><th class="num">Orders</th><th class="num">Lifetime value</th><th class="num">Next 12 mo (est.)</th></tr></thead><tbody>${
+    a.top_customers.map((c) => `<tr><td>${esc(c.full_name)}<div class="muted small">#${c.customer_id} · ${esc(c.country)}</div></td>
+      <td><span class="badge" style="background:${SEGMENT_COLORS[c.segment] || "var(--line)"};color:#fff">${esc(c.segment || "–")}</span></td>
+      <td class="num">${int(c.orders)}</td><td class="num">${money(c.historical_ltv)}</td><td class="num">${money(c.predicted_12m_revenue)}</td></tr>`).join("")}</tbody></table>`;
+}
+$("#reload").onclick = load;
+load();
+</script>
+</body>
+</html>

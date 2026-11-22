@@ -9,7 +9,7 @@
 <body>
 <header>
   <div class="brand">Shop<span>Lite</span> <span class="muted small">admin</span></div>
-  <nav><a href="/">Shop</a><a href="/admin">Admin</a><a href="/dashboard">Dashboard</a><a href="/docs" target="_blank">API</a></nav>
+  <nav><a href="/">Shop</a><a href="/admin">Admin</a><a href="/dashboard">Dashboard</a><a href="/analytics">Analytics</a><a href="/docs" target="_blank">API</a></nav>
   <div class="spacer"></div>
   <span id="live" class="live">connecting…</span>
 </header>
@@ -69,11 +69,16 @@
         <h2>2 · Run a pipeline step</h2>
         <p class="muted small">Same scripts you run in the terminal. The command and its output appear below.</p>
         <div class="row">
-          <button data-step="extract" class="primary">Extract → bronze</button>
+          <button data-step="extract" class="primary">① Extract → bronze</button>
+          <button data-step="silver" class="primary">② Build silver</button>
+          <button data-step="dbt_build" class="primary">③ dbt build (gold)</button>
+          <button data-step="export_gold" class="primary">④ Export gold</button>
+        </div>
+        <div class="row" style="margin-top: 8px">
           <button data-step="check_bronze">Check bronze</button>
-          <button data-step="silver" class="primary">Build silver</button>
           <button data-step="inject_bad_data">Inject messy data</button>
           <button data-step="check_db">Check source DB</button>
+          <a class="small" href="/analytics" style="margin-left:auto">See results in Analytics →</a>
         </div>
         <pre id="step-out" class="out">Click a step…</pre>
       </div>

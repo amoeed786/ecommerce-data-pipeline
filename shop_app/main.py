@@ -7,16 +7,19 @@ Then open http://localhost:8000
 Pages (plain HTML + JavaScript in shop_app/static, data comes from the JSON API below)
     /            Shop        - customers sign in, browse, checkout, watch their orders update live
     /admin       Admin       - live order board with actions, catalog, simulator + pipeline controls
-    /dashboard   Dashboard   - live analytics
+    /dashboard   Dashboard   - live operational view (reads ShopDB directly)
+    /analytics   Analytics   - business analytics from the gold layer (forecast, RFM, cohorts, LTV)
     /docs        API docs    - FastAPI's automatic interactive documentation (try any endpoint)
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
 import duckdb
@@ -34,12 +37,18 @@ LAKE = ROOT / "data_lake"
 STATE = LAKE / "_state"
 SIM_LOG = STATE / "simulator.log"
 TABLES = ["categories", "customers", "products", "inventory", "orders", "order_items", "payments"]
+GOLD = LAKE / "gold"
+VENV_BIN = Path(sys.executable).parent
+# step -> (command shown to the user, actual argv)
 PIPELINE_STEPS = {
-    "extract": ["ingestion/extract.py"],
-    "check_bronze": ["ingestion/check_bronze.py"],
-    "silver": ["transform/silver.py"],
-    "inject_bad_data": ["source_app/inject_bad_data.py"],
-    "check_db": ["source_app/check_db.py"],
+    "extract": ("python ingestion/extract.py", [sys.executable, "ingestion/extract.py"]),
+    "check_bronze": ("python ingestion/check_bronze.py", [sys.executable, "ingestion/check_bronze.py"]),
+    "silver": ("python transform/silver.py", [sys.executable, "transform/silver.py"]),
+    "dbt_build": ("dbt build --project-dir dbt_shop --profiles-dir dbt_shop",
+                  [str(VENV_BIN / "dbt"), "build", "--project-dir", "dbt_shop", "--profiles-dir", "dbt_shop"]),
+    "export_gold": ("python transform/export_gold.py", [sys.executable, "transform/export_gold.py"]),
+    "inject_bad_data": ("python source_app/inject_bad_data.py", [sys.executable, "source_app/inject_bad_data.py"]),
+    "check_db": ("python source_app/check_db.py", [sys.executable, "source_app/check_db.py"]),
 }
 simulator: dict = {"proc": None, "interval": None}
 
@@ -76,6 +85,11 @@ def page_admin():
 @app.get("/dashboard", include_in_schema=False)
 def page_dashboard():
     return FileResponse(STATIC / "dashboard.html")
+
+
+@app.get("/analytics", include_in_schema=False)
+def page_analytics():
+    return FileResponse(STATIC / "analytics.html")
 
 
 # ------------------------------------------------------------------ catalog + customers
@@ -201,6 +215,63 @@ async def events():
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@app.get("/api/analytics", tags=["analytics"])
+def gold_analytics():
+    """Business analytics from the GOLD layer (data_lake/gold/*.parquet, built by dbt + export_gold).
+    Unlike /api/stats (live ShopDB), this is as fresh as the last pipeline run."""
+    if not (GOLD / "mart_daily_sales.parquet").exists():
+        raise HTTPException(404, "No gold data yet - run the pipeline: extract, silver, dbt build, export gold.")
+    con = duckdb.connect()
+
+    def g(table: str) -> str:
+        return f"read_parquet('{(GOLD / f'{table}.parquet').as_posix()}')"
+
+    def q(sql: str) -> list[dict]:
+        cur = con.execute(sql)
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, map(db._jsonable, row))) for row in cur.fetchall()]
+
+    kpis = q(f"""
+        WITH d AS (SELECT * FROM {g('mart_daily_sales')} WHERE date_day < current_date)
+        SELECT
+          sum(revenue)        FILTER (WHERE date_day >= current_date - 30) AS revenue_30d,
+          sum(revenue)        FILTER (WHERE date_day <  current_date - 30 AND date_day >= current_date - 60) AS revenue_prev_30d,
+          sum(revenue_orders) FILTER (WHERE date_day >= current_date - 30) AS orders_30d,
+          sum(revenue_orders) FILTER (WHERE date_day <  current_date - 30 AND date_day >= current_date - 60) AS orders_prev_30d,
+          sum(gross_margin)   FILTER (WHERE date_day >= current_date - 30) AS margin_30d,
+          sum(cancelled_orders + returned_orders) FILTER (WHERE date_day >= current_date - 30) AS lost_orders_30d,
+          sum(orders)         FILTER (WHERE date_day >= current_date - 30) AS all_orders_30d
+        FROM d
+    """)[0]
+    return {
+        "built_at": db._jsonable(datetime.fromtimestamp((GOLD / "mart_daily_sales.parquet").stat().st_mtime)),
+        "kpis": kpis,
+        "forecast": q(f"SELECT date_day, kind, revenue, forecast FROM {g('mart_revenue_forecast')} ORDER BY date_day"),
+        "category_monthly": q(f"""
+            SELECT category_name, year_month, revenue FROM {g('mart_category_monthly')}
+            WHERE year_month >= strftime(current_date - INTERVAL 6 MONTH, '%Y-%m') ORDER BY year_month, category_name
+        """),
+        "rfm": q(f"""
+            SELECT segment, count(*) AS customers, round(avg(monetary), 2) AS avg_spend, round(avg(recency_days)) AS avg_recency
+            FROM {g('mart_customer_rfm')} GROUP BY segment ORDER BY customers DESC
+        """),
+        "cohorts": q(f"""
+            SELECT cohort, months_since_first, cohort_size, retention_pct FROM {g('mart_cohort_retention')}
+            WHERE cohort >= strftime(current_date - INTERVAL 9 MONTH, '%Y-%m') AND months_since_first <= 6
+            ORDER BY cohort, months_since_first
+        """),
+        "top_products": q(f"""
+            SELECT revenue_rank, product_name, category_name, current_price, units_sold, revenue, margin_pct, return_rate, stock
+            FROM {g('mart_product_performance')} ORDER BY revenue_rank LIMIT 10
+        """),
+        "top_customers": q(f"""
+            SELECT l.customer_id, l.full_name, l.country, l.orders, l.historical_ltv, l.predicted_12m_revenue, r.segment
+            FROM {g('mart_customer_ltv')} l LEFT JOIN {g('mart_customer_rfm')} r USING (customer_id)
+            ORDER BY l.historical_ltv DESC LIMIT 10
+        """),
+    }
+
+
 # ------------------------------------------------------------------ simulator + pipeline
 def _sim_running() -> bool:
     return simulator["proc"] is not None and simulator["proc"].poll() is None
@@ -238,10 +309,10 @@ def simulator_stop():
 def run_pipeline_step(step: str):
     if step not in PIPELINE_STEPS:
         raise HTTPException(404, f"Unknown step. Choose from: {', '.join(PIPELINE_STEPS)}")
-    args = PIPELINE_STEPS[step]
-    out = subprocess.run([sys.executable, *args], cwd=ROOT, capture_output=True, text=True, timeout=600)
-    return {"command": f"python {' '.join(args)}", "exit_code": out.returncode,
-            "output": (out.stdout + out.stderr).strip()}
+    shown, argv = PIPELINE_STEPS[step]
+    out = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, timeout=600,
+                         env={**os.environ, "SHOP_ROOT": str(ROOT)})
+    return {"command": shown, "exit_code": out.returncode, "output": (out.stdout + out.stderr).strip()}
 
 
 @app.get("/api/admin/lake", tags=["admin"])

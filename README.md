@@ -16,11 +16,12 @@ SQL Server (ShopDB)  ->  Data lake (Parquet: bronze/silver/gold)  ->  DuckDB + d
 | 2 | Ingestion: incremental extract SQL Server -> bronze Parquet | Done |
 | 3 | Silver: cleaning, dedup, data-quality checks | Done |
 | ★ | ShopLite web app (FastAPI): shop, admin, live dashboard | Done |
-| 4 | Gold: dbt + DuckDB star schema (facts/dims), tests, docs | |
-| 5 | Analytics: revenue, top products, CLV, RFM, cohorts | |
-| 6 | Orchestration with Dagster | |
-| 7 | Analytics dashboard on the gold layer (Power BI or ShopLite) | |
-| + | Bonus: CDC, SCD2, forecasting | |
+| 4 | Gold: dbt + DuckDB star schema (facts/dims), tests, docs | Done |
+| 5 | Analytics: revenue, top products, CLV, RFM, cohorts | Done |
+| 6 | Orchestration with Dagster | Done |
+| 7 | Analytics dashboard on the gold layer (ShopLite `/analytics`; Power BI can read `data_lake/gold`) | Done |
+| + | Bonus: SCD2 (dim_customer, dim_product) and revenue forecast | Done |
+| + | Bonus: CDC (log-based change capture) | Not started: needs SQL Server Agent |
 
 ## Setup
 
@@ -102,6 +103,78 @@ For each table, parents first, DuckDB:
 
 Silver is fully rebuilt on each run, so it's idempotent: running it twice gives the same result.
 
+## Phase 4 - Gold layer (dbt + DuckDB star schema)
+
+```powershell
+.\.venv\Scripts\dbt.exe build --project-dir dbt_shop --profiles-dir dbt_shop   # models + 35 tests
+.\.venv\Scripts\python.exe transform\export_gold.py                            # gold -> data_lake/gold/*.parquet
+.\.venv\Scripts\dbt.exe docs generate --project-dir dbt_shop --profiles-dir dbt_shop
+.\.venv\Scripts\dbt.exe docs serve --project-dir dbt_shop --profiles-dir dbt_shop --port 8081   # lineage + docs site
+```
+
+Run dbt from the project root. dbt reads silver Parquet directly and builds `warehouse/shop.duckdb`:
+
+| Schema | Models | What |
+|---|---|---|
+| `staging` (views) | `stg_*` | One per silver table: rename and type, nothing else |
+| `intermediate` | `int_product_versions` | Product history joined to its category |
+| `core` (tables) | `dim_date`, `dim_customer`, `dim_product`, `fct_order_items`, `fct_orders` | **Star schema** |
+| `analytics` (tables) | `mart_*` | Business answers (Phase 5) |
+
+- **SCD Type 2:** `dim_customer` and `dim_product` keep one row per version, with `valid_from`, `valid_to`
+  and `is_current`. Silver writes `*_history.parquet`, which has every captured version run through
+  the same cleaning rules. The `scd2()` macro collapses versions where nothing tracked changed.
+- **Point-in-time joins:** facts join the version that was valid when the order was placed, so
+  `gross_margin` uses the product's cost on that day, and geography uses where the customer lived then.
+- **Tests:** uniqueness, not-null, foreign keys to every dimension, accepted status values,
+  no SCD2 overlaps, exactly one current version, and an order-total check
+  (warn level, so it reports the deliberately broken order without failing the build).
+- **History caveat:** SCD2 history is only as fine-grained as your extracts. Two price changes
+  between two extracts show up as one change.
+
+## Phase 5 - Analytics marts
+
+| Mart | Answers |
+|---|---|
+| `mart_daily_sales` | Orders, revenue, margin, average order value, cancellations, 7-day moving average per day |
+| `mart_product_performance` | Units, revenue, margin, return rate, overall and in-category rank, stock |
+| `mart_category_monthly` | Category revenue per month, month-over-month growth, share of month |
+| `mart_customer_rfm` | Recency/Frequency/Monetary scores 1–5, mapped to segments (Champions, At risk, …) |
+| `mart_customer_ltv` | Lifetime spend + simple 12-month projection, value decile |
+| `mart_cohort_retention` | Monthly cohorts, % who order again N months later |
+| `mart_revenue_forecast` | 90 days actual + 30-day forecast (linear trend × weekday seasonality, plain SQL) |
+
+```powershell
+.\.venv\Scripts\python.exe tools\lake.py "select segment, count(*) from gold_mart_customer_rfm group by 1 order by 2 desc"
+```
+
+## Phase 6 - Orchestration (Dagster)
+
+```powershell
+$env:DAGSTER_HOME = "$PWD\.dagster_home"
+.\.venv\Scripts\dagster.exe dev -m orchestration.definitions          # UI on http://localhost:3000
+.\.venv\Scripts\dagster.exe job execute -m orchestration.definitions -j full_pipeline   # one run, no UI
+```
+
+`orchestration/definitions.py` turns the pipeline into an **asset graph**:
+`shopdb → bronze → silver/<table> → every dbt model → gold_parquet`.
+
+- `bronze` runs the extract. Its asset check `bronze_reconciles_with_shopdb` runs `check_bronze.py`.
+- `silver` is one script producing 9 assets (one per silver file). Their keys match dbt's sources,
+  so lineage connects table by table.
+- Every dbt model is an asset, and every dbt test is an asset check (34 checks in total).
+- The `full_pipeline` job runs everything. The `every_30_minutes` schedule is **on** while
+  `dagster dev` is running; you can toggle it in the UI.
+
+## Phase 7 - Analytics dashboard
+
+ShopLite's **`/analytics`** page reads the gold Parquet files. It shows 30-day KPIs vs the previous
+30 days, the revenue forecast, RFM segments, monthly category revenue, a cohort retention heatmap,
+top products and most valuable customers. It's as fresh as the last pipeline run.
+**`/dashboard`** stays the second-by-second operational view, reading ShopDB directly.
+
+**Power BI (optional):** Get data → Parquet → point at `data_lake\gold\*.parquet`.
+
 ## ShopLite web app (FastAPI)
 
 ```powershell
@@ -147,5 +220,9 @@ All commands are run from the project folder: `cd C:\Projects\ecommerce-data-pip
 | Bronze | `.\.venv\Scripts\python.exe ingestion\extract.py` | Incremental extract (`--full` reloads) |
 | Bronze | `.\.venv\Scripts\python.exe ingestion\check_bronze.py` | Reconcile bronze vs ShopDB |
 | Silver | `.\.venv\Scripts\python.exe transform\silver.py` | Dedup + clean + quality checks |
+| Gold | `.\.venv\Scripts\dbt.exe build --project-dir dbt_shop --profiles-dir dbt_shop` | Star schema + marts + tests |
+| Gold | `.\.venv\Scripts\python.exe transform\export_gold.py` | Gold -> `data_lake/gold/*.parquet` |
+| Docs | `.\.venv\Scripts\dbt.exe docs generate --project-dir dbt_shop --profiles-dir dbt_shop` then `... docs serve --port 8081` | Model docs + lineage graph |
+| Orchestrate | `$env:DAGSTER_HOME="$PWD\.dagster_home"; .\.venv\Scripts\dagster.exe dev -m orchestration.definitions` | Dagster UI on http://localhost:3000 |
 | App | `.\.venv\Scripts\uvicorn.exe shop_app.main:app --port 8000` | ShopLite on http://localhost:8000 (Ctrl+C stops) |
 | Explore | `.\.venv\Scripts\python.exe -c "import duckdb; duckdb.sql(\"select * from 'data_lake/silver/orders.parquet' limit 5\").show()"` | Query any Parquet file with SQL |
