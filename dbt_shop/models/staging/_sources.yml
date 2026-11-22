@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: silver
+    description: Cleaned, deduplicated, quality-checked Parquet files written by transform/silver.py.
+    meta:
+      # dbt-duckdb reads these Parquet files directly - no loading step needed.
+      external_location: "{{ env_var('SHOP_ROOT', '.') }}/data_lake/silver/{name}.parquet"
+    tables:
+      - name: categories
+      - name: customers
+        description: Latest version of each customer.
+      - name: customers_history
+        description: Every captured version of each customer (for SCD2).
+      - name: products
+      - name: products_history
+        description: Every captured version of each product (for SCD2 - price changes).
+      - name: inventory
+      - name: orders
+      - name: order_items
+      - name: payments

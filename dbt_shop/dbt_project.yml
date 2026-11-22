@@ -1,0 +1,31 @@
+# dbt project for the gold layer: silver Parquet -> DuckDB star schema + analytics marts.
+# Run from the PROJECT ROOT (paths below are relative to it):
+#   .\.venv\Scripts\dbt.exe build --project-dir dbt_shop --profiles-dir dbt_shop
+name: shop
+version: "1.0.0"
+profile: shop
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  shop:
+    staging:          # 1:1 with silver tables: rename, type, nothing else
+      +schema: staging
+      +materialized: view
+    intermediate:     # building blocks (SCD2 version logic)
+      +schema: intermediate
+      +materialized: view
+    marts:
+      core:           # the star schema: dimensions + facts
+        +schema: core
+        +materialized: table
+      analytics:      # business answers built on the star schema
+        +schema: analytics
+        +materialized: table
+
+vars:
+  # Statuses that don't count as revenue
+  non_revenue_statuses: ["cancelled", "returned"]

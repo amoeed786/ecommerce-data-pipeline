@@ -1,7 +1,7 @@
 """Query the data lake with plain SQL - no file paths needed.
 
 Every Parquet table is available as a view named <layer>_<table>:
-    bronze_orders, silver_orders, quarantine_orders, bronze_customers, silver_customers, ...
+    bronze_orders, silver_orders, quarantine_orders, gold_fct_orders, gold_mart_customer_rfm, ...
 
 Usage (from the project folder):
     python tools/lake.py "select * from silver_orders order by order_id desc limit 5"
@@ -21,7 +21,7 @@ LAKE = Path(__file__).resolve().parents[1] / "data_lake"
 def main() -> None:
     con = duckdb.connect()
     views = []
-    for layer in ("bronze", "silver", "quarantine"):
+    for layer in ("bronze", "silver", "quarantine", "gold"):
         base = LAKE / layer
         if not base.exists():
             continue

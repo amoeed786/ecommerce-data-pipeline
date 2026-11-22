@@ -8,6 +8,15 @@ python-dotenv==1.2.4
 pyarrow==26.0.1
 duckdb==2.0.1
 
+# Phase 4/5 - gold layer with dbt on DuckDB
+dbt-core==1.12.7
+dbt-duckdb==1.11.1
+
+# Phase 6 - orchestration
+dagster==1.13.31
+dagster-webserver==1.13.31
+dagster-dbt==0.29.31
+
 # Shop web app (FastAPI: shop, admin, live dashboard)
 fastapi==0.165.0
 uvicorn[standard]==0.54.0

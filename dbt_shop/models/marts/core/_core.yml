@@ -1,0 +1,85 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: Calendar dimension, one row per day.
+    columns:
+      - name: date_key
+        description: YYYYMMDD integer key used by the facts.
+        data_tests: [unique, not_null]
+
+  - name: dim_customer
+    description: >
+      Customer dimension, **SCD Type 2**. One row per version of a customer; a new version starts when
+      they move (city/country) or change name/email. Join facts with
+      `fact_ts >= valid_from and fact_ts < valid_to`.
+    columns:
+      - name: customer_sk
+        description: Surrogate key of this version (md5 of customer_id + version timestamp).
+        data_tests: [unique, not_null]
+      - name: customer_id
+        description: Natural key from ShopDB.
+        data_tests: [not_null]
+      - name: valid_from
+        description: When this version became true (first version uses 1900-01-01).
+      - name: valid_to
+        description: When the next version replaced it (9999-12-31 for the current version).
+      - name: is_current
+        description: True for the customer's latest version.
+
+  - name: dim_product
+    description: >
+      Product dimension, **SCD Type 2**. A new version starts when price, cost, name, category or
+      active flag changes, so you can answer "what did this cost on the day of the order?".
+    columns:
+      - name: product_sk
+        data_tests: [unique, not_null]
+      - name: product_id
+        data_tests: [not_null]
+      - name: category_name
+        data_tests: [not_null]
+      - name: unit_price
+        data_tests: [not_null]
+
+  - name: fct_order_items
+    description: >
+      **Main fact table** - grain: one order line. Customer and product are joined point-in-time
+      (the version valid when the order was placed).
+    columns:
+      - name: order_item_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('fct_orders'), field: order_id}}
+      - name: order_date_key
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_date'), field: date_key}}
+      - name: customer_sk
+        description: Customer version at order time.
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_customer'), field: customer_sk}}
+      - name: product_sk
+        description: Product version at order time.
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_product'), field: product_sk}}
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments: {values: ['pending', 'paid', 'shipped', 'delivered', 'cancelled', 'returned']}
+      - name: net_amount
+        description: What the customer paid for this line (after discount).
+      - name: gross_margin
+        description: net_amount minus cost at the product's cost on the order date.
+
+  - name: fct_orders
+    description: Grain - one order. Header, rolled-up lines and payment.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: customer_sk
+        data_tests: [not_null]
+      - name: net_revenue
+        description: total_amount for orders that count as revenue (not cancelled/returned), else 0.

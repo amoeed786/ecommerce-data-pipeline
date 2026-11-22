@@ -1,0 +1,10 @@
+# Where dbt builds the warehouse. SHOP_ROOT lets tools like Dagster run dbt from any folder;
+# from the command line it defaults to "." (the project root).
+shop:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('SHOP_ROOT', '.') }}/warehouse/shop.duckdb"
+      schema: main
+      threads: 4

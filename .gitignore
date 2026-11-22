@@ -15,6 +15,7 @@ warehouse/*.duckdb.wal
 dbt_shop/target/
 dbt_shop/logs/
 dbt_shop/dbt_packages/
+dbt_shop/.user.yml
 
 # Dagster
 .dagster_home/

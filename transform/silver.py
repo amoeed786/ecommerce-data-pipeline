@@ -61,7 +61,7 @@ TABLES: list[dict] = [
         "warnings": {},
     },
     {
-        "name": "customers", "pk": "customer_id",
+        "name": "customers", "pk": "customer_id", "history": True,
         "clean": f"""
             SELECT c.* REPLACE (
                 {tidy('c.first_name')} AS first_name,
@@ -82,7 +82,7 @@ TABLES: list[dict] = [
         },
     },
     {
-        "name": "products", "pk": "product_id",
+        "name": "products", "pk": "product_id", "history": True,
         "clean": f"SELECT * REPLACE ({tidy('product_name')} AS product_name, upper(trim(sku)) AS sku) FROM src",
         "errors": {
             "negative_price": "unit_price < 0 OR unit_cost < 0",
@@ -222,9 +222,24 @@ def build_table(db: duckdb.DuckDBPyConnection, cfg: dict, loaded_at: datetime) -
     elif quarantine_file.exists():
         quarantine_file.unlink()  # problems from an earlier run are gone
 
+    history_rows = None
+    if cfg.get("history"):
+        # Every distinct version (not just the latest), run through the SAME cleaning rules.
+        # Gold uses this to build SCD2 dimensions: "what was the price / address on a given day?"
+        db.execute(f"""
+            CREATE OR REPLACE TEMP VIEW src AS
+            SELECT * EXCLUDE (_source_table)
+            FROM read_parquet('{bronze_glob(name)}', union_by_name = true)
+            QUALIFY row_number() OVER (PARTITION BY {pk}, updated_at ORDER BY _ingested_at DESC) = 1
+        """)
+        history_file = SILVER_DIR / f"{name}_history.parquet"
+        write_parquet(db, f"SELECT * FROM cleaned WHERE {pk} IN (SELECT {pk} FROM silver_{name}) "
+                          f"ORDER BY {pk}, updated_at", history_file)
+        history_rows = db.execute(f"SELECT count(*) FROM read_parquet('{history_file.as_posix()}')").fetchone()[0]
+
     return {
         "table": name, "bronze_rows": bronze_rows, "deduped": deduped,
-        "silver_rows": silver_rows, "quarantined": quarantined,
+        "silver_rows": silver_rows, "quarantined": quarantined, "history_rows": history_rows,
         "errors": {k: v for k, v in error_counts.items() if v},
         "warnings": {k: v for k, v in warning_counts.items() if v},
         "seconds": round(time.perf_counter() - started, 2),
@@ -252,6 +267,8 @@ def main() -> None:
         results.append(r)
         issues = [f"ERROR {k}={v}" for k, v in r["errors"].items()]
         issues += [f"warn {k}={v}" for k, v in r["warnings"].items()]
+        if r["history_rows"] is not None:
+            issues.append(f"history versions={r['history_rows']:,}")
         print(f"  {r['table']:<12} {r['bronze_rows']:>8,} {r['deduped']:>8,} {r['silver_rows']:>8,} "
               f"{r['quarantined']:>8,}  {'; '.join(issues) or 'clean'}")
 
