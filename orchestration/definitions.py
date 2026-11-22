@@ -8,9 +8,14 @@ Asset graph (each box is something that exists in the lake/warehouse, Dagster tr
         -> dbt models        dbt build (staging -> core star schema -> analytics marts, with tests)
         -> gold_parquet      transform/export_gold.py
 
-Run the UI (from the project root):
+AUTOMATIC: the `shopdb_changes` sensor checks ShopDB every 30 seconds. When there are rows the lake
+hasn't seen, it starts `full_pipeline` (one run at a time, with a short cooldown) - so every new order,
+status change or price change flows to gold by itself. Each run is logged to data_lake/_state/pipeline_runs.jsonl.
+
+Easiest way to run everything (shop + autopilot + Dagster):   .\.venv\Scripts\python.exe start.py
+Dagster only (from the project root):
     $env:DAGSTER_HOME = "$PWD\.dagster_home"; .\.venv\Scripts\dagster.exe dev -m orchestration.definitions
-then open http://localhost:3000 -> Assets -> "Materialize all", or let the schedule run it.
+then open http://localhost:3000 (Automation tab shows the sensor; Runs shows each automatic run).
 """
 # Note: no `from __future__ import annotations` here - Dagster inspects the real type hints.
 import json
@@ -18,6 +23,8 @@ import os
 import re
 import subprocess
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 
 from dagster import (
@@ -26,20 +33,35 @@ from dagster import (
     AssetKey,
     AssetSelection,
     AssetSpec,
-    DefaultScheduleStatus,
+    DagsterRunStatus,
+    DefaultSensorStatus,
     Definitions,
     MaterializeResult,
     MetadataValue,
-    ScheduleDefinition,
+    RetryPolicy,
+    RunRequest,
+    RunsFilter,
+    RunStatusSensorContext,
+    SensorEvaluationContext,
+    SkipReason,
     asset,
     asset_check,
     define_asset_job,
     multi_asset,
+    run_failure_sensor,
+    run_status_sensor,
+    sensor,
 )
 from dagster_dbt import DagsterDbtTranslator, DbtCliResource, DbtProject, dbt_assets
 
 ROOT = Path(__file__).resolve().parents[1]
 os.environ.setdefault("SHOP_ROOT", str(ROOT))  # dbt resolves the warehouse + lake paths from this
+sys.path.insert(0, str(ROOT))
+from ingestion.extract import STATE_DIR, load_watermarks, pending_changes  # noqa: E402
+from source_app.db import get_connection  # noqa: E402
+
+PIPELINE_RUNS_FILE = STATE_DIR / "pipeline_runs.jsonl"
+COOLDOWN_SECONDS = int(os.getenv("PIPELINE_COOLDOWN_SECONDS", "30"))  # min gap between automatic runs
 
 dbt_project = DbtProject(project_dir=ROOT / "dbt_shop", profiles_dir=ROOT / "dbt_shop")
 dbt_project.prepare_if_dev()  # in `dagster dev`, (re)builds the dbt manifest on startup
@@ -127,18 +149,78 @@ def gold_parquet(context: AssetExecutionContext) -> MaterializeResult:
     return MaterializeResult(metadata={"log": MetadataValue.md(f"```\n{output}\n```")})
 
 
-# ------------------------------------------------------------------ jobs + schedule
+# ------------------------------------------------------------------ job + automation
 full_pipeline = define_asset_job(
     "full_pipeline",
     selection=AssetSelection.all() - AssetSelection.keys("shopdb"),
     description="ShopDB -> bronze -> silver -> dbt gold -> gold Parquet",
+    op_retry_policy=RetryPolicy(max_retries=2, delay=10),  # ride out a momentary lock instead of failing the run
 )
+ACTIVE = [DagsterRunStatus.QUEUED, DagsterRunStatus.NOT_STARTED, DagsterRunStatus.STARTING, DagsterRunStatus.STARTED]
 
-every_30_minutes = ScheduleDefinition(
-    job=full_pipeline,
-    cron_schedule="*/30 * * * *",
-    default_status=DefaultScheduleStatus.RUNNING,  # runs while `dagster dev` is up; toggle it in the UI
-)
+
+@sensor(job=full_pipeline, minimum_interval_seconds=30, default_status=DefaultSensorStatus.RUNNING,
+        description="Starts the full pipeline whenever ShopDB has changes the lake hasn't extracted yet.")
+def shopdb_changes(context: SensorEvaluationContext):
+    """Event-driven micro-batching: new entries in ShopDB -> one pipeline run takes them all to gold.
+
+    - skips while a run is in progress (changes made meanwhile are picked up by the next run)
+    - waits COOLDOWN_SECONDS after the last run, so a busy shop doesn't run the pipeline back-to-back
+    - run_key = newest change + current watermarks, so the same changes never trigger twice,
+      but changes still pending after a run (made during it) do trigger the next one
+    """
+    instance = context.instance
+    if instance.get_run_records(RunsFilter(job_name="full_pipeline", statuses=ACTIVE), limit=1):
+        return SkipReason("A pipeline run is already in progress")
+    last = instance.get_run_records(RunsFilter(job_name="full_pipeline",
+                                               statuses=[DagsterRunStatus.SUCCESS, DagsterRunStatus.FAILURE]), limit=1)
+    if last and last[0].end_time and time.time() - last[0].end_time < COOLDOWN_SECONDS:
+        return SkipReason(f"Cooling down ({COOLDOWN_SECONDS}s between runs)")
+
+    conn = get_connection()
+    try:
+        pending = pending_changes(conn)
+    finally:
+        conn.close()
+    if not pending:
+        return SkipReason("The lake is up to date with ShopDB")
+    newest = max(pending.values())
+    marks = load_watermarks()
+    return RunRequest(
+        run_key=f"{newest.isoformat()}|{min(marks.values(), default='none')}",
+        tags={"trigger": "shopdb_changes", "changed_tables": ",".join(sorted(pending)),
+              "newest_change": newest.isoformat()},
+    )
+
+
+def _log_run(context: RunStatusSensorContext, status: str) -> None:
+    """Append one line per finished run, so the shop app can show the automatic pipeline's history."""
+    run = context.dagster_run
+    stats = context.instance.get_run_stats(run.run_id)
+    started = datetime.fromtimestamp(stats.start_time) if stats.start_time else None
+    ended = datetime.fromtimestamp(stats.end_time) if stats.end_time else datetime.now()
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    with PIPELINE_RUNS_FILE.open("a") as f:
+        f.write(json.dumps({
+            "run_id": run.run_id, "status": status,
+            "trigger": run.tags.get("trigger", "manual"),
+            "changed_tables": run.tags.get("changed_tables", ""),
+            "started_at": started.isoformat(timespec="seconds") if started else None,
+            "finished_at": ended.isoformat(timespec="seconds"),
+            "seconds": round((ended - started).total_seconds(), 1) if started else None,
+        }) + "\n")
+
+
+@run_status_sensor(run_status=DagsterRunStatus.SUCCESS, monitored_jobs=[full_pipeline],
+                   default_status=DefaultSensorStatus.RUNNING, description="Logs successful pipeline runs.")
+def log_pipeline_success(context: RunStatusSensorContext):
+    _log_run(context, "success")
+
+
+@run_failure_sensor(monitored_jobs=[full_pipeline], default_status=DefaultSensorStatus.RUNNING,
+                    description="Logs failed pipeline runs.")
+def log_pipeline_failure(context: RunStatusSensorContext):
+    _log_run(context, "failure")
 
 
 @asset(group_name="source", kinds={"sqlserver"}, description="ShopDB on SQL Server - written by the shop app and simulator.")
@@ -151,6 +233,6 @@ defs = Definitions(
     assets=[shopdb, bronze, silver, shop_dbt, gold_parquet],
     asset_checks=[bronze_reconciles_with_shopdb],
     jobs=[full_pipeline],
-    schedules=[every_30_minutes],
+    sensors=[shopdb_changes, log_pipeline_success, log_pipeline_failure],
     resources={"dbt": DbtCliResource(project_dir=dbt_project)},
 )

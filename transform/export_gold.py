@@ -16,6 +16,8 @@ from pathlib import Path
 import duckdb
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+from ingestion.extract import atomic_replace  # noqa: E402
 WAREHOUSE = PROJECT_ROOT / "warehouse" / "shop.duckdb"
 GOLD_DIR = PROJECT_ROOT / "data_lake" / "gold"
 
@@ -36,7 +38,7 @@ def main() -> None:
         target = GOLD_DIR / f"{table}.parquet"
         tmp = target.with_suffix(".parquet.tmp")
         con.execute(f"COPY {schema}.{table} TO '{tmp.as_posix()}' (FORMAT parquet, COMPRESSION zstd)")
-        tmp.replace(target)
+        atomic_replace(tmp, target)  # retries if the analytics page is reading this file right now
         rows = con.execute(f"SELECT count(*) FROM {schema}.{table}").fetchone()[0]
         print(f"  {schema + '.' + table:<36} {rows:>8,} rows")
     con.close()

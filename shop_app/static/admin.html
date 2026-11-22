@@ -69,6 +69,14 @@
 
   <!-- ============ PIPELINE ============ -->
   <section id="tab-pipeline" class="hidden grid">
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h2>⚡ Automatic pipeline</h2><span id="auto-state"></span></div>
+      <p class="muted small" style="margin-top:0">A Dagster sensor checks ShopDB every 30 seconds. When there are new or changed rows, it runs
+        extract → silver → dbt → gold export by itself, so every entry reaches gold and <a href="/analytics">Analytics</a> without you running anything.
+        Start it with <code>python start.py</code>. The manual buttons below are still there for learning.</p>
+      <div class="portal-kpis" id="auto-kpis" style="margin:10px 0"></div>
+      <div class="table-wrap" id="auto-runs"></div>
+    </div>
     <div class="grid cols-even">
       <div class="card">
         <h2>1 · Shopper simulator <span id="sim-state" class="muted small"></span></h2>
@@ -124,7 +132,24 @@ async function act(path, body, msg, method = "POST") {
 
 // ---------------- tabs
 const LOADERS = { control: () => { loadOverview(); loadOrders(); }, board: loadBoard, vendors: loadVendors, riders: loadRiders,
-  users: loadUsers, catalog: loadCatalog, pipeline: () => { loadSim(); loadLake(); } };
+  users: loadUsers, catalog: loadCatalog, pipeline: () => { loadAuto(); loadSim(); loadLake(); } };
+
+async function loadAuto() {
+  const s = await api("/api/admin/pipeline-status");
+  const last = s.runs[0];
+  $("#auto-state").innerHTML = s.dagster_up ? `<span class="badge s-delivered">● running</span>`
+    : `<span class="badge s-cancelled">● off</span> <span class="muted small">start it with <code>python start.py</code></span>`;
+  const tiles = [
+    ["Gold last refreshed", s.gold_built_at ? ago(s.gold_built_at) : "never", s.gold_built_at ? fmtDateTime(s.gold_built_at) : ""],
+    ["Waiting to be processed", s.pending_tables.length ? `${s.pending_tables.length} tables` : "nothing",
+      s.pending_tables.length ? `oldest change ${ago(s.oldest_pending_change)} · ${s.pending_tables.join(", ")}` : "the lake is up to date"],
+    ["Last automatic run", last ? badge(last.status === "success" ? "completed" : "failed") : "–", last ? `${ago(last.finished_at)} · took ${duration(last.seconds)}` : "no runs yet"],
+  ];
+  $("#auto-kpis").innerHTML = tiles.map(([l, v, sub]) => `<div class="card kpi"><div class="label">${l}</div><div class="value" style="font-size:20px">${v}</div><div class="small muted">${esc(sub)}</div></div>`).join("");
+  $("#auto-runs").innerHTML = table([["Finished", (r) => fmtDateTime(r.finished_at)], ["Result", (r) => badge(r.status === "success" ? "completed" : "failed")],
+    ["Trigger", (r) => esc(r.trigger === "shopdb_changes" ? "new data in ShopDB" : r.trigger)], ["Tables with changes", (r) => `<span class="small">${esc(r.changed_tables || "–")}</span>`],
+    ["Took", (r) => duration(r.seconds), "num"]], s.runs);
+}
 $$(".tabs button").forEach((b) => (b.onclick = () => {
   tab = b.dataset.tab;
   $$(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
@@ -312,6 +337,7 @@ const refresh = throttle(() => {
     if (ev.kind === "order" || ev.kind === "shipment") { flashIds.add(ev.order_id); refresh(); }
   });
   setInterval(() => { if (tab === "pipeline") loadSim(); if (tab === "control") loadOverview(); }, 3000);
+  setInterval(() => { if (tab === "pipeline") { loadAuto(); loadLake(); } }, 10000);
 })();
 </script>
 </body>

@@ -106,17 +106,49 @@ def load_watermarks() -> dict[str, str]:
     return {}
 
 
+def atomic_replace(src: Path, dst: Path, attempts: int = 40, wait: float = 0.25) -> None:
+    """Swap a finished temp file into place (readers never see a half-written file).
+
+    On Windows the swap fails with "access denied" if another process has `dst` open at that instant -
+    e.g. the automatic pipeline's sensor or the admin page reading it. That's momentary, so retry for a
+    few seconds instead of failing the run.
+    """
+    for attempt in range(attempts):
+        try:
+            src.replace(dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(wait)
+
+
 def save_watermarks(marks: dict[str, str]) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     tmp = WATERMARK_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(marks, indent=2, sort_keys=True))
-    tmp.replace(WATERMARK_FILE)  # atomic swap: never leaves a half-written state file
+    atomic_replace(tmp, WATERMARK_FILE)
 
 
 def log_run(entry: dict) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     with RUN_LOG_FILE.open("a") as f:
         f.write(json.dumps(entry) + "\n")
+
+
+def pending_changes(conn) -> dict[str, datetime]:
+    """Tables with rows the lake hasn't extracted yet -> newest pending updated_at.
+
+    A cheap check (one MAX per table, all on indexed updated_at columns) that the automatic pipeline
+    runs every 30 seconds to decide whether there's anything to do.
+    """
+    marks = load_watermarks()
+    sql = " UNION ALL ".join(f"SELECT '{t}', MAX([{WATERMARK_COLUMN}]) FROM dbo.[{t}]" for t in TABLES)
+    pending = {}
+    for table, newest in conn.cursor().execute(sql).fetchall():
+        if newest is not None and (table not in marks or newest > datetime.fromisoformat(marks[table])):
+            pending[table] = newest
+    return pending
 
 
 # ---------------------------------------------------------------- extract
@@ -168,7 +200,7 @@ def extract_table(conn, table: str, low: datetime, high: datetime, batch_id: str
 
     if total == 0:
         return 0, None
-    tmp_file.replace(out_file)  # only a complete file ever gets the .parquet name
+    atomic_replace(tmp_file, out_file)  # only a complete file ever gets the .parquet name
     return total, out_file
 
 

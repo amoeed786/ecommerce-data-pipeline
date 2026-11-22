@@ -79,7 +79,7 @@ async function load() {
   let a;
   try { a = await api("/api/analytics"); $("#error").classList.add("hidden"); }
   catch (e) { $("#error").classList.remove("hidden"); $("#error").textContent = e.message; return; }
-  $("#built").textContent = "gold built " + fmtDateTime(a.built_at);
+  $("#built").textContent = `gold built ${fmtDateTime(a.built_at)} (${ago(a.built_at)}) · auto-refreshes`;
 
   const k = a.kpis;
   const tiles = [
@@ -148,6 +148,16 @@ function renderMarketplace(a) {
 }
 $("#reload").onclick = () => load();
 renderPortalHeader("analytics").then(() => { $("#live")?.remove(); load(); });  // gold isn't live - no stream here
+
+// The automatic pipeline rebuilds gold after new entries; reload the page's data when that happens.
+let lastBuilt = null;
+setInterval(async () => {
+  try {
+    const f = await api("/api/analytics/freshness");
+    if (lastBuilt && f.gold_built_at && f.gold_built_at !== lastBuilt) { await load(); toast("Analytics updated with the latest data", "good"); }
+    lastBuilt = f.gold_built_at;
+  } catch {}
+}, 15000);
 </script>
 </body>
 </html>

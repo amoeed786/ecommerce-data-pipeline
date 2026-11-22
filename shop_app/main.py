@@ -633,6 +633,40 @@ def run_pipeline_step(step: str, _: dict = Depends(admin)):
     return {"command": shown, "exit_code": out.returncode, "output": (out.stdout + out.stderr).strip()}
 
 
+@app.get("/api/admin/pipeline-status", tags=["admin"])
+def pipeline_status(_: dict = Depends(admin)):
+    """The automatic pipeline (Dagster sensor): recent runs, what's waiting, and how fresh gold is."""
+    from ingestion.extract import pending_changes  # noqa: PLC0415 - keeps app startup light
+    runs_file = STATE / "pipeline_runs.jsonl"
+    runs = [json.loads(x) for x in runs_file.read_text().splitlines()[-15:] if x.strip()] if runs_file.exists() else []
+    conn = db.get_connection()
+    try:
+        pending = pending_changes(conn)
+    finally:
+        conn.close()
+    gold = GOLD / "mart_daily_sales.parquet"
+    return {
+        "runs": runs[::-1],
+        "pending_tables": sorted(pending),
+        "oldest_pending_change": db._jsonable(min(pending.values())) if pending else None,
+        "gold_built_at": db._jsonable(datetime.fromtimestamp(gold.stat().st_mtime)) if gold.exists() else None,
+        "dagster_up": _port_open(int(os.getenv("DAGSTER_PORT", "3000"))),
+    }
+
+
+def _port_open(port: int) -> bool:
+    import socket  # noqa: PLC0415
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.3)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+@app.get("/api/analytics/freshness", tags=["analytics"])
+def analytics_freshness(_: dict = Depends(admin)):
+    gold = GOLD / "mart_daily_sales.parquet"
+    return {"gold_built_at": db._jsonable(datetime.fromtimestamp(gold.stat().st_mtime)) if gold.exists() else None}
+
+
 @app.get("/api/admin/lake", tags=["admin"])
 def lake_status(_: dict = Depends(admin)):
     con = duckdb.connect()

@@ -24,6 +24,31 @@ SQL Server (ShopDB)  ->  Data lake (Parquet: bronze/silver/gold)  ->  DuckDB + d
 | + | Bonus: SCD2 (dim_customer, dim_product) and revenue forecast | Done |
 | + | Bonus: CDC (log-based change capture) | Not started: needs SQL Server Agent |
 
+## Run everything (one command)
+
+```powershell
+.\.venv\Scripts\python.exe start.py              # shop + autopilot + automatic pipeline
+.\.venv\Scripts\python.exe start.py --simulate   # ...plus fake shoppers placing orders
+```
+
+Then open http://localhost:8000. **You never have to run the pipeline yourself:**
+
+```
+new entry in ShopDB (order, status change, price change, new customer…)
+  └─► Dagster sensor `shopdb_changes` notices it (checks every 30 s)
+        └─► runs full_pipeline: extract → bronze → silver → dbt gold (+tests) → gold Parquet
+              └─► /analytics reloads itself with the new numbers
+```
+
+- **Typical delay:** about 1–2 minutes from an entry to gold. That's the 30 s check plus about 1 minute of pipeline.
+- **One run at a time:** changes made during a run are picked up by the next one. There's a 30 s cooldown
+  between runs (`PIPELINE_COOLDOWN_SECONDS`) so a busy shop doesn't run the pipeline nonstop.
+- **Failed steps** are retried twice. Each run is logged to `data_lake/_state/pipeline_runs.jsonl` and shown
+  in **Admin → Simulator & pipeline → ⚡ Automatic pipeline**. Dagster's UI (http://localhost:3000) has the full detail.
+- **Logs:** each service writes to `data_lake/_state/logs/`. Ctrl+C stops everything.
+- **Don't run two Dagsters:** if you already have `dagster dev` or the app running in another terminal, stop it
+  first. `start.py` refuses to start on a port that's in use.
+
 ## Setup
 
 ```powershell
@@ -166,9 +191,12 @@ $env:DAGSTER_HOME = "$PWD\.dagster_home"
 - `bronze` runs the extract. Its asset check `bronze_reconciles_with_shopdb` runs `check_bronze.py`.
 - `silver` is one script producing 9 assets (one per silver file). Their keys match dbt's sources,
   so lineage connects table by table.
-- Every dbt model is an asset, and every dbt test is an asset check (34 checks in total).
-- The `full_pipeline` job runs everything. The `every_30_minutes` schedule is **on** while
-  `dagster dev` is running; you can toggle it in the UI.
+- Every dbt model is an asset, and every dbt test is an asset check.
+- The `full_pipeline` job runs everything, retrying a failed step twice.
+- **Automation:** the `shopdb_changes` sensor (on by default) starts `full_pipeline` whenever ShopDB has
+  rows the lake hasn't extracted yet (see "Run everything" above). It replaced the earlier
+  30-minute schedule. Two small sensors log each finished run for the shop's admin page. You can
+  toggle the sensors in the UI under Automation.
 
 ## Phase 7 - Analytics dashboard
 
@@ -257,6 +285,7 @@ All commands are run from the project folder: `cd C:\Projects\ecommerce-data-pip
 
 | Step | Command | What it does |
 |---|---|---|
+| **Run all** | `.\.venv\Scripts\python.exe start.py [--simulate]` | **Shop + autopilot + automatic pipeline, one command** |
 | Setup | `.\.venv\Scripts\python.exe -m pip install -r requirements.txt` | Install libraries |
 | Source | `.\.venv\Scripts\python.exe source_app\setup_db.py` | Create ShopDB + tables (`--reset` wipes) |
 | Source | `.\.venv\Scripts\python.exe source_app\generator.py seed` | One year of fake history |

@@ -25,7 +25,7 @@ import duckdb
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
-from ingestion.extract import BRONZE_DIR, LAKE_DIR, STATE_DIR  # noqa: E402
+from ingestion.extract import BRONZE_DIR, LAKE_DIR, STATE_DIR, atomic_replace  # noqa: E402
 
 SILVER_DIR = LAKE_DIR / "silver"
 QUARANTINE_DIR = LAKE_DIR / "quarantine"
@@ -212,7 +212,7 @@ def write_parquet(db: duckdb.DuckDBPyConnection, relation: str, path: Path) -> N
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".parquet.tmp")
     db.execute(f"COPY ({relation}) TO '{tmp.as_posix()}' (FORMAT parquet, COMPRESSION zstd)")
-    tmp.replace(path)
+    atomic_replace(tmp, path)  # retries if a reader (e.g. the admin page) has the file open
 
 
 def build_table(db: duckdb.DuckDBPyConnection, cfg: dict, loaded_at: datetime) -> dict:
