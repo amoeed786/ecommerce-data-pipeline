@@ -1,0 +1,5 @@
+# Phase 1 - source system
+pyodbc==5.5.0
+SQLAlchemy==2.1.9
+Faker==40.63.0
+python-dotenv==1.2.4

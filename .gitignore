@@ -1,0 +1,27 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets / local config
+.env
+
+# Generated data (rebuilt by the pipeline, never committed)
+data_lake/
+warehouse/*.duckdb
+warehouse/*.duckdb.wal
+
+# dbt
+dbt_shop/target/
+dbt_shop/logs/
+dbt_shop/dbt_packages/
+
+# Dagster
+.dagster_home/
+orchestration/.dagster_home/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
