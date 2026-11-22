@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Design system · Kartora</title>
+  <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/ds.css">
+  <style>
+    body { margin: 0; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: var(--k-s-4) var(--k-s-2) var(--k-s-8); }
+    section { margin-top: var(--k-s-5); }
+    .label { font-size: var(--k-fs-12); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--k-text-3); margin-bottom: var(--k-s-1); }
+    .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--k-s-1); }
+    .sw { border: 1px solid var(--k-border); border-radius: var(--k-radius); overflow: hidden; background: var(--k-surface); }
+    .sw div { height: 56px; } .sw p { margin: 0; padding: 8px 10px; font-size: var(--k-fs-12); }
+    .type p { margin: 0 0 6px; }
+    .row { display: flex; gap: var(--k-s-1); flex-wrap: wrap; align-items: center; }
+    .cartdemo { position: fixed; right: 24px; top: 24px; display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px;
+      background: var(--k-surface); border: 1px solid var(--k-border); font-weight: 600; z-index: 10; }
+    .cartdemo b { background: var(--k-brand); color: var(--k-on-brand); border-radius: 999px; font-size: 12px; padding: 1px 7px; }
+    .state { font-size: var(--k-fs-12); color: var(--k-text-3); margin-top: 6px; text-align: center; }
+  </style>
+</head>
+<body class="k">
+<div class="cartdemo" id="cart">${icon}</div>
+<div class="wrap">
+  <h1 class="k-h1">Kartora design system</h1>
+  <p class="k-muted" style="font-size:var(--k-fs-16)">Tokens and the product card - step 1 of the storefront redesign.</p>
+
+  <section><div class="label">Color roles</div><div class="swatches" id="swatches"></div>
+    <p class="k-muted" style="font-size:var(--k-fs-12)">Purple is for actions and links only. Orange-red is for sale prices and deal badges only.</p></section>
+
+  <section class="type"><div class="label">Type scale · Inter</div>
+    <p style="font-size:40px; font-weight:700; letter-spacing:-.02em">40 · Everything you love</p>
+    <p style="font-size:32px; font-weight:700; letter-spacing:-.02em">32 · Page title</p>
+    <p style="font-size:24px; font-weight:700">24 · Section heading</p>
+    <p style="font-size:20px; font-weight:600">20 · Card price <span class="price">Rs 12,499</span></p>
+    <p style="font-size:16px">16 · Body large - product descriptions and forms</p>
+    <p style="font-size:14px">14 · Body - default UI text, card titles</p>
+    <p style="font-size:12px" class="k-muted">12 · Meta - store names, review counts, badges</p></section>
+
+  <section><div class="label">Buttons, chips, badges</div>
+    <div class="row" id="controls"></div></section>
+
+  <section><div class="label">Product card · states (hover a card; try Add to cart and the heart)</div>
+    <div class="pc-grid" id="cards"></div></section>
+</div>
+<script src="/static/common.js"></script>
+<script src="/static/ds.js"></script>
+<script>
+$("#cart").innerHTML = `${icon("shopping-cart")} Cart <b id="cartcount">0</b>`;
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+$("#swatches").innerHTML = [["--k-bg", "Page background"], ["--k-surface", "Surface / card"], ["--k-text", "Text"], ["--k-text-2", "Text secondary"],
+  ["--k-text-3", "Text muted"], ["--k-border", "Border"], ["--k-brand", "Brand · actions & links"], ["--k-brand-50", "Brand tint"],
+  ["--k-sale", "Sale · prices & badges"], ["--k-star", "Rating stars"], ["--k-success", "Success"], ["--k-warning", "Low stock"]]
+  .map(([v, l]) => `<div class="sw"><div style="background:var(${v})"></div><p><b>${l}</b><br><span class="k-muted">${css(v)}</span></p></div>`).join("");
+$("#controls").innerHTML = `<button class="k-btn primary">${icon("shopping-cart", "sm")}Add to cart</button>
+  <button class="k-btn primary lg">Buy now</button><button class="k-btn">${icon("heart", "sm")}Save</button>
+  <button class="k-btn ghost">${icon("sliders-horizontal", "sm")}Filters</button><button class="k-btn icon" aria-label="Search">${icon("search")}</button>
+  <span class="k-chip">${icon("truck", "sm")}Free delivery</span><span class="k-chip">On sale ${icon("x", "sm")}</span>
+  <span class="k-badge-sale">-25%</span>${starRating(4.3, 1204)}`;
+
+let count = 0;
+(async () => {
+  $("#cards").innerHTML = Array.from({ length: 6 }, productCardSkeleton).join("");
+  const items = (await api("/api/products?limit=60&sort=popular")).items;
+  const photo = items.filter((p) => p.image_url);
+  const sale = photo.find((p) => p.discount_pct >= 20) || photo[0];
+  const plain = photo.find((p) => !p.discount_pct && p.product_id !== sale.product_id) || photo[1];
+  const two = { ...(photo.find((p) => p.product_id !== sale.product_id && p.product_id !== plain.product_id && p.category_name === sale.category_name) || photo[2]) };
+  const second = photo.find((p) => p.category_name === two.category_name && p.product_id !== two.product_id);
+  two.images = [two.image_url, second ? second.image_url : two.image_url];
+  const noPhoto = items.find((p) => !p.image_url) || items[0];
+  const states = [
+    [sale, "on sale - discount badge, sale price, struck old price"],
+    [{ ...plain }, "regular price - no badge"],
+    [two, "second photo on hover"],
+    [{ ...photo[3], stock: 3 }, "low stock - “Only 3 left”"],
+    [{ ...photo[4], stock: 0 }, "out of stock - button disabled"],
+    [{ ...noPhoto, image_url: null }, "no photo yet - category icon placeholder"],
+  ];
+  $("#cards").innerHTML = states.map(([p, s]) => `<div>${productCard(p)}<div class="state">${s}</div></div>`).join("") +
+    `<div>${productCardSkeleton()}<div class="state">loading skeleton</div></div>`;
+  wireProductCards($("#cards"), () => { $("#cartcount").textContent = ++count; return true; }, () => $("#cart"));
+})();
+</script>
+</body>
+</html>
