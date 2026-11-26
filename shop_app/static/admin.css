@@ -313,3 +313,5 @@ pre.out { margin: 0; padding: 12px; background: var(--k-bg); border: 1px solid v
 
 .grid > * { min-width: 0; }
 .card-b { overflow-x: auto; }
+.ph > *, .kpi, .kc, .drawer-b, .parcel, .card-b { min-width: 0; overflow-wrap: anywhere; }
+table.dt td .t, table.dt td .m { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }

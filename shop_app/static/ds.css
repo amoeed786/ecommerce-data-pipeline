@@ -162,3 +162,7 @@
   .pc, .pc-media img, .k-btn { transition: none !important; }
   .k-sk, .k-bump { animation: none !important; }
 }
+
+/* Long names and unbroken strings (product names, store names, URLs) wrap instead of widening the layout */
+.k h1, .k h2, .k h3, .k h4, .k p, .k li, .k td, .k th, .k dd, .k label, .k .insight { overflow-wrap: anywhere; }
+.hero > *, .pdp > *, .pdp-sections > *, .two > *, .listing > *, .props > *, .stores > * { min-width: 0; }
