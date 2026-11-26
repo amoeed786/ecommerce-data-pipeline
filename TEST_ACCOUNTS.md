@@ -12,7 +12,7 @@ site, and admin accounts are refused on the public `/login`. If you set `ADMIN_P
 
 | Account type | Email | Password | Opens |
 |---|---|---|---|
-| 🛠️ Admin | `admin@raunaqi.test` | `Admin@123` | sign in at `/admin/login` → `/admin` (control room), `/admin/dashboard`, `/admin/analytics` |
+| 🛠️ Admin | `admin@raunaqi.test` | *private - not stored in the repo* | sign in at `/admin/login` → `/admin` (control room), `/admin/dashboard`, `/admin/analytics` |
 | 🛍️ Shopper | `customer@raunaqi.test` | `Demo@123` | `/` storefront - cart, checkout, live order tracking |
 | 🛵 Rider (you deliver) | `rider@raunaqi.test` | `Demo@123` | `/rider` - go online, pick up, deliver |
 | 🏪 Seller (you pack) - Raunaqi Demo Store | `vendor@raunaqi.test` | `Demo@123` | `/vendor` - bulk accept + pack, products, photos |

@@ -176,3 +176,174 @@ Not done in this pass (limited budget). These still need work or approval:
 - **Data:** D-01 (UTC migration), D-02 to D-04.
 - **Realism and performance:** R-01 to R-06, P-01 to P-05.
 - **QA:** the Phase 6 test suite.
+
+---
+
+# Final frontend audit report (2026-11-25)
+
+Scope covered: every page of the four roles, checked through a real headless browser and against the database. The scripts are in [tests/ui/](tests/ui/README.md). Every number below comes from a run on 2026-11-25 against the local app, unless the line names another date.
+
+## 1. Overall frontend assessment
+
+The app works as a demo marketplace and holds together across all four roles. The full order lifecycle runs through the UI with no JS errors, and money shown on screen matches the database. Layout holds from 360px to 1920px. **It is not yet production-ready:**
+- it has never been deployed or load-tested
+- the design system is split across three stylesheets
+- several flows a real marketplace needs do not exist yet: password reset, seller onboarding wizard, address book, tracking map
+
+Rating: a solid working prototype, not yet a product that competes with the big marketplaces on polish.
+
+## 2. Pages and components inspected
+
+- **Storefront:** home, category, product, search, cart, checkout, orders list, order tracking, account, 404.
+- **Sign-in:** shopper/seller/rider login and admin login (separate path).
+- **Seller center:** queue tabs, bulk select, autopilot switch, products, earnings.
+- **Rider app.**
+- **Admin console:** orders and drawer, live shipments kanban, catalog, finance, payouts, riders, command palette, Live ops dashboard, BI analytics.
+- **Shared:** header, footer, theme toggle, toasts, skeletons, empty, error and offline states, branded 404/500 pages.
+
+## 3. UI/UX problems discovered
+
+| Sev | Problem | Status |
+|---|---|---|
+| MEDIUM | BI page: the tab bar stuck at the wrong place; long amounts broke the bar cells; wide charts were squeezed into half-width cards | Fixed |
+| MEDIUM | Long or unbroken names (products, sellers, customers) widened the page and pushed columns off screen on hero, product, seller and admin pages | Fixed: global wrapping plus `min-width: 0` on grid children |
+| MEDIUM | Product cards: Add-to-cart buttons sat at different heights in the same row | Fixed |
+| MEDIUM | Storefront footer misaligned (side padding lost); the summary block leaned to one side | Fixed |
+| LOW | Review titles rendered as oversized headings after a heading-order fix | Fixed (`h3.rv-t`) |
+| LOW | Admin numeric column headers were left-aligned | Fixed |
+| LOW | Seller bulk-select checkboxes were 16px on phones | Fixed (24px) |
+| MEDIUM | Three stylesheets (`style.css`, `store.css`, `admin.css`) on top of `ds.css`, with raw colour and spacing values left in places (V-01 to V-07) | **Open** |
+| MEDIUM | Missing flows: password reset, sign-in modal, /sell and /ride onboarding wizards, cart drawer, 3-step checkout, saved addresses, tracking map, seller settings | **Open** |
+
+## 4. Improvements implemented
+
+- **Design tokens:** status colour palette (`--st-*`) and light/dark themes from `ds.css`.
+- **States:** skeletons at boot, empty states, offline/error state with "Try again", branded 404/500 pages.
+- **Wrapping:** long text wraps at every level.
+- **Admin:**
+  - shell shared by every admin page
+  - sticky BI tab bar
+  - readable log-scale chart ticks
+- **Assets:** versioned with immutable caching, so a deploy never serves stale CSS or JS.
+- **Brand:** renamed Kartora to Raunaqi everywhere, data included. Money is shown in Rs (PKR).
+
+## 5. Functional issues discovered and fixed
+
+| Sev | Issue | Fix |
+|---|---|---|
+| HIGH | Live feed (SSE) stayed open on back/forward cache, so pages restored from history went stale | `liveEvents()` closes on `pagehide` and reopens on `pageshow` |
+| MEDIUM | `money()` could show rounding artefacts | Rounds to paisa first |
+| MEDIUM | "Show more" on listings could fire twice | Guarded |
+| LOW | Recently viewed items lost on rename | Migrated from the old storage key |
+| HIGH (self-inflicted) | An edit during this work broke an import in `auth.py` | Caught and fixed before commit |
+
+## 6. Responsive testing results
+
+**84/84** page-width combinations clean: 14 pages at 360, 390, 768, 1024, 1440 and 1920px.
+
+What counted as a failure:
+- page side-scroll
+- elements past the screen edge
+- clipped headings, buttons or prices
+- tap targets under 24px on phones
+- JS errors
+
+The long-text run injected names over 100 characters and unbroken 80-character strings:
+- No page side-scroll on store, category, product, cart, checkout, orders, seller, rider, admin orders, catalog, dashboard or analytics.
+- Admin finance scrolls inside its table card, which is intended.
+
+Honest caveat: the run just before the last fix was 77/84. Two of those failures were the checker not knowing about intended horizontal scrollers (the finance table card and the BI tab bar). One was real (the 16px checkboxes).
+
+## 7. Performance improvements
+
+- Lighthouse (2026-11-22): **92 to 100** across performance, accessibility, best practices and SEO on the pages measured.
+- Versioned static files with a one-year immutable cache, and a log line for any request slower than 1.5s.
+- **Open:** P-01 to P-05, covering image re-encoding on upload, responsive image sizes, API pagination limits and query tuning on large data.
+- Not measured: real network latency. Over the Cloudflare quick tunnel, each request took about 0.5 to 1s, mostly tunnel overhead.
+
+## 8. Accessibility findings (WCAG 2.2 AA)
+
+Fixed (A-01 to A-09):
+- contrast on sale badges, status chips, danger buttons and muted text
+- accessible names on header controls, product buttons and the autopilot switch
+- heading order
+- underlined links in text
+- keyboard access to scrollable areas
+- visible focus rings
+- 24px phone targets
+
+Verified by script:
+- Tab reaches the header controls in order, each with a visible focus ring.
+- Ctrl+K and Esc work.
+- Enter opens the order drawer, and Esc returns focus to the row.
+
+**Open (MEDIUM):** no screen-reader pass yet (NVDA or VoiceOver), and charts have no data-table fallback for screen readers.
+
+## 9. Security concerns
+
+Fixed and probed:
+- security headers and CSP
+- admin-only API docs
+- Origin-based CSRF block
+- `Secure` cookie in production
+- signup rate limit (5 per 10 min per IP)
+- login lockout (5 failures lock an email for 5 min)
+- admin console on its own path
+- strong admin password (old sessions cleared)
+- `pip-audit` clean
+- `password_hash` never enters the data lake
+
+Open:
+
+| Sev | Concern |
+|---|---|
+| MEDIUM | Login lockout and signup limit live in memory: they reset on restart and won't hold across more than one server. There is no per-IP login limit (S-06) |
+| MEDIUM | Uploaded images are stored as uploaded, not re-encoded (S-07/B-08) |
+| MEDIUM | No admin audit log; needs a schema change, waiting on approval |
+| LOW | Old commits with a co-author trailer are back in GitHub history after the merge. Only a force-push removes them, and that is the owner's call |
+
+## 10. Remaining issues and limitations
+
+| Sev | Item |
+|---|---|
+| CRITICAL (for launch) | Not deployed. No production database, backups, HTTPS domain or monitoring. Plan: Render plus Azure SQL |
+| HIGH | The UI suites in `tests/ui` are scripts, not CI. Nothing runs them on each commit |
+| HIGH | No password reset. A shopper who forgets their password is locked out |
+| MEDIUM | Timestamps are stored in server local time, not UTC (D-01, needs a migration) |
+| MEDIUM | Design-system consolidation and missing flows (see 3) |
+| MEDIUM | Charts not accessible to screen readers |
+| LOW | Demo realism: simulator volume, review variety, some products without photos, prices not localised (R-01 to R-06) |
+| LOW | Test orders **#17150** (delivered, then returned), **#17151** (cancelled) and **#17152** (started, then cancelled) are in the database. The seller name "Raunaqi Demo Store" appears in BI after the next pipeline run |
+
+## 11. Testing performed and its actual results
+
+| Suite | Result |
+|---|---|
+| `journeys.py`: order, start, accept+pack, deliver, ledger, return, cancel, all via the UI and checked against SQL | 35/36 (2026-11-23). The 1 miss was timing: the autopilot rider moved the parcel before the check. A separate re-run showed the card correctly |
+| `qa2.py`: 189 internal links across 5 roles, offline, keyboard | 13/13 |
+| `responsive.py`: 14 pages × 6 widths | 84/84 |
+| `responsive.py` with long text injected | no page side-scroll (see 6) |
+| `accuracy.py`: API vs DB, page vs API, alignment | all passed |
+| Lighthouse | 92 to 100 (2026-11-22) |
+| Security probes and `pip-audit` | pass / clean (2026-11-22) |
+| dbt | PASS=103, WARN=1 |
+
+Not tested:
+- real phones (only emulated widths)
+- Safari and Firefox (only Edge/Chromium)
+- load or concurrency
+- screen readers
+- visual-regression diffs (screenshots are saved but not compared automatically)
+
+## 12. Final production-readiness assessment
+
+**Ready for a private demo or pilot:** yes. Journeys, money and layout are verified.
+
+**Not ready for real customers yet.** These must happen first:
+1. Deploy with HTTPS, a managed database and backups.
+2. Password reset.
+3. Run the UI suites in CI.
+4. UTC timestamps.
+5. Persistent rate limiting (database or Redis), not in memory.
+
+After those, finish the design-system consolidation and the missing flows to reach a competitive polish level.

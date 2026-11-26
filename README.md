@@ -300,7 +300,7 @@ top products and most valuable customers. It's as fresh as the last pipeline run
 | Vendor (you pack) | `vendor@raunaqi.test` | `Demo@123` | `/vendor` seller center, Raunaqi Demo Store |
 | Vendor (autopilot) | `techhub@`, `gadget@`, `stylestreet@`, `homenest@`, … `@raunaqi.test` | `Demo@123` | `/vendor` |
 | Rider | `rider@raunaqi.test` | `Demo@123` | `/rider` |
-| Admin | `admin@raunaqi.test` | `Admin@123` | `/admin` |
+| Admin | `admin@raunaqi.test` | *private - not stored in the repo* | `/admin` |
 
 Customers can also create their own account. Store and rider accounts are made by `migrate_marketplace.py`.
 
