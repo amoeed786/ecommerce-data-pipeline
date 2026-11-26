@@ -35,7 +35,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run Raunaqi on localhost (IPv4 + IPv6)")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
-    config = uvicorn.Config("shop_app.main:app", log_level="info")
+    # Only this computer can connect (see local_sockets), so a local tunnel such as cloudflared is the only "proxy".
+    # Trust its X-Forwarded-For / X-Forwarded-Proto from both loopback addresses: rate limits then see the real
+    # visitor (not one shared 127.0.0.1), and HTTPS through the tunnel turns on HSTS.
+    config = uvicorn.Config("shop_app.main:app", log_level="info", proxy_headers=True,
+                            forwarded_allow_ips="127.0.0.1,::1")
     uvicorn.Server(config).run(sockets=local_sockets(args.port))
 
 

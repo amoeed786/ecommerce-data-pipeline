@@ -111,9 +111,18 @@ def gateway():
     return GATEWAYS[name]()
 
 
+def _refuse_test_money_in_production(gw) -> None:
+    """The sandbox accepts any test card: on a real deployment that would hand out goods for free. In production
+    online payment needs a real gateway (or an explicit ALLOW_SANDBOX_PAYMENTS=1 for a closed demo)."""
+    if (gw.name == "sandbox" and os.getenv("APP_ENV") == "production"
+            and os.getenv("ALLOW_SANDBOX_PAYMENTS") != "1"):
+        raise PaymentError("Online payment isn't available yet - please choose cash on delivery")
+
+
 # ================================================================== checkout side
 def start_online_payment(cur, order_id: int) -> str:
     """Create a gateway session for an unpaid online order and return the URL to send the customer to."""
+    _refuse_test_money_in_production(gateway())
     row = cur.execute("SELECT payment_id, amount, payment_status, payment_method FROM dbo.payments WHERE order_id = ?",
                       order_id).fetchone()
     if row is None:
@@ -186,6 +195,7 @@ def sandbox_pay(cur, session_ref: str, card_number: str) -> dict:
     gw = gateway()
     if gw.name != "sandbox":
         raise PaymentError("The sandbox page is only available with PAYMENT_GATEWAY=sandbox")
+    _refuse_test_money_in_production(gw)
     info = session_info(cur, session_ref)
     if info is None:
         raise PaymentError("Payment session not found")

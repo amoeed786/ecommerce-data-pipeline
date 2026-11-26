@@ -34,6 +34,7 @@ from datetime import datetime
 from pathlib import Path
 
 import duckdb
+import pyodbc
 import secrets
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
@@ -49,6 +50,20 @@ from .live import feed
 
 mp = db.mp
 log = logging.getLogger("shop")
+security_log = logging.getLogger("shop.security")   # failed logins, lockouts, blocked requests, permission denials
+if not logging.getLogger("shop").handlers:   # app logs to the console; security events also to a rotating file
+    from logging.handlers import RotatingFileHandler  # noqa: PLC0415
+    _console = logging.StreamHandler()
+    _console.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    logging.getLogger("shop").addHandler(_console)
+    logging.getLogger("shop").setLevel(logging.INFO)
+    (db.PROJECT_ROOT / "data_lake" / "_state").mkdir(parents=True, exist_ok=True)
+    _sec_file = RotatingFileHandler(db.PROJECT_ROOT / "data_lake" / "_state" / "security.log", maxBytes=5_000_000, backupCount=5,
+                                    encoding="utf-8")
+    _sec_file.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    security_log.addHandler(_sec_file)
+PRODUCTION = os.getenv("APP_ENV") == "production"
+MAX_BODY_BYTES = 5 * 1024 * 1024   # largest request we accept: a 3 MB photo plus form overhead
 ROOT = db.PROJECT_ROOT
 STATIC = Path(__file__).parent / "static"
 LAKE = ROOT / "data_lake"
@@ -141,16 +156,28 @@ async def cache_headers(request: Request, call_next):
     path0 = request.url.path
     # CSRF defence: a state-changing request from a browser must come from this site (Origin check). Gateway webhooks
     # (server-to-server, no Origin) are exempt. SameSite=Lax cookies are the second layer.
+    ip = request.client.host if request.client else "?"
     if request.method in ("POST", "PUT", "PATCH", "DELETE") and not path0.startswith("/api/webhooks/"):
         origin = request.headers.get("origin")
         if origin and urlparse(origin).netloc != request.headers.get("host"):
+            security_log.warning("csrf_blocked ip=%s path=%s origin=%s", ip, path0, origin[:100])
             return JSONResponse(status_code=403, content={"detail": "Cross-site request blocked"})
+    # refuse oversized bodies before they are read (stops memory/disk exhaustion through huge JSON or uploads)
+    try:
+        too_big = int(request.headers.get("content-length") or 0) > MAX_BODY_BYTES
+    except ValueError:
+        too_big = True
+    if too_big:
+        return JSONResponse(status_code=413, content={"detail": "Request too large"})
     # signup rate limit: 5 accounts per 10 minutes per client address
     if request.method == "POST" and path0.startswith("/api/auth/register"):
-        ip = request.client.host if request.client else "?"
         now_s = time.time()
         hits = [t for t in _signup_hits.get(ip, []) if now_s - t < 600]
+        if len(_signup_hits) > 10_000:   # keep memory bounded: forget addresses with no recent sign-ups
+            for k in [k for k, v in _signup_hits.items() if not v or now_s - v[-1] > 600]:
+                _signup_hits.pop(k, None)
         if len(hits) >= 5:
+            security_log.warning("signup_rate_limited ip=%s", ip)
             return JSONResponse(status_code=429, content={"detail": "Too many sign-ups from this address - try again in a few minutes"})
         _signup_hits[ip] = hits + [now_s]
     response = await call_next(request)
@@ -182,6 +209,9 @@ def _wants_page(request: Request) -> bool:
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error(request: Request, exc: StarletteHTTPException):
+    if exc.status_code in (401, 403, 429) and request.url.path != "/api/auth/me":
+        security_log.info("denied status=%s ip=%s %s %s", exc.status_code,
+                          request.client.host if request.client else "?", request.method, request.url.path)
     if exc.status_code == 404 and _wants_page(request):
         return HTMLResponse((STATIC / "404.html").read_text(encoding="utf-8"), status_code=404)
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=getattr(exc, "headers", None))
@@ -193,6 +223,13 @@ async def server_error(request: Request, exc: Exception):
     if _wants_page(request):
         return HTMLResponse((STATIC / "500.html").read_text(encoding="utf-8"), status_code=500)
     return JSONResponse(status_code=500, content={"detail": "Something went wrong on our side"})
+
+
+@app.exception_handler(pyodbc.DataError)
+async def bad_value(request: Request, exc: pyodbc.DataError):
+    """The database refused a value (too long, out of range). The client sent bad data: 400, not a server error."""
+    log.warning("rejected value on %s: %s", request.url.path, str(exc)[:200])
+    return JSONResponse(status_code=400, content={"detail": "A value is too long or out of range"})
 
 
 @app.exception_handler(mp.MarketplaceError)
@@ -256,44 +293,51 @@ if ADMIN_PATH == "/admin":  # old bookmarks - only with the default path, so a c
 
 
 # ================================================================== auth
+# Length limits match the database columns, so an over-long value gets a clear 422 instead of a server error.
+Email = Field(max_length=255)
+Password = Field(max_length=128)   # also keeps scrypt from hashing megabyte-sized "passwords"
+Short = Field(default="", max_length=100)
+
+
 class Login(BaseModel):
-    email: str
-    password: str
-    role: str | None = None  # the portal chosen on the sign-in page; a mismatch gets a helpful error
+    email: str = Email
+    password: str = Password
+    role: str | None = Field(default=None, max_length=10)  # the portal chosen on the sign-in page; a mismatch gets a helpful error
 
 
 class RegisterVendor(BaseModel):
-    store_name: str
-    owner_name: str
-    email: str
-    password: str
-    city: str = ""
-    country: str = ""
-    tagline: str = ""
+    store_name: str = Field(max_length=100)
+    owner_name: str = Field(max_length=100)
+    email: str = Email
+    password: str = Password
+    city: str = Short
+    country: str = Short
+    tagline: str = Field(default="", max_length=200)
 
 
 class RegisterRider(BaseModel):
-    full_name: str
-    email: str
-    password: str
-    phone: str = ""
-    city: str = ""
-    vehicle: str = "bike"
+    full_name: str = Field(max_length=100)
+    email: str = Email
+    password: str = Password
+    phone: str = Field(default="", max_length=30)
+    city: str = Short
+    vehicle: str = Field(default="bike", max_length=10)
 
 
 class Register(BaseModel):
-    first_name: str
-    last_name: str
-    email: str
-    password: str
-    phone: str = ""
-    city: str = ""
-    country: str = ""
+    first_name: str = Field(max_length=50)
+    last_name: str = Field(max_length=49)   # display name = first + " " + last must fit 100
+    email: str = Email
+    password: str = Password
+    phone: str = Field(default="", max_length=30)
+    city: str = Short
+    country: str = Short
 
 
 @app.post("/api/auth/login", tags=["auth"])
-def login(body: Login, response: Response):
-    return auth.login(body.email, body.password, response, expected_role=body.role)
+def login(body: Login, request: Request, response: Response):
+    return auth.login(body.email, body.password, response, expected_role=body.role,
+                      ip=request.client.host if request.client else "?")
 
 
 @app.post("/api/auth/register/vendor", tags=["auth"])
@@ -379,17 +423,17 @@ class CartLine(BaseModel):
 
 
 class Checkout(BaseModel):
-    items: list[CartLine]
-    payment_method: str = "cash_on_delivery"
-    coupon: str = ""
-    ship_city: str = ""
-    ship_country: str = ""
+    items: list[CartLine] = Field(max_length=100)
+    payment_method: str = Field(default="cash_on_delivery", max_length=30)
+    coupon: str = Field(default="", max_length=30)
+    ship_city: str = Short
+    ship_country: str = Short
 
 
 class Profile(BaseModel):
-    phone: str = ""
-    city: str = ""
-    country: str = ""
+    phone: str = Field(default="", max_length=30)
+    city: str = Short
+    country: str = Short
 
 
 @app.get("/api/me/profile", tags=["customer"])
@@ -506,20 +550,23 @@ def return_my_order(order_id: int, user: dict = Depends(customer)):
 vendor = auth.require("vendor")
 
 
+MAX_PRICE = 99_999_999   # products.unit_price is decimal(10,2)
+
+
 class ProductPatch(BaseModel):
-    unit_price: float | None = None
-    list_price: float | None = None
-    add_stock: int | None = None
+    unit_price: float | None = Field(default=None, le=MAX_PRICE)
+    list_price: float | None = Field(default=None, le=MAX_PRICE)   # 0 or less clears the "was" price
+    add_stock: int | None = Field(default=None, le=100_000)
     is_active: bool | None = None
 
 
 class NewProduct(BaseModel):
-    product_name: str
+    product_name: str = Field(min_length=1, max_length=200)
     category_id: int
-    unit_price: float = Field(gt=0)
-    unit_cost: float = Field(ge=0)
+    unit_price: float = Field(gt=0, le=MAX_PRICE)
+    unit_cost: float = Field(ge=0, le=MAX_PRICE)
     stock: int = Field(ge=0, le=100_000)
-    description: str = ""
+    description: str = Field(default="", max_length=400)
 
 
 class Toggle(BaseModel):
@@ -531,10 +578,21 @@ def vendor_summary(user: dict = Depends(vendor)):
     return db.vendor_summary(user["vendor_id"])
 
 
+SHIPMENT_STATUSES = {"pending", "confirmed", "packing", "ready", "assigned", "picked_up", "delivered", "cancelled", "returned"}
+ORDER_STATUSES = {"pending", "processing", "shipped", "delivered", "cancelled", "returned"}
+
+
+def _statuses(given: list[str], allowed: set[str]) -> list[str]:
+    picked = sorted(set(given) & allowed)
+    if not picked:
+        raise HTTPException(422, f"status must be one of: {', '.join(sorted(allowed))}")
+    return picked
+
+
 @app.get("/api/vendor/shipments", tags=["vendor"])
 def vendor_shipments(status: list[str] = Query(default=["confirmed", "packing", "ready", "assigned"]),
                      user: dict = Depends(vendor)):
-    return db.vendor_shipments(user["vendor_id"], status)
+    return db.vendor_shipments(user["vendor_id"], _statuses(status, SHIPMENT_STATUSES))
 
 
 @app.post("/api/vendor/shipments/{shipment_id}/{action}", tags=["vendor"])
@@ -622,7 +680,7 @@ rider = auth.require("rider")
 
 
 class RiderStatus(BaseModel):
-    status: str
+    status: str = Field(max_length=10)
 
 
 @app.get("/api/rider/summary", tags=["rider"])
@@ -688,7 +746,7 @@ def admin_settings(body: SettingsBody, _: dict = Depends(admin)):
 @app.get("/api/admin/orders", tags=["admin"])
 def admin_orders(status: list[str] = Query(default=["pending", "processing", "shipped"]),
                  limit: int = Query(100, le=500), _: dict = Depends(admin)):
-    return db.order_queue(status, limit)
+    return db.order_queue(_statuses(status, ORDER_STATUSES), limit)
 
 
 @app.get("/api/admin/orders/{order_id}", tags=["admin"])
@@ -969,6 +1027,8 @@ def simulator_status(_: dict = Depends(admin)):
 
 @app.post("/api/admin/simulator/start", tags=["admin"])
 def simulator_start(interval: float = Query(5, ge=1, le=60), user: dict = Depends(admin)):
+    if PRODUCTION:   # the simulator creates fake shoppers and orders: never on real data
+        raise HTTPException(403, "The simulator is switched off in production")
     if not _sim_running():
         STATE.mkdir(parents=True, exist_ok=True)
         simulator["proc"] = subprocess.Popen(
@@ -992,6 +1052,8 @@ def simulator_stop(user: dict = Depends(admin)):
 def run_pipeline_step(step: str, _: dict = Depends(admin)):
     if step not in PIPELINE_STEPS:
         raise HTTPException(404, f"Unknown step. Choose from: {', '.join(PIPELINE_STEPS)}")
+    if PRODUCTION and step == "inject_bad_data":   # a data-quality demo that corrupts rows on purpose
+        raise HTTPException(403, "Injecting bad data is switched off in production")
     shown, argv = PIPELINE_STEPS[step]
     out = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, timeout=600,
                          env={**os.environ, "SHOP_ROOT": str(ROOT)})

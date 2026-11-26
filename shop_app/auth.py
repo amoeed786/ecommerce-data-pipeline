@@ -4,12 +4,17 @@
 - Sessions: a random 256-bit token in an httpOnly, SameSite=Lax cookie. The database only stores the
   token's SHA-256, so a leaked user_sessions table can't be used to log in. Sessions last 7 days and
   are deleted on logout.
-- Brute force: 5 failed logins for an email locks it for 5 minutes (in memory - fine for one server).
+- Brute force: 5 failed logins for an email locks it for 5 minutes, and 30 failures from one address lock that
+  address for 15 minutes (in memory - fine for one server). Unknown emails take as long as known ones, so the
+  timing doesn't reveal who has an account. Failures and lockouts go to the "shop.security" log.
+- Admin sessions last 12 hours; everyone else stays signed in for 7 days.
+- In production (APP_ENV=production) the demo accounts (@raunaqi.test, published passwords) can't sign in.
 - Roles: customer, vendor, rider, admin. Routes declare who may call them with Depends(require(...)).
 """
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import secrets
 import time
@@ -22,8 +27,14 @@ from source_app.passwords import hash_password, verify_password  # noqa: E402
 
 COOKIE = "shoplite_session"
 SESSION_DAYS = 7
-MAX_FAILS, LOCK_SECONDS = 5, 300
+ADMIN_SESSION_HOURS = 12
+MAX_FAILS, LOCK_SECONDS = 5, 300            # per email
+MAX_IP_FAILS, IP_LOCK_SECONDS = 30, 900     # per client address: slows spraying one password across many emails
 _fails: dict[str, list[float]] = {}
+_ip_fails: dict[str, list[float]] = {}
+DEMO_DOMAIN = "@raunaqi.test"
+security_log = logging.getLogger("shop.security")
+_DUMMY_HASH = hash_password(secrets.token_urlsafe(16))   # checked for unknown emails, so they cost the same time
 
 USER_SQL = """
     SELECT u.user_id, u.email, u.role, u.display_name, u.customer_id, u.vendor_id, u.rider_id, u.is_active,
@@ -38,27 +49,51 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def _locked(email: str) -> bool:
-    recent = [t for t in _fails.get(email, []) if time.time() - t < LOCK_SECONDS]
-    _fails[email] = recent
-    return len(recent) >= MAX_FAILS
+def _recent(store: dict[str, list[float]], key: str, window: float) -> list[float]:
+    now = time.time()
+    if len(store) > 50_000:   # keep memory bounded under a flood of made-up emails/addresses
+        for k in [k for k, v in store.items() if not v or now - v[-1] > window]:
+            store.pop(k, None)
+    recent = [t for t in store.get(key, []) if now - t < window]
+    if recent:
+        store[key] = recent
+    else:
+        store.pop(key, None)
+    return recent
 
 
-def login(email: str, password: str, response: Response, expected_role: str | None = None) -> dict:
+def _locked(email: str, ip: str | None = None) -> bool:
+    return (len(_recent(_fails, email, LOCK_SECONDS)) >= MAX_FAILS
+            or (ip is not None and len(_recent(_ip_fails, ip, IP_LOCK_SECONDS)) >= MAX_IP_FAILS))
+
+
+def _failed(email: str, ip: str | None, reason: str) -> None:
+    _fails.setdefault(email, []).append(time.time())
+    if ip is not None:
+        _ip_fails.setdefault(ip, []).append(time.time())
+    security_log.warning("login_failed reason=%s email=%s ip=%s", reason, email[:80], ip)
+
+
+def login(email: str, password: str, response: Response, expected_role: str | None = None,
+          ip: str | None = None) -> dict:
     email = email.strip().lower()
-    if _locked(email):
+    if _locked(email, ip):
+        security_log.warning("login_locked email=%s ip=%s", email[:80], ip)
         raise HTTPException(429, "Too many failed attempts. Try again in a few minutes.")
     row = db.query_one("SELECT user_id, password_hash, is_active, role FROM dbo.users WHERE email = ?", email)
-    if row is None or not verify_password(password, row["password_hash"]):
-        _fails.setdefault(email, []).append(time.time())
+    if os.getenv("APP_ENV") == "production" and email.endswith(DEMO_DOMAIN):
+        row = None   # demo accounts have published passwords: never usable on a real deployment
+    if not verify_password(password, row["password_hash"] if row else _DUMMY_HASH) or row is None:
+        _failed(email, ip, "bad_credentials")
         raise HTTPException(401, "Wrong email or password")  # same message either way: don't reveal which emails exist
     if not row["is_active"]:
+        security_log.warning("login_disabled_account email=%s ip=%s", email[:80], ip)
         raise HTTPException(403, "This account is disabled")
     # Admins sign in only on the separate admin page (/admin/login), and that page only accepts admins.
     # Either mismatch gets the same answer as a wrong password, so neither page reveals that the other kind
     # of account exists.
     if (row["role"] == "admin") != (expected_role == "admin"):
-        _fails.setdefault(email, []).append(time.time())
+        _failed(email, ip, "wrong_portal")
         raise HTTPException(401, "Wrong email or password")
     if expected_role and row["role"] != expected_role:  # public portal, wrong type: point them to the right one
         names = {"customer": "Shopper", "vendor": "Seller", "rider": "Rider"}
@@ -66,10 +101,14 @@ def login(email: str, password: str, response: Response, expected_role: str | No
     _fails.pop(email, None)
     token = secrets.token_urlsafe(32)
     now = datetime.now().replace(microsecond=0)
+    lifetime = timedelta(hours=ADMIN_SESSION_HOURS) if row["role"] == "admin" else timedelta(days=SESSION_DAYS)
+    db.execute("DELETE FROM dbo.user_sessions WHERE user_id = ? AND expires_at < ?", row["user_id"], now)  # tidy up
     db.execute("INSERT INTO dbo.user_sessions (token_hash, user_id, created_at, expires_at) VALUES (?,?,?,?)",
-               _token_hash(token), row["user_id"], now, now + timedelta(days=SESSION_DAYS))
+               _token_hash(token), row["user_id"], now, now + lifetime)
     db.execute("UPDATE dbo.users SET last_login_at = ? WHERE user_id = ?", now, row["user_id"])
-    response.set_cookie(COOKIE, token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", path="/",
+    if row["role"] == "admin":
+        security_log.info("admin_login user_id=%s ip=%s", row["user_id"], ip)
+    response.set_cookie(COOKIE, token, max_age=int(lifetime.total_seconds()), httponly=True, samesite="lax", path="/",
                         secure=os.getenv("APP_ENV") == "production")  # HTTPS-only cookie in production
     return user_by_id(row["user_id"])
 
