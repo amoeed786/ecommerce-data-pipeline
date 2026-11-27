@@ -1,12 +1,45 @@
-# Ecommerce Data Pipeline (learning project)
+# Raunaqi: a multi-vendor marketplace and the data platform behind it
 
-An end-to-end, 100% free, local data pipeline:
+An end-to-end project built on free tools. A live marketplace web app (shoppers, sellers, riders, admins) runs on
+SQL Server, and an automated **bronze → silver → gold** lakehouse with **dbt, DuckDB and Dagster** turns its
+data into analytics.
+
+![Raunaqi storefront](docs/images/storefront.jpg)
+
+**Highlights**
+
+- **Marketplace app (FastAPI):** 84 routes, 4 roles and server-side ownership checks. One order splits into one parcel
+  per seller; sellers pack, riders deliver, and shoppers watch it live over Server-Sent Events.
+- **Money:** cash on delivery or a gateway with HMAC-signed, idempotent webhooks. A seller ledger records sale − commission,
+  holds earnings for a 7-day return window, then pays out in batches. Finance totals reconcile with the database to the paisa.
+- **Data platform:** incremental watermark extract → partitioned Parquet (bronze) → DuckDB cleaning with quarantined bad
+  rows (silver) → dbt star schema with SCD2 history, 11 marts and 103 tests (gold). A Dagster sensor refreshes it
+  whenever the shop has new data.
+- **Quality and security:** 198 role × route authorization checks, 52 live security probes, 84/84 responsive checks,
+  browser journeys checked against the database, Lighthouse 92–100, and a least-privilege database login.
+  See [SECURITY_AUDIT.md](SECURITY_AUDIT.md) and [tests/](tests/).
+
+## Architecture
+
+![System architecture](docs/images/architecture.png)
+
+## Data pipeline
+
+![Data pipeline](docs/images/data-pipeline.png)
 
 ```
-SQL Server (ShopDB)  ->  Data lake (Parquet: bronze/silver/gold)  ->  DuckDB + dbt  ->  Dashboard
+SQL Server (ShopDB)  ->  Data lake (Parquet: bronze/silver/gold)  ->  DuckDB + dbt  ->  Admin BI
         ^                          orchestrated by Dagster
- fake shop activity (Faker)
+ marketplace + simulated shoppers
 ```
+
+## Order and money flow
+
+![Order and money flow](docs/images/order-and-money-flow.png)
+
+## Engineering quality
+
+![Engineering quality](docs/images/engineering-quality.png)
 
 ## Roadmap
 
@@ -26,7 +59,7 @@ SQL Server (ShopDB)  ->  Data lake (Parquet: bronze/silver/gold)  ->  DuckDB + d
 
 ## Raunaqi: the storefront brand
 
-The shop app is branded **Raunaqi** ("cart" + "aura"; tagline *Everything you love, delivered.*). The name and
+The shop app is branded **Raunaqi** (from the Urdu *raunaq*: liveliness, splendour; tagline *Everything you love, delivered.*). The name and
 logo live in one place, `BRAND` and `LOGO_SVG` in `shop_app/static/common.js`, so a rename is a one-line change.
 One design system for every page: tokens, Inter, Lucide icons and the light/dark theme live in `shop_app/static/ds.css` + `ds.js` (gallery at `/static/design.html`). Purple is for actions only, orange-red for sale prices only, and status pills use one palette everywhere (gray waiting, blue in progress, purple on the move, green done, red stopped, amber returned). `store.css` = storefront, `admin.css` = admin console, `style.css` = seller center, rider app, sign-in and payment page. No emoji anywhere.
 

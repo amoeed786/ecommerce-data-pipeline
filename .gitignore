@@ -32,3 +32,6 @@ brand_photos/
 .idea/
 Thumbs.db
 .DS_Store
+
+# Rendered demo video (large binary, kept out of git)
+demo_video/
